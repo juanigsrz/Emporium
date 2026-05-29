@@ -1,19 +1,22 @@
 from rest_framework import serializers
 from .models import Shipment
+from matching.serializers import AssignmentSerializer
 
 
 class ShipmentSerializer(serializers.ModelSerializer):
-    token = serializers.CharField(source='assignment.entry.item_token', read_only=True)
-    item_name = serializers.CharField(source='assignment.entry.listing.game.name', read_only=True)
-    sender_username = serializers.CharField(
-        source='assignment.entry.listing.owner.username', read_only=True)
-    recipient_username = serializers.CharField(
-        source='assignment.recipient.username', read_only=True)
+    assignment_detail = AssignmentSerializer(source='assignment', read_only=True)
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = Shipment
         fields = [
-            'id', 'token', 'item_name', 'sender_username', 'recipient_username',
+            'id', 'assignment', 'assignment_detail', 'role',
             'status', 'tracking', 'shipped_at', 'received_at', 'disputed', 'notes',
         ]
         read_only_fields = ['status', 'shipped_at', 'received_at']
+
+    def get_role(self, obj):
+        request = self.context.get('request')
+        if request and request.user == obj.assignment.entry.listing.owner:
+            return 'SENDER'
+        return 'RECIPIENT'
