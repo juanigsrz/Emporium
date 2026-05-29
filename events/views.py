@@ -49,12 +49,22 @@ class TradeEventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='result')
     def result(self, request, slug=None):
         event = self.get_object()
-        from matching.models import MatchResult
-        from matching.serializers import MatchResultSerializer
-        result = MatchResult.objects.filter(event=event).order_by('-started_at').first()
-        if not result:
-            return Response({'detail': 'No match result yet.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(MatchResultSerializer(result, context={'request': request}).data)
+        from matching.models import MatchResult, Assignment
+        from matching.serializers import MatchResultSerializer, AssignmentSerializer
+        match_result = MatchResult.objects.filter(event=event).order_by('-started_at').first()
+        if not match_result:
+            return Response({'result': None, 'my_assignments': []})
+        my = Assignment.objects.filter(
+            match_result=match_result
+        ).filter(
+            entry__listing__owner=request.user
+        ) | Assignment.objects.filter(
+            match_result=match_result, recipient=request.user
+        )
+        return Response({
+            'result': MatchResultSerializer(match_result).data,
+            'my_assignments': AssignmentSerializer(my.distinct(), many=True).data,
+        })
 
     @action(detail=True, methods=['get'], url_path='shipping')
     def shipping(self, request, slug=None):
@@ -63,13 +73,23 @@ class TradeEventViewSet(viewsets.ModelViewSet):
         from shipping.serializers import ShipmentSerializer
         shipments = Shipment.objects.filter(
             assignment__match_result__event=event
-        ).select_related('assignment__entry__listing__owner', 'assignment__recipient')
-        user_shipments = [
-            s for s in shipments
-            if s.assignment.entry.listing.owner == request.user
-            or s.assignment.recipient == request.user
-        ]
-        return Response(ShipmentSerializer(user_shipments, many=True).data)
+        ).select_related(
+            'assignment__entry__listing__owner',
+            'assignment__entry__listing__game',
+            'assignment__recipient',
+        ).filter(
+            assignment__entry__listing__owner=request.user
+        ) | Shipment.objects.filter(
+            assignment__match_result__event=event,
+            assignment__recipient=request.user,
+        ).select_related(
+            'assignment__entry__listing__owner',
+            'assignment__entry__listing__game',
+            'assignment__recipient',
+        )
+        return Response(ShipmentSerializer(
+            shipments.distinct(), many=True, context={'request': request}
+        ).data)
 
 
 class EventEntryViewSet(viewsets.ModelViewSet):

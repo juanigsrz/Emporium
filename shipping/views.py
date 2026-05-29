@@ -30,7 +30,7 @@ class ShipmentViewSet(viewsets.ReadOnlyModelViewSet):
         shipment.shipped_at = timezone.now()
         shipment.tracking = request.data.get('tracking', '')
         shipment.save()
-        return Response(ShipmentSerializer(shipment).data)
+        return Response(ShipmentSerializer(shipment, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], url_path='mark-received')
     def mark_received(self, request, pk=None):
@@ -44,4 +44,4 @@ class ShipmentViewSet(viewsets.ReadOnlyModelViewSet):
         shipment.status = ShipmentStatus.RECEIVED
         shipment.received_at = timezone.now()
         shipment.save()
-        return Response(ShipmentSerializer(shipment).data)
+        return Response(ShipmentSerializer(shipment, context={'request': request}).data)

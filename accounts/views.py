@@ -5,8 +5,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, BGGLinkSerializer
+from .serializers import RegisterSerializer, LoginSerializer, UserProfileSerializer, BGGLinkSerializer
 from catalog import bgg as bgg_service
+
+
+def _profile_response(user):
+    return UserProfileSerializer(user.profile).data
 
 
 @api_view(['POST'])
@@ -16,7 +20,7 @@ def register(request):
     serializer.is_valid(raise_exception=True)
     user = serializer.save()
     token, _ = Token.objects.get_or_create(user=user)
-    return Response({'token': token.key, 'user': UserSerializer(user).data},
+    return Response({'token': token.key, 'profile': _profile_response(user)},
                     status=status.HTTP_201_CREATED)
 
 
@@ -32,7 +36,7 @@ def user_login(request):
         return Response({'detail': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
     login(request, user)
     token, _ = Token.objects.get_or_create(user=user)
-    return Response({'token': token.key, 'user': UserSerializer(user).data})
+    return Response({'token': token.key, 'profile': _profile_response(user)})
 
 
 @api_view(['POST'])
@@ -46,13 +50,13 @@ def user_logout(request):
 @permission_classes([IsAuthenticated])
 def me(request):
     if request.method == 'GET':
-        return Response(UserSerializer(request.user).data)
+        return Response(_profile_response(request.user))
     profile = request.user.profile
     for field in ['default_country', 'default_region', 'timezone']:
         if field in request.data:
             setattr(profile, field, request.data[field])
     profile.save()
-    return Response(UserSerializer(request.user).data)
+    return Response(_profile_response(request.user))
 
 
 @api_view(['POST'])
@@ -64,7 +68,7 @@ def bgg_link(request):
     profile.bgg_username = serializer.validated_data['bgg_username']
     profile.bgg_verified = False
     profile.save()
-    return Response({'detail': 'BGG username linked. Use /api/me/bgg/verify/ to verify.'})
+    return Response(_profile_response(request.user))
 
 
 @api_view(['POST'])
@@ -78,7 +82,7 @@ def bgg_verify(request):
         return Response({'detail': 'BGG user not found.'}, status=status.HTTP_404_NOT_FOUND)
     profile.bgg_verified = True
     profile.save()
-    return Response({'detail': 'BGG username verified.', 'bgg_user': user_data})
+    return Response(_profile_response(request.user))
 
 
 @api_view(['POST'])

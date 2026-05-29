@@ -12,7 +12,10 @@ class ListingViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
 
     def get_queryset(self):
-        return Listing.objects.select_related('owner', 'game').prefetch_related('photos').all()
+        qs = Listing.objects.select_related('owner', 'game').prefetch_related('photos').all()
+        if self.request.query_params.get('mine') in ('true', '1'):
+            qs = qs.filter(owner=self.request.user)
+        return qs
 
     @action(detail=True, methods=['post'], url_path='photos')
     def upload_photo(self, request, pk=None):

@@ -4,10 +4,17 @@ from .models import UserProfile
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.CharField(source='user.email', read_only=True)
+
     class Meta:
         model = UserProfile
-        fields = ['bgg_username', 'bgg_verified', 'default_country', 'default_region',
-                  'is_organizer', 'timezone']
+        fields = [
+            'user_id', 'username', 'email',
+            'bgg_username', 'bgg_verified', 'default_country', 'default_region',
+            'is_organizer', 'timezone',
+        ]
         read_only_fields = ['bgg_verified']
 
 
