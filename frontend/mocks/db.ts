@@ -19,6 +19,7 @@ import type {
   UserProfile,
   WantFilters,
 } from "@/lib/api/types";
+import { BGG_DATASET } from "./bgg-dataset";
 
 interface MockUser {
   id: number;
@@ -73,6 +74,11 @@ const games: Game[] = [
   mkGame(266192, "Wingspan", 2019, 1, 5, 70, 2.4, 8.1),
   mkGame(230802, "Azul", 2017, 2, 4, 45, 1.8, 7.8),
 ];
+
+// Full BGG game list for mock search — keyed by bgg_id for O(1) lookup.
+const bggIndex = new Map(
+  BGG_DATASET.map(([bgg_id, name, year]) => [bgg_id, { bgg_id, name, year_published: year }])
+);
 
 function mkGame(
   bgg_id: number,
@@ -239,6 +245,15 @@ const shipments: MockShipment[] = [];
 const userById = (uid: number) => users.find((u) => u.id === uid)!;
 const userByName = (name: string) =>
   users.find((u) => u.username === name);
+
+// When a listing is created for an unsynced game, promote it to the catalog.
+function syncGameIfNeeded(bgg_id: number): void {
+  if (games.some((g) => g.bgg_id === bgg_id)) return;
+  const entry = bggIndex.get(bgg_id);
+  if (!entry) return;
+  games.push(mkGame(bgg_id, entry.name, entry.year_published, 2, 4, 60, 2.5, 7.5));
+}
+
 const gameById = (bgg: number) => games.find((g) => g.bgg_id === bgg)!;
 
 // ---- Session ----
@@ -463,7 +478,18 @@ export const db = {
     const l = listings.find((x) => x.id === lid);
     return l ? listingOf(l) : null;
   },
+  searchBgg(q: string) {
+    if (!q) return [];
+    const lower = q.toLowerCase();
+    // Search the full BGG dataset (not just the local catalog).
+    return Array.from(bggIndex.values())
+      .filter((g) => g.name.toLowerCase().includes(lower))
+      .slice(0, 50);
+  },
+
   createListing(owner: number, body: Partial<MockListing>) {
+    // Sync game from BGG-only pool if not yet in catalog.
+    if (body.game_bgg_id) syncGameIfNeeded(body.game_bgg_id);
     const l: MockListing = {
       id: id(),
       game_bgg_id: body.game_bgg_id!,

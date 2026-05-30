@@ -11,7 +11,7 @@ import { FormField, Input } from "@/components/ui/field";
 export default function RegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
-  const [form, setForm] = useState({ username: "", email: "", password: "" });
+  const [form, setForm] = useState({ username: "", email: "", password: "", password2: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,6 +20,10 @@ export default function RegisterPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (form.password !== form.password2) {
+      setError("Passwords do not match.");
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
@@ -50,6 +54,16 @@ export default function RegisterPage() {
               value={form.password}
               autoComplete="new-password"
               onChange={set("password")}
+              required
+            />
+          </FormField>
+          <FormField label="Confirm password" htmlFor="password2">
+            <Input
+              id="password2"
+              type="password"
+              value={form.password2}
+              autoComplete="new-password"
+              onChange={set("password2")}
               required
             />
           </FormField>

@@ -62,11 +62,13 @@ def me(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bgg_link(request):
+    from django.conf import settings
     serializer = BGGLinkSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     profile = request.user.profile
     profile.bgg_username = serializer.validated_data['bgg_username']
-    profile.bgg_verified = False
+    # Auto-verify when BGG API auth is not configured.
+    profile.bgg_verified = not getattr(settings, 'BGG_VERIFICATION_ENABLED', True)
     profile.save()
     return Response(_profile_response(request.user))
 
@@ -74,12 +76,20 @@ def bgg_link(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bgg_verify(request):
+    from django.conf import settings
     profile = request.user.profile
     if not profile.bgg_username:
         return Response({'detail': 'No BGG username linked.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not getattr(settings, 'BGG_VERIFICATION_ENABLED', True):
+        profile.bgg_verified = True
+        profile.save()
+        return Response(_profile_response(request.user))
     user_data = bgg_service.get_user(profile.bgg_username)
     if user_data is None:
-        return Response({'detail': 'BGG user not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'detail': 'BGG user not found or BGG API is unavailable.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
     profile.bgg_verified = True
     profile.save()
     return Response(_profile_response(request.user))

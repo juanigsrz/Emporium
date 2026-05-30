@@ -82,6 +82,19 @@ export const handlers = [
   }),
 
   // ---- Catalog ----
+  // Literal paths must come before parametric routes (:bgg would eat them otherwise).
+  http.get(`${P}/games/search-bgg/`, ({ request }) => {
+    requireUser();
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") ?? "";
+    return HttpResponse.json({ results: db.searchBgg(q) });
+  }),
+  http.get(`${P}/games/`, ({ request }) => {
+    requireUser();
+    const url = new URL(request.url);
+    const q = url.searchParams.get("q") ?? undefined;
+    return HttpResponse.json(paginate(db.games(q)));
+  }),
   http.get(`${P}/games/:bgg/listings/`, ({ params }) => {
     requireUser();
     return HttpResponse.json(db.gameListings(Number(params.bgg)));
@@ -92,12 +105,6 @@ export const handlers = [
     return game
       ? HttpResponse.json(game)
       : HttpResponse.json({ detail: "Not found." }, { status: 404 });
-  }),
-  http.get(`${P}/games/`, ({ request }) => {
-    requireUser();
-    const url = new URL(request.url);
-    const q = url.searchParams.get("q") ?? undefined;
-    return HttpResponse.json(paginate(db.games(q)));
   }),
 
   // ---- Inventory ----
