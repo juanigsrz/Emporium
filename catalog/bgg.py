@@ -1,5 +1,6 @@
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone as dt_timezone
 from django.conf import settings
 from django.utils import timezone
 import requests
@@ -28,6 +29,9 @@ def _get(path, params=None, retries=5):
         if resp.status_code == 202:
             time.sleep(2 ** attempt + 1)
             continue
+        if resp.status_code == 401:
+            # BGG XML API now requires OAuth — caller must handle None.
+            return None
         if resp.status_code == 200:
             return resp.text
         return None
@@ -45,11 +49,83 @@ def search_games(query):
     results = []
     for item in root.findall('item'):
         bgg_id = int(item.get('id', 0))
+        if not bgg_id:
+            continue
         name_el = item.find('name')
         name = name_el.get('value', '') if name_el is not None else ''
         year_el = item.find('yearpublished')
         year = int(year_el.get('value', 0)) if year_el is not None else None
         results.append({'bgg_id': bgg_id, 'name': name, 'year_published': year})
+    return results
+
+
+# Sentinel: stubs are seeded with this timestamp so needs_sync() returns True
+# on next access, triggering a full /thing fetch at that point.
+_STUB_EPOCH = datetime(2000, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def bulk_create_stubs(results):
+    """Create minimal Game rows (id + name + year only) for unknown games.
+
+    Never downgrades a fully-synced game. Safe to call repeatedly.
+    """
+    from .models import Game
+
+    if not results:
+        return
+
+    existing_ids = set(
+        Game.objects.filter(
+            bgg_id__in=[r['bgg_id'] for r in results]
+        ).values_list('bgg_id', flat=True)
+    )
+
+    new_stubs = [
+        Game(
+            bgg_id=r['bgg_id'],
+            name=r['name'] or f'BGG #{r["bgg_id"]}',
+            year_published=r.get('year_published'),
+            thumbnail_url=r.get('thumbnail_url', ''),
+            last_synced_at=_STUB_EPOCH,
+        )
+        for r in results
+        if r['bgg_id'] not in existing_ids and r.get('name')
+    ]
+    if new_stubs:
+        Game.objects.bulk_create(new_stubs, ignore_conflicts=True)
+
+
+def fetch_hot_games():
+    """Fetch BGG's /hot list — one request, ~50 games, lightweight."""
+    xml = _get('/hot', {'type': 'boardgame'})
+    if not xml:
+        return []
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        return []
+    results = []
+    for item in root.findall('item'):
+        bgg_id = int(item.get('id', 0))
+        if not bgg_id:
+            continue
+        name_el = item.find('name')
+        name = name_el.get('value', '') if name_el is not None else ''
+        year_el = item.find('yearpublished')
+        year = None
+        if year_el is not None:
+            try:
+                year = int(year_el.get('value', 0))
+            except (ValueError, TypeError):
+                pass
+        thumbnail_el = item.find('thumbnail')
+        thumbnail = thumbnail_el.get('value', '') if thumbnail_el is not None else ''
+        results.append({
+            'bgg_id': bgg_id,
+            'name': name,
+            'year_published': year,
+            'thumbnail_url': thumbnail,
+        })
     return results
 
 

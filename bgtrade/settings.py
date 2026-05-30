@@ -101,3 +101,6 @@ REST_FRAMEWORK = {
 BGG_BASE_URL = 'https://boardgamegeek.com/xmlapi2'
 BGG_REQUESTS_PER_MINUTE = 30
 BGG_SYNC_TTL_DAYS = 7
+# Set False when BGG API requires OAuth and verification calls would 401.
+# Linking a username will auto-mark it verified without a BGG API call.
+BGG_VERIFICATION_ENABLED = False

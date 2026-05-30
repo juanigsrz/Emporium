@@ -46,7 +46,19 @@ class GameViewSet(viewsets.ReadOnlyModelViewSet):
         if not q:
             return Response({'results': []})
         results = bgg_service.search_games(q)
+        # Persist stubs so catalog search finds them next time (no extra BGG call).
+        bgg_service.bulk_create_stubs(results)
         return Response({'results': results})
+
+    @action(detail=False, methods=['post'], url_path='import-popular')
+    def import_popular(self, request):
+        """Seed catalog with BGG's current hotness list — one API call, ~50 games."""
+        if not (request.user.is_staff or request.user.is_superuser):
+            from rest_framework import status as drf_status
+            return Response({'detail': 'Staff only.'}, status=drf_status.HTTP_403_FORBIDDEN)
+        hot = bgg_service.fetch_hot_games()
+        bgg_service.bulk_create_stubs(hot)
+        return Response({'seeded': len(hot)})
 
     @action(detail=True, methods=['post'], url_path='sync')
     def sync(self, request, bgg_id=None):
