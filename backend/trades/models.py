@@ -1,0 +1,235 @@
+"""
+trades/models.py
+
+F5 X-to-Y Trades models.
+
+Models:
+    OfferGroup      — named set of a user's own event listings + max_give (X).
+    OfferGroupItem  — a single listing inside an OfferGroup.
+    WantGroup       — named set of target games/listings + min_receive (Y).
+    WantGroupItem   — a tiered, ranked target inside a WantGroup.
+    TradeWish       — links one OfferGroup to one WantGroup (the trade intention).
+
+Design: all models are event-scoped. Owner is always set to request.user at
+create time; writes are owner-only. The unified X-to-Y model is the core
+innovation (see DESIGN.md §4).
+"""
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+
+
+# ---------------------------------------------------------------------------
+# OfferGroup
+# ---------------------------------------------------------------------------
+
+class OfferGroup(models.Model):
+    """A named set of the wishing user's own copies in an event."""
+
+    event = models.ForeignKey(
+        "events.TradeEvent",
+        on_delete=models.CASCADE,
+        related_name="offer_groups",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="offer_groups",
+    )
+    name     = models.CharField(max_length=120)
+    max_give = models.PositiveIntegerField(default=1)   # X
+    rules    = models.JSONField(default=dict)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"OfferGroup({self.name!r}, event={self.event.slug}, user={self.user.username})"
+
+
+# ---------------------------------------------------------------------------
+# OfferGroupItem
+# ---------------------------------------------------------------------------
+
+class OfferGroupItem(models.Model):
+    """A single EventListing belonging to an OfferGroup."""
+
+    offer_group = models.ForeignKey(
+        OfferGroup,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    event_listing = models.ForeignKey(
+        "events.EventListing",
+        on_delete=models.CASCADE,
+        related_name="offer_memberships",
+    )
+
+    class Meta:
+        unique_together = [("offer_group", "event_listing")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return (
+            f"OfferGroupItem(group={self.offer_group_id}, "
+            f"listing={self.event_listing_id})"
+        )
+
+    def clean(self):
+        """Validate that the listing's copy is owned by the offer group's user."""
+        if self.event_listing.copy.owner_id != self.offer_group.user_id:
+            raise ValidationError(
+                "The event listing does not belong to the offer group's user."
+            )
+
+
+# ---------------------------------------------------------------------------
+# WantGroup
+# ---------------------------------------------------------------------------
+
+class WantGroup(models.Model):
+    """A named set of targets the user wants, with a minimum receive bound (Y)."""
+
+    event = models.ForeignKey(
+        "events.TradeEvent",
+        on_delete=models.CASCADE,
+        related_name="want_groups",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="want_groups",
+    )
+    name         = models.CharField(max_length=120)
+    min_receive  = models.PositiveIntegerField(default=1)  # Y
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"WantGroup({self.name!r}, event={self.event.slug}, user={self.user.username})"
+
+
+# ---------------------------------------------------------------------------
+# WantGroupItem
+# ---------------------------------------------------------------------------
+
+class WantGroupItem(models.Model):
+    """A tiered, ranked target inside a WantGroup."""
+
+    class TargetType(models.TextChoices):
+        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
+        LISTING    = "LISTING",    "Specific Listing"
+
+    want_group    = models.ForeignKey(
+        WantGroup,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    target_type   = models.CharField(
+        max_length=20,
+        choices=TargetType.choices,
+    )
+    board_game    = models.ForeignKey(
+        "catalog.BoardGame",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="want_group_items",
+    )
+    event_listing = models.ForeignKey(
+        "events.EventListing",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="want_memberships",
+    )
+    tier = models.PositiveIntegerField(default=1)   # priority tier (1 = top)
+    rank = models.IntegerField(default=0)            # order within tier
+
+    class Meta:
+        ordering = ["tier", "rank", "id"]
+
+    def __str__(self):
+        return (
+            f"WantGroupItem(group={self.want_group_id}, "
+            f"type={self.target_type}, tier={self.tier}, rank={self.rank})"
+        )
+
+    def clean(self):
+        """Validate exactly one of board_game / event_listing is set, matching target_type."""
+        if self.target_type == self.TargetType.BOARD_GAME:
+            if not self.board_game_id:
+                raise ValidationError(
+                    "board_game is required when target_type is BOARD_GAME."
+                )
+            if self.event_listing_id:
+                raise ValidationError(
+                    "event_listing must be null when target_type is BOARD_GAME."
+                )
+        elif self.target_type == self.TargetType.LISTING:
+            if not self.event_listing_id:
+                raise ValidationError(
+                    "event_listing is required when target_type is LISTING."
+                )
+            if self.board_game_id:
+                raise ValidationError(
+                    "board_game must be null when target_type is LISTING."
+                )
+        else:
+            raise ValidationError(f"Unknown target_type: {self.target_type}")
+
+
+# ---------------------------------------------------------------------------
+# TradeWish
+# ---------------------------------------------------------------------------
+
+class TradeWish(models.Model):
+    """
+    Links one OfferGroup to one WantGroup (one trade intention).
+
+    Effective bounds:
+        X = offer_group.max_give
+        Y = want_group.min_receive
+    """
+
+    event       = models.ForeignKey(
+        "events.TradeEvent",
+        on_delete=models.CASCADE,
+        related_name="wishes",
+    )
+    user        = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="wishes",
+    )
+    offer_group = models.ForeignKey(
+        OfferGroup,
+        on_delete=models.CASCADE,
+        related_name="wishes",
+    )
+    want_group  = models.ForeignKey(
+        WantGroup,
+        on_delete=models.CASCADE,
+        related_name="wishes",
+    )
+    active = models.BooleanField(default=True)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self):
+        return (
+            f"TradeWish(offer={self.offer_group_id}, "
+            f"want={self.want_group_id}, active={self.active})"
+        )
