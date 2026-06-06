@@ -1,0 +1,61 @@
+"""
+trades/urls.py
+
+Event-scoped trade routes, mounted under /api/events/{slug}/ in events/urls.py.
+
+Pattern: all routes receive `slug` from the parent URL conf.
+
+    GET/POST      offer-groups/
+    GET/PATCH/DELETE offer-groups/{pk}/
+    GET/POST      want-groups/
+    GET/PATCH/DELETE want-groups/{pk}/
+    GET/POST      wishes/
+    GET/PATCH/DELETE wishes/{pk}/
+"""
+
+from django.urls import path
+
+from .views import (
+    OfferGroupDetailView,
+    OfferGroupListCreateView,
+    TradeWishDetailView,
+    TradeWishListCreateView,
+    WantGroupDetailView,
+    WantGroupListCreateView,
+)
+
+urlpatterns = [
+    # Offer Groups
+    path(
+        "events/<slug:slug>/offer-groups/",
+        OfferGroupListCreateView.as_view(),
+        name="offer-group-list",
+    ),
+    path(
+        "events/<slug:slug>/offer-groups/<int:pk>/",
+        OfferGroupDetailView.as_view(),
+        name="offer-group-detail",
+    ),
+    # Want Groups
+    path(
+        "events/<slug:slug>/want-groups/",
+        WantGroupListCreateView.as_view(),
+        name="want-group-list",
+    ),
+    path(
+        "events/<slug:slug>/want-groups/<int:pk>/",
+        WantGroupDetailView.as_view(),
+        name="want-group-detail",
+    ),
+    # Wishes
+    path(
+        "events/<slug:slug>/wishes/",
+        TradeWishListCreateView.as_view(),
+        name="wish-list",
+    ),
+    path(
+        "events/<slug:slug>/wishes/<int:pk>/",
+        TradeWishDetailView.as_view(),
+        name="wish-detail",
+    ),
+]

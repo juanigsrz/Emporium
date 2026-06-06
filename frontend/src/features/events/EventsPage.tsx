@@ -1,0 +1,614 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { useEvents, useCreateEvent } from '../../api/events'
+import type { TradeEventListItem } from '../../api/events'
+import { useAuthStore } from '../../store/auth'
+import { StatusBadge } from './StatusBadge'
+
+// ---- Constants ----
+
+const PAGE_SIZE = 24
+
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All statuses' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'SUBMISSIONS_OPEN', label: 'Submissions Open' },
+  { value: 'WANTLIST_OPEN', label: 'Want List Open' },
+  { value: 'MATCHING', label: 'Matching' },
+  { value: 'MATCH_REVIEW', label: 'Match Review' },
+  { value: 'FINALIZATION', label: 'Finalization' },
+  { value: 'SHIPPING', label: 'Shipping' },
+  { value: 'ARCHIVED', label: 'Archived' },
+]
+
+// ---- Debounce hook ----
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(id)
+  }, [value, delay])
+  return debounced
+}
+
+// ---- Pagination component (reused pattern from GamesPage) ----
+
+interface PaginationProps {
+  page: number
+  total: number
+  pageSize: number
+  onChange: (p: number) => void
+}
+
+function Pagination({ page, total, pageSize, onChange }: PaginationProps) {
+  const totalPages = Math.ceil(total / pageSize)
+  if (totalPages <= 1) return null
+  const delta = 2
+  const pages: (number | 'ellipsis')[] = []
+  const left = Math.max(2, page - delta)
+  const right = Math.min(totalPages - 1, page + delta)
+  pages.push(1)
+  if (left > 2) pages.push('ellipsis')
+  for (let i = left; i <= right; i++) pages.push(i)
+  if (right < totalPages - 1) pages.push('ellipsis')
+  if (totalPages > 1) pages.push(totalPages)
+  return (
+    <nav className="flex items-center justify-center gap-1 mt-8 flex-wrap" aria-label="Pagination">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page === 1}
+        className="px-2.5 py-1.5 text-sm rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        aria-label="Previous page"
+      >
+        ‹ Prev
+      </button>
+      {pages.map((p, i) =>
+        p === 'ellipsis' ? (
+          <span key={`ell-${i}`} className="px-2 py-1.5 text-sm text-gray-400">…</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={`min-w-[2rem] px-2.5 py-1.5 text-sm rounded border transition-colors ${
+              p === page
+                ? 'bg-indigo-600 border-indigo-600 text-white font-semibold'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page === Math.ceil(total / pageSize)}
+        className="px-2.5 py-1.5 text-sm rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        aria-label="Next page"
+      >
+        Next ›
+      </button>
+    </nav>
+  )
+}
+
+// ---- Event card ----
+
+function EventCard({ event }: { event: TradeEventListItem }) {
+  const subDate = event.submissions_open_at
+    ? new Date(event.submissions_open_at).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null
+  const closeDate = event.submissions_close_at
+    ? new Date(event.submissions_close_at).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null
+
+  return (
+    <Link
+      to={`/events/${event.slug}`}
+      className="group block rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h3 className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors line-clamp-2 leading-snug">
+          {event.name}
+        </h3>
+        <StatusBadge status={event.status} />
+      </div>
+
+      {event.description && (
+        <p className="text-xs text-gray-500 line-clamp-2 mb-3">{event.description}</p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+        <span className="flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          {event.participants_count} participant{event.participants_count !== 1 ? 's' : ''}
+        </span>
+        <span className="flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          {event.organizer_username}
+        </span>
+        {subDate && (
+          <span className="flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {closeDate ? `${subDate} – ${closeDate}` : `Opens ${subDate}`}
+          </span>
+        )}
+      </div>
+
+      {(event.is_organizer || event.is_participant) && (
+        <div className="mt-3 flex gap-1.5">
+          {event.is_organizer && (
+            <span className="text-xs border border-indigo-200 text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 font-medium">
+              Organizer
+            </span>
+          )}
+          {event.is_participant && !event.is_organizer && (
+            <span className="text-xs border border-green-200 text-green-600 bg-green-50 rounded px-1.5 py-0.5 font-medium">
+              Joined
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  )
+}
+
+// ---- Event card skeleton ----
+
+function EventCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 animate-pulse">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="h-4 w-2/3 bg-gray-100 rounded" />
+        <div className="h-5 w-16 bg-gray-100 rounded" />
+      </div>
+      <div className="space-y-1.5 mb-3">
+        <div className="h-3 w-full bg-gray-100 rounded" />
+        <div className="h-3 w-4/5 bg-gray-100 rounded" />
+      </div>
+      <div className="flex gap-3">
+        <div className="h-3 w-16 bg-gray-100 rounded" />
+        <div className="h-3 w-20 bg-gray-100 rounded" />
+      </div>
+    </div>
+  )
+}
+
+// ---- Create event form (zod schema) ----
+
+const createEventSchema = z.object({
+  name: z.string().min(3, 'Name must be at least 3 characters').max(200, 'Name too long'),
+  description: z.string().max(5000).optional(),
+  shipping_rules: z.string().max(2000).optional(),
+  regional_restrictions: z.string().max(2000).optional(),
+  trade_policies: z.string().max(2000).optional(),
+  submissions_open_at: z.string().optional(),
+  submissions_close_at: z.string().optional(),
+  wantlist_close_at: z.string().optional(),
+})
+
+type CreateEventFormValues = z.infer<typeof createEventSchema>
+
+interface CreateEventModalProps {
+  onClose: () => void
+}
+
+function CreateEventModal({ onClose }: CreateEventModalProps) {
+  const navigate = useNavigate()
+  const createEvent = useCreateEvent()
+  const [serverError, setServerError] = useState<string | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<CreateEventFormValues>({
+    resolver: zodResolver(createEventSchema),
+    defaultValues: {
+      name: '',
+      description: '',
+      shipping_rules: '',
+      regional_restrictions: '',
+      trade_policies: '',
+    },
+  })
+
+  async function onSubmit(values: CreateEventFormValues) {
+    setServerError(null)
+    try {
+      const payload = {
+        name: values.name,
+        description: values.description || undefined,
+        shipping_rules: values.shipping_rules || undefined,
+        regional_restrictions: values.regional_restrictions || undefined,
+        trade_policies: values.trade_policies || undefined,
+        submissions_open_at: values.submissions_open_at
+          ? new Date(values.submissions_open_at).toISOString()
+          : undefined,
+        submissions_close_at: values.submissions_close_at
+          ? new Date(values.submissions_close_at).toISOString()
+          : undefined,
+        wantlist_close_at: values.wantlist_close_at
+          ? new Date(values.wantlist_close_at).toISOString()
+          : undefined,
+      }
+      const created = await createEvent.mutateAsync(payload)
+      onClose()
+      navigate(`/events/${created.slug}`)
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const resp = (err as { response?: { data?: unknown } }).response
+        const data = resp?.data
+        if (data && typeof data === 'object') {
+          const first = Object.values(data as Record<string, string[]>)[0]
+          setServerError(Array.isArray(first) ? first[0] : String(first))
+        } else {
+          setServerError('Failed to create event. Please try again.')
+        }
+      } else {
+        setServerError('Network error. Please try again.')
+      }
+    }
+  }
+
+  const inputCls = (hasErr: boolean) =>
+    `w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+      hasErr ? 'border-red-400' : 'border-gray-300'
+    }`
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create trade event"
+    >
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-base font-semibold text-gray-900">Create Trade Event</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 p-1 rounded"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="overflow-y-auto flex-1 px-5 py-4">
+          {serverError && (
+            <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {serverError}
+            </div>
+          )}
+
+          <form id="create-event-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Event name <span className="text-red-500">*</span>
+              </label>
+              <input
+                {...register('name')}
+                placeholder="e.g. Spring 2026 Math Trade"
+                className={inputCls(!!errors.name)}
+              />
+              {errors.name && (
+                <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                {...register('description')}
+                rows={3}
+                placeholder="Describe your event, rules, or any special notes…"
+                className={`${inputCls(false)} resize-none`}
+              />
+            </div>
+
+            {/* Dates */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dates (optional)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Submissions open
+                  </label>
+                  <input
+                    type="datetime-local"
+                    {...register('submissions_open_at')}
+                    className={inputCls(false)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Submissions close
+                  </label>
+                  <input
+                    type="datetime-local"
+                    {...register('submissions_close_at')}
+                    className={inputCls(false)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Want list closes
+                  </label>
+                  <input
+                    type="datetime-local"
+                    {...register('wantlist_close_at')}
+                    className={inputCls(false)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Policies */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Policies (optional)</p>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Shipping rules</label>
+                <textarea
+                  {...register('shipping_rules')}
+                  rows={2}
+                  placeholder="e.g. Domestic shipping only. Buyer pays shipping."
+                  className={`${inputCls(false)} resize-none`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Regional restrictions
+                </label>
+                <textarea
+                  {...register('regional_restrictions')}
+                  rows={2}
+                  placeholder="e.g. Argentina only."
+                  className={`${inputCls(false)} resize-none`}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Trade policies</label>
+                <textarea
+                  {...register('trade_policies')}
+                  rows={2}
+                  placeholder="e.g. No confirmed trades may be retracted."
+                  className={`${inputCls(false)} resize-none`}
+                />
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="create-event-form"
+            disabled={isSubmitting}
+            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          >
+            {isSubmitting ? 'Creating…' : 'Create event'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---- Main page ----
+
+export default function EventsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { token } = useAuthStore()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '')
+  const debouncedSearch = useDebounce(searchInput, 300)
+  const statusFilter = searchParams.get('status') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1', 10)
+
+  const prevFilters = useRef({ search: debouncedSearch, status: statusFilter })
+
+  useEffect(() => {
+    const prev = prevFilters.current
+    const changed = prev.search !== debouncedSearch || prev.status !== statusFilter
+    prevFilters.current = { search: debouncedSearch, status: statusFilter }
+    setSearchParams(
+      (p) => {
+        const next = new URLSearchParams(p)
+        if (debouncedSearch) next.set('search', debouncedSearch)
+        else next.delete('search')
+        if (changed) next.delete('page')
+        return next
+      },
+      { replace: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, statusFilter])
+
+  function setStatus(value: string) {
+    setSearchParams((p) => {
+      const next = new URLSearchParams(p)
+      if (value) next.set('status', value)
+      else next.delete('status')
+      next.delete('page')
+      return next
+    })
+  }
+
+  function changePage(p: number) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (p === 1) next.delete('page')
+      else next.set('page', String(p))
+      return next
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const queryParams = {
+    search: debouncedSearch || undefined,
+    status: statusFilter || undefined,
+    page,
+  }
+
+  const { data, isLoading, isError, isFetching } = useEvents(queryParams)
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setSearchInput(e.target.value),
+    []
+  )
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      {createOpen && <CreateEventModal onClose={() => setCreateOpen(false)} />}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Trade Events</h1>
+          {data && !isLoading && (
+            <p className="mt-0.5 text-sm text-gray-500">
+              {data.count.toLocaleString()} event{data.count !== 1 ? 's' : ''}
+              {debouncedSearch ? ` matching "${debouncedSearch}"` : ''}
+            </p>
+          )}
+        </div>
+
+        {token ? (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm self-start whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Create event
+          </button>
+        ) : (
+          <Link
+            to="/login"
+            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors self-start whitespace-nowrap"
+          >
+            Login to create event
+          </Link>
+        )}
+      </div>
+
+      {/* Filter bar */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+          </span>
+          <input
+            type="search"
+            placeholder="Search events…"
+            value={searchInput}
+            onChange={handleSearchChange}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          {isFetching && !isLoading && (
+            <span className="absolute inset-y-0 right-3 flex items-center">
+              <svg className="w-3.5 h-3.5 text-indigo-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </span>
+          )}
+        </div>
+
+        {/* Status filter */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatus(e.target.value)}
+          className="py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          aria-label="Filter by status"
+        >
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Content */}
+      {isError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
+          <p className="text-sm font-medium text-red-700">Could not load events.</p>
+          <p className="mt-1 text-xs text-red-500">Check your connection or try again later.</p>
+        </div>
+      ) : isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <EventCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : data && data.results.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p className="text-base font-medium text-gray-600">No events found</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {debouncedSearch || statusFilter
+              ? 'Try adjusting your filters.'
+              : 'Be the first to create a trade event!'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 transition-opacity ${
+              isFetching ? 'opacity-60' : 'opacity-100'
+            }`}
+          >
+            {data!.results.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+
+          <Pagination
+            page={page}
+            total={data!.count}
+            pageSize={PAGE_SIZE}
+            onChange={changePage}
+          />
+        </>
+      )}
+    </div>
+  )
+}

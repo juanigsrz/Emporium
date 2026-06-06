@@ -1,0 +1,1482 @@
+import { useState, useCallback } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+
+import { useEvent, useEventListings } from '../../api/events'
+import type { EventListing } from '../../api/events'
+import { useGamesList } from '../../api/games'
+import type { GameListItem } from '../../api/games'
+import { useAuthStore } from '../../store/auth'
+
+import {
+  useOfferGroups,
+  useCreateOfferGroup,
+  usePatchOfferGroup,
+  useDeleteOfferGroup,
+  useWantGroups,
+  useCreateWantGroup,
+  usePatchWantGroup,
+  useDeleteWantGroup,
+  useWishes,
+  useCreateWish,
+  useToggleWish,
+  useDeleteWish,
+} from '../../api/trades'
+import type {
+  OfferGroup,
+  WantGroup,
+  WantGroupItem,
+  WantGroupItemPayload,
+  TradeWish,
+} from '../../api/trades'
+
+// ---- Helpers ----
+
+function extractErrorMsg(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const resp = (err as { response?: { data?: unknown } }).response
+    const data = resp?.data
+    if (data && typeof data === 'object') {
+      const first = Object.values(data as Record<string, unknown>)[0]
+      if (Array.isArray(first)) return String(first[0])
+      if (typeof first === 'string') return first
+    }
+    if (typeof data === 'string') return data
+  }
+  if (err instanceof Error) return err.message
+  return 'An error occurred. Please try again.'
+}
+
+// ---- Drag-sortable item ----
+
+interface SortableItemProps {
+  id: string
+  children: React.ReactNode
+  className?: string
+}
+
+function SortableItem({ id, children, className }: SortableItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style} className={className}>
+      <div className="flex items-center gap-2">
+        <button
+          {...attributes}
+          {...listeners}
+          className="touch-none shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-1"
+          aria-label="Drag to reorder"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+          </svg>
+        </button>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// OFFER GROUPS PANEL
+// ============================================================
+
+interface OfferGroupsPanelProps {
+  slug: string
+  myListings: EventListing[]
+}
+
+function OfferGroupsPanel({ slug, myListings }: OfferGroupsPanelProps) {
+  const { data: groups = [], isLoading } = useOfferGroups(slug)
+  const createGroup = useCreateOfferGroup()
+  const patchGroup = usePatchOfferGroup()
+  const deleteGroup = useDeleteOfferGroup()
+
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      {groups.length === 0 && !showForm && (
+        <p className="text-xs text-gray-400 py-2">No offer groups yet. Create one to specify what you're offering.</p>
+      )}
+
+      {groups.map((group) =>
+        editingId === group.id ? (
+          <OfferGroupForm
+            key={group.id}
+            slug={slug}
+            myListings={myListings}
+            existing={group}
+            onSave={async (payload) => {
+              setError(null)
+              try {
+                await patchGroup.mutateAsync({ slug, id: group.id, payload })
+                setEditingId(null)
+              } catch (e) {
+                setError(extractErrorMsg(e))
+              }
+            }}
+            onCancel={() => setEditingId(null)}
+            isSaving={patchGroup.isPending}
+          />
+        ) : (
+          <OfferGroupCard
+            key={group.id}
+            group={group}
+            onEdit={() => setEditingId(group.id)}
+            onDelete={async () => {
+              setError(null)
+              try {
+                await deleteGroup.mutateAsync({ slug, id: group.id })
+              } catch (e) {
+                setError(extractErrorMsg(e))
+              }
+            }}
+            isDeleting={deleteGroup.isPending}
+          />
+        )
+      )}
+
+      {showForm && (
+        <OfferGroupForm
+          slug={slug}
+          myListings={myListings}
+          onSave={async (payload) => {
+            setError(null)
+            try {
+              await createGroup.mutateAsync({ slug, payload })
+              setShowForm(false)
+            } catch (e) {
+              setError(extractErrorMsg(e))
+            }
+          }}
+          onCancel={() => setShowForm(false)}
+          isSaving={createGroup.isPending}
+        />
+      )}
+
+      {!showForm && (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+        >
+          + New offer group
+        </button>
+      )}
+    </div>
+  )
+}
+
+interface OfferGroupCardProps {
+  group: OfferGroup
+  onEdit: () => void
+  onDelete: () => void
+  isDeleting: boolean
+}
+
+function OfferGroupCard({ group, onEdit, onDelete, isDeleting }: OfferGroupCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <span className="text-sm font-semibold text-gray-800">{group.name}</span>
+          <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+            Give up to {group.max_give}
+          </span>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          <button
+            onClick={onEdit}
+            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
+          >
+            Edit
+          </button>
+          {confirmDelete ? (
+            <span className="flex items-center gap-1">
+              <button
+                onClick={onDelete}
+                disabled={isDeleting}
+                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+              >
+                {isDeleting ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+      {group.items.length === 0 ? (
+        <p className="text-xs text-gray-400 italic">No listings in this group.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {group.items.map((item) => (
+            <span
+              key={item.id}
+              className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+            >
+              <span className="font-mono text-gray-400">{item.listing_code}</span>
+              {item.board_game_name}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface OfferGroupFormProps {
+  slug: string
+  myListings: EventListing[]
+  existing?: OfferGroup
+  onSave: (payload: { name: string; max_give: number; item_listing_ids: number[] }) => Promise<void>
+  onCancel: () => void
+  isSaving: boolean
+}
+
+function OfferGroupForm({ myListings, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+  const [name, setName] = useState(existing?.name ?? '')
+  const [maxGive, setMaxGive] = useState(String(existing?.max_give ?? 1))
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(
+    new Set(existing?.items.map((i) => i.event_listing) ?? [])
+  )
+  const [formError, setFormError] = useState<string | null>(null)
+
+  function toggleListing(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setFormError(null)
+    if (!name.trim()) { setFormError('Name is required.'); return }
+    const mg = parseInt(maxGive, 10)
+    if (isNaN(mg) || mg < 1) { setFormError('Max give must be at least 1.'); return }
+    if (selectedIds.size === 0) { setFormError('Select at least one listing.'); return }
+    if (mg > selectedIds.size) { setFormError(`Max give (${mg}) cannot exceed the number of selected listings (${selectedIds.size}).`); return }
+    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds) })
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-3"
+    >
+      {formError && (
+        <p className="text-xs text-red-600">{formError}</p>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Group name</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="e.g. My heavy games"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Max give (X) — give up to this many
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={myListings.length || 1}
+            value={maxGive}
+            onChange={(e) => setMaxGive(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-gray-700 mb-1.5">
+          Select listings to offer ({selectedIds.size} selected)
+        </p>
+        {myListings.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">
+            No listings in this event. Add copies first.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
+            {myListings.map((listing) => (
+              <label
+                key={listing.id}
+                className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-colors text-sm ${
+                  selectedIds.has(listing.id)
+                    ? 'border-indigo-400 bg-white text-indigo-800'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(listing.id)}
+                  onChange={() => toggleListing(listing.id)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium">{listing.board_game_name}</span>
+                <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+        >
+          {isSaving ? 'Saving…' : existing ? 'Save changes' : 'Create group'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ============================================================
+// WANT GROUPS PANEL
+// ============================================================
+
+interface WantGroupsPanelProps {
+  slug: string
+  myListings: EventListing[]
+}
+
+// A "draft item" used in the local editor before persisting
+interface DraftWantItem {
+  // Unique local key for DnD (not the backend id)
+  localId: string
+  target_type: 'BOARD_GAME' | 'LISTING'
+  board_game: number | null
+  board_game_name: string | null
+  event_listing: number | null
+  listing_code: string | null
+  tier: number
+  rank: number
+}
+
+function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
+  if (item.target_type === 'BOARD_GAME') return `bg-${item.board_game}`
+  return `listing-${item.event_listing}`
+}
+
+function WantGroupsPanel({ slug, myListings }: WantGroupsPanelProps) {
+  const { data: groups = [], isLoading } = useWantGroups(slug)
+  const createGroup = useCreateWantGroup()
+  const deleteGroup = useDeleteWantGroup()
+
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      {groups.length === 0 && !showForm && (
+        <p className="text-xs text-gray-400 py-2">No want groups yet. Create one by adding games you'd like to receive.</p>
+      )}
+
+      {groups.map((group) =>
+        editingId === group.id ? (
+          <WantGroupEditor
+            key={group.id}
+            slug={slug}
+            group={group}
+            myListings={myListings}
+            onClose={() => setEditingId(null)}
+          />
+        ) : (
+          <WantGroupCard
+            key={group.id}
+            group={group}
+            onEdit={() => setEditingId(group.id)}
+            onDelete={async () => {
+              setError(null)
+              try {
+                await deleteGroup.mutateAsync({ slug, id: group.id })
+              } catch (e) {
+                setError(extractErrorMsg(e))
+              }
+            }}
+            isDeleting={deleteGroup.isPending}
+          />
+        )
+      )}
+
+      {showForm && (
+        <WantGroupEditor
+          slug={slug}
+          myListings={myListings}
+          onClose={async (created) => {
+            if (created) {
+              try {
+                await createGroup.mutateAsync({ slug, payload: created })
+              } catch (e) {
+                setError(extractErrorMsg(e))
+                return
+              }
+            }
+            setShowForm(false)
+          }}
+          isCreating
+        />
+      )}
+
+      {!showForm && editingId === null && (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors"
+        >
+          + New want group
+        </button>
+      )}
+    </div>
+  )
+}
+
+interface WantGroupCardProps {
+  group: WantGroup
+  onEdit: () => void
+  onDelete: () => void
+  isDeleting: boolean
+}
+
+function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  // Group items by tier for display
+  const tiers = group.items.reduce<Record<number, WantGroupItem[]>>((acc, item) => {
+    const t = item.tier
+    if (!acc[t]) acc[t] = []
+    acc[t].push(item)
+    return acc
+  }, {})
+  const tierNumbers = Object.keys(tiers)
+    .map(Number)
+    .sort((a, b) => a - b)
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <span className="text-sm font-semibold text-gray-800">{group.name}</span>
+          <span className="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+            Receive at least {group.min_receive}
+          </span>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          <button
+            onClick={onEdit}
+            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
+          >
+            Edit
+          </button>
+          {confirmDelete ? (
+            <span className="flex items-center gap-1">
+              <button
+                onClick={onDelete}
+                disabled={isDeleting}
+                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+              >
+                {isDeleting ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+
+      {group.items.length === 0 ? (
+        <p className="text-xs text-gray-400 italic">No targets yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {tierNumbers.map((tier) => (
+            <div key={tier}>
+              <span className="text-xs font-medium text-gray-500 mb-1 block">Tier {tier}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {tiers[tier]
+                  .sort((a, b) => a.rank - b.rank)
+                  .map((item) => (
+                    <span
+                      key={item.id}
+                      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${
+                        item.target_type === 'BOARD_GAME'
+                          ? 'bg-purple-50 text-purple-700'
+                          : 'bg-blue-50 text-blue-700'
+                      }`}
+                    >
+                      {item.target_type === 'LISTING' && (
+                        <span className="font-mono text-gray-400">{item.listing_code}</span>
+                      )}
+                      {item.target_type === 'LISTING' ? item.board_game_name : item.board_game_name}
+                      {item.target_type === 'BOARD_GAME' && (
+                        <span className="text-gray-400">(any copy)</span>
+                      )}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// The drag-and-drop editor for a want group
+
+interface WantGroupEditorProps {
+  slug: string
+  group?: WantGroup
+  myListings: EventListing[]
+  onClose: (
+    created?: { name: string; min_receive: number; items: WantGroupItemPayload[] }
+  ) => void
+  isCreating?: boolean
+}
+
+function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantGroupEditorProps) {
+  const patchGroup = usePatchWantGroup()
+
+  const [name, setName] = useState(group?.name ?? '')
+  const [minReceive, setMinReceive] = useState(String(group?.min_receive ?? 1))
+  const [items, setItems] = useState<DraftWantItem[]>(() =>
+    (group?.items ?? []).map((i) => ({
+      localId: makeDraftKey(i),
+      target_type: i.target_type,
+      board_game: i.board_game,
+      board_game_name: i.board_game_name,
+      event_listing: i.event_listing,
+      listing_code: i.listing_code,
+      tier: i.tier,
+      rank: i.rank,
+    }))
+  )
+  const [gameSearch, setGameSearch] = useState('')
+  const [activeTier, setActiveTier] = useState(1)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [duplicateWarn, setDuplicateWarn] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Search games for adding BOARD_GAME targets
+  const { data: gameResults } = useGamesList({
+    search: gameSearch,
+    page: 1,
+  })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
+  )
+
+  // Items in the current view: filtered to activeTier, sorted by rank
+  const tiers = [...new Set(items.map((i) => i.tier))].sort((a, b) => a - b)
+  if (!tiers.includes(activeTier) && tiers.length > 0) {
+    // activeTier no longer exists, switch to first
+  }
+  const tierItems = items.filter((i) => i.tier === activeTier).sort((a, b) => a.rank - b.rank)
+  const tierItemIds = tierItems.map((i) => i.localId)
+
+  function addBoardGame(game: GameListItem) {
+    const key = `bg-${game.bgg_id}`
+    if (items.some((i) => i.localId === key)) {
+      setDuplicateWarn(`"${game.name}" is already in this want group.`)
+      setTimeout(() => setDuplicateWarn(null), 3000)
+      return
+    }
+    const maxRank = Math.max(0, ...items.filter((i) => i.tier === activeTier).map((i) => i.rank))
+    setItems((prev) => [
+      ...prev,
+      {
+        localId: key,
+        target_type: 'BOARD_GAME',
+        board_game: game.bgg_id,
+        board_game_name: game.name,
+        event_listing: null,
+        listing_code: null,
+        tier: activeTier,
+        rank: maxRank + 1,
+      },
+    ])
+    setGameSearch('')
+  }
+
+  function addListing(listing: EventListing) {
+    const key = `listing-${listing.id}`
+    if (items.some((i) => i.localId === key)) {
+      setDuplicateWarn(`Listing "${listing.board_game_name} (${listing.listing_code})" is already in this want group.`)
+      setTimeout(() => setDuplicateWarn(null), 3000)
+      return
+    }
+    const maxRank = Math.max(0, ...items.filter((i) => i.tier === activeTier).map((i) => i.rank))
+    setItems((prev) => [
+      ...prev,
+      {
+        localId: key,
+        target_type: 'LISTING',
+        board_game: null,
+        board_game_name: listing.board_game_name,
+        event_listing: listing.id,
+        listing_code: listing.listing_code,
+        tier: activeTier,
+        rank: maxRank + 1,
+      },
+    ])
+  }
+
+  function removeItem(localId: string) {
+    setItems((prev) => {
+      const filtered = prev.filter((i) => i.localId !== localId)
+      // Re-index ranks within each tier
+      const tiers = [...new Set(filtered.map((i) => i.tier))]
+      return tiers.flatMap((t) =>
+        filtered
+          .filter((i) => i.tier === t)
+          .sort((a, b) => a.rank - b.rank)
+          .map((item, idx) => ({ ...item, rank: idx + 1 }))
+      )
+    })
+  }
+
+  function addTier() {
+    const nextTier = tiers.length > 0 ? Math.max(...tiers) + 1 : 1
+    setActiveTier(nextTier)
+  }
+
+  function removeTier(tier: number) {
+    setItems((prev) => prev.filter((i) => i.tier !== tier))
+    // Switch to a remaining tier
+    const remaining = [...new Set(items.filter((i) => i.tier !== tier).map((i) => i.tier))].sort(
+      (a, b) => a - b
+    )
+    setActiveTier(remaining[0] ?? 1)
+  }
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      setItems((prev) => {
+        const tierItemsLocal = prev.filter((i) => i.tier === activeTier).sort((a, b) => a.rank - b.rank)
+        const oldIndex = tierItemsLocal.findIndex((i) => i.localId === active.id)
+        const newIndex = tierItemsLocal.findIndex((i) => i.localId === over.id)
+        if (oldIndex === -1 || newIndex === -1) return prev
+
+        const reordered = arrayMove(tierItemsLocal, oldIndex, newIndex).map((item, idx) => ({
+          ...item,
+          rank: idx + 1,
+        }))
+        // Merge back with items from other tiers
+        return [...prev.filter((i) => i.tier !== activeTier), ...reordered]
+      })
+    },
+    [activeTier]
+  )
+
+  function buildPayloadItems(): WantGroupItemPayload[] {
+    // Sort by tier then rank for the full list
+    const sorted = [...items].sort((a, b) => a.tier - b.tier || a.rank - b.rank)
+    return sorted.map((item) => {
+      const base: WantGroupItemPayload = {
+        target_type: item.target_type,
+        tier: item.tier,
+        rank: item.rank,
+      }
+      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
+        base.board_game = item.board_game
+      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
+        base.event_listing = item.event_listing
+      }
+      return base
+    })
+  }
+
+  async function handleSave() {
+    setFormError(null)
+    if (!name.trim()) { setFormError('Name is required.'); return }
+    const mr = parseInt(minReceive, 10)
+    if (isNaN(mr) || mr < 1) { setFormError('Min receive must be at least 1.'); return }
+    if (items.length === 0) { setFormError('Add at least one want target.'); return }
+    if (mr > items.length) { setFormError(`Min receive (${mr}) cannot exceed total targets (${items.length}).`); return }
+
+    setIsSaving(true)
+    try {
+      const payloadItems = buildPayloadItems()
+      if (isCreating) {
+        // Signal to parent to create
+        onClose({ name: name.trim(), min_receive: mr, items: payloadItems })
+      } else if (group) {
+        await patchGroup.mutateAsync({
+          slug,
+          id: group.id,
+          payload: { name: name.trim(), min_receive: mr, items: payloadItems },
+        })
+        onClose()
+      }
+    } catch (e) {
+      setFormError(extractErrorMsg(e))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Group name</label>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            placeholder="e.g. Strategy games I want"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Min receive (Y) — receive at least this many
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={minReceive}
+            onChange={(e) => setMinReceive(e.target.value)}
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+      </div>
+
+      {(formError || duplicateWarn) && (
+        <div className={`rounded-md px-3 py-2 text-xs ${formError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
+          {formError || duplicateWarn}
+        </div>
+      )}
+
+      {/* Tier tabs */}
+      <div>
+        <div className="flex items-center gap-1 flex-wrap mb-2">
+          <span className="text-xs font-medium text-gray-600 mr-1">Tiers:</span>
+          {tiers.map((tier) => (
+            <div key={tier} className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setActiveTier(tier)}
+                className={`rounded-l px-2.5 py-1 text-xs font-medium transition-colors ${
+                  activeTier === tier
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-purple-50'
+                }`}
+              >
+                Tier {tier}
+                <span className="ml-1 text-gray-300">
+                  ({items.filter((i) => i.tier === tier).length})
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => removeTier(tier)}
+                className={`rounded-r border border-l-0 px-1.5 py-1 text-xs transition-colors ${
+                  activeTier === tier
+                    ? 'bg-purple-700 text-white border-purple-700 hover:bg-purple-800'
+                    : 'bg-white border-gray-300 text-gray-400 hover:text-red-500'
+                }`}
+                aria-label={`Remove tier ${tier}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addTier}
+            className="rounded px-2.5 py-1 text-xs font-medium bg-white border border-dashed border-gray-300 text-gray-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
+          >
+            + Tier
+          </button>
+        </div>
+
+        {/* Drag-and-drop list for active tier */}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={tierItemIds} strategy={verticalListSortingStrategy}>
+            <div className="space-y-1.5 min-h-[40px]">
+              {tierItems.length === 0 ? (
+                <div className="rounded-md border-2 border-dashed border-purple-200 py-4 text-center text-xs text-gray-400">
+                  Drop targets here or search below to add
+                </div>
+              ) : (
+                tierItems.map((item) => (
+                  <SortableItem
+                    key={item.localId}
+                    id={item.localId}
+                    className="rounded-md border border-gray-200 bg-white px-3 py-2"
+                  >
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-sm text-gray-800 font-medium truncate block">
+                          {item.board_game_name}
+                        </span>
+                        {item.target_type === 'LISTING' ? (
+                          <span className="text-xs text-blue-600 font-mono">{item.listing_code} (specific)</span>
+                        ) : (
+                          <span className="text-xs text-purple-500">any copy</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.localId)}
+                        className="shrink-0 text-xs text-gray-300 hover:text-red-500 transition-colors"
+                        aria-label="Remove target"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </SortableItem>
+                ))
+              )}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+
+      {/* Add game target via search */}
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-gray-700">Search game (any copy):</p>
+        <input
+          value={gameSearch}
+          onChange={(e) => setGameSearch(e.target.value)}
+          placeholder="Type a game name…"
+          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+        />
+        {gameSearch.length >= 2 && gameResults && gameResults.results.length > 0 && (
+          <div className="rounded-md border border-gray-200 bg-white divide-y divide-gray-50 max-h-40 overflow-y-auto shadow-sm">
+            {gameResults.results.slice(0, 8).map((game) => {
+              const alreadyAdded = items.some((i) => i.localId === `bg-${game.bgg_id}`)
+              return (
+                <button
+                  key={game.bgg_id}
+                  type="button"
+                  onClick={() => addBoardGame(game)}
+                  disabled={alreadyAdded}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                    alreadyAdded
+                      ? 'text-gray-300 cursor-not-allowed'
+                      : 'hover:bg-purple-50 text-gray-700'
+                  }`}
+                >
+                  <span className="font-medium">{game.name}</span>
+                  {game.year_published && (
+                    <span className="ml-1 text-xs text-gray-400">({game.year_published})</span>
+                  )}
+                  {alreadyAdded && <span className="ml-2 text-xs text-gray-400">already added</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {gameSearch.length >= 2 && gameResults?.results.length === 0 && (
+          <p className="text-xs text-gray-400">No games found.</p>
+        )}
+      </div>
+
+      {/* Add specific listing target */}
+      {myListings.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-gray-700">
+            Or add a specific listing from this event:
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {myListings.map((listing) => {
+              const alreadyAdded = items.some((i) => i.localId === `listing-${listing.id}`)
+              return (
+                <button
+                  key={listing.id}
+                  type="button"
+                  onClick={() => addListing(listing)}
+                  disabled={alreadyAdded}
+                  className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
+                    alreadyAdded
+                      ? 'border-gray-200 text-gray-300 cursor-not-allowed'
+                      : 'border-blue-200 text-blue-600 hover:bg-blue-50'
+                  }`}
+                >
+                  {listing.board_game_name}
+                  <span className="ml-1 font-mono text-gray-400">{listing.listing_code}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => onClose()}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="flex-1 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60 transition-colors"
+        >
+          {isSaving ? 'Saving…' : group ? 'Save changes' : 'Create group'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// WISHES PANEL
+// ============================================================
+
+interface WishesPanelProps {
+  slug: string
+  offerGroups: OfferGroup[]
+  wantGroups: WantGroup[]
+}
+
+function WishesPanel({ slug, offerGroups, wantGroups }: WishesPanelProps) {
+  const { data: wishes = [], isLoading } = useWishes(slug)
+  const createWish = useCreateWish()
+  const toggleWish = useToggleWish()
+  const deleteWish = useDeleteWish()
+
+  const [showForm, setShowForm] = useState(false)
+  const [selectedOG, setSelectedOG] = useState<string>('')
+  const [selectedWG, setSelectedWG] = useState<string>('')
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleCreate() {
+    setError(null)
+    if (!selectedOG || !selectedWG) {
+      setError('Select both an offer group and a want group.')
+      return
+    }
+    const ogId = parseInt(selectedOG, 10)
+    const wgId = parseInt(selectedWG, 10)
+    // Check duplicate
+    if (wishes.some((w) => w.offer_group === ogId && w.want_group === wgId)) {
+      setError('This offer → want combination already exists.')
+      return
+    }
+    try {
+      await createWish.mutateAsync({ slug, payload: { offer_group: ogId, want_group: wgId, active: true } })
+      setShowForm(false)
+      setSelectedOG('')
+      setSelectedWG('')
+    } catch (e) {
+      setError(extractErrorMsg(e))
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      {wishes.length === 0 && !showForm && (
+        <p className="text-xs text-gray-400 py-2">
+          No wishes yet. Link an offer group to a want group to express a trade preference.
+        </p>
+      )}
+
+      {wishes.map((wish) => (
+        <WishCard
+          key={wish.id}
+          wish={wish}
+          onToggle={async () => {
+            setError(null)
+            try {
+              await toggleWish.mutateAsync({ slug, id: wish.id, active: !wish.active })
+            } catch (e) {
+              setError(extractErrorMsg(e))
+            }
+          }}
+          onDelete={async () => {
+            setError(null)
+            try {
+              await deleteWish.mutateAsync({ slug, id: wish.id })
+            } catch (e) {
+              setError(extractErrorMsg(e))
+            }
+          }}
+          isToggling={toggleWish.isPending}
+          isDeleting={deleteWish.isPending}
+        />
+      ))}
+
+      {showForm ? (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-3">
+          <p className="text-xs font-semibold text-green-700">New wish — link an offer to a want</p>
+
+          <div className="grid grid-cols-1 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Offer group (what you give)</label>
+              {offerGroups.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">Create an offer group first.</p>
+              ) : (
+                <select
+                  value={selectedOG}
+                  onChange={(e) => setSelectedOG(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Select offer group…</option>
+                  {offerGroups.map((og) => (
+                    <option key={og.id} value={og.id}>
+                      {og.name} (give up to {og.max_give})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Want group (what you receive)</label>
+              {wantGroups.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">Create a want group first.</p>
+              ) : (
+                <select
+                  value={selectedWG}
+                  onChange={(e) => setSelectedWG(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="">Select want group…</option>
+                  {wantGroups.map((wg) => (
+                    <option key={wg.id} value={wg.id}>
+                      {wg.name} (receive at least {wg.min_receive})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {selectedOG && selectedWG && (() => {
+            const og = offerGroups.find((g) => g.id === parseInt(selectedOG, 10))
+            const wg = wantGroups.find((g) => g.id === parseInt(selectedWG, 10))
+            if (!og || !wg) return null
+            return (
+              <div className="rounded-md bg-white border border-green-200 px-3 py-2 text-xs">
+                <span className="font-semibold text-indigo-700">{og.name}</span>
+                <span className="mx-1.5 font-mono text-green-600">
+                  {og.max_give}:{wg.min_receive}
+                </span>
+                <span className="font-semibold text-purple-700">{wg.name}</span>
+                <span className="ml-2 text-gray-400">
+                  — give up to {og.max_give}, receive at least {wg.min_receive}
+                </span>
+              </div>
+            )
+          })()}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowForm(false); setError(null); setSelectedOG(''); setSelectedWG('') }}
+              className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={createWish.isPending || offerGroups.length === 0 || wantGroups.length === 0}
+              className="flex-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-60 transition-colors"
+            >
+              {createWish.isPending ? 'Creating…' : 'Create wish'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowForm(true)}
+          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-green-300 hover:text-green-500 transition-colors"
+        >
+          + New wish
+        </button>
+      )}
+    </div>
+  )
+}
+
+interface WishCardProps {
+  wish: TradeWish
+  onToggle: () => void
+  onDelete: () => void
+  isToggling: boolean
+  isDeleting: boolean
+}
+
+function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting }: WishCardProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  return (
+    <div
+      className={`rounded-lg border p-3 transition-colors ${
+        wish.active ? 'border-green-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-70'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          {/* X:Y summary */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-1">
+            <span className="text-sm font-semibold text-indigo-700 truncate">
+              {wish.offer_group_name}
+            </span>
+            <span className="shrink-0 inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 font-mono text-xs font-bold text-green-700">
+              {wish.max_give}:{wish.min_receive}
+            </span>
+            <span className="text-sm font-semibold text-purple-700 truncate">
+              {wish.want_group_name}
+            </span>
+          </div>
+          <p className="text-xs text-gray-400">
+            Give up to <strong>{wish.max_give}</strong> → Receive at least <strong>{wish.min_receive}</strong>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={onToggle}
+            disabled={isToggling}
+            className={`rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+              wish.active
+                ? 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
+                : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'
+            }`}
+            title={wish.active ? 'Deactivate wish' : 'Activate wish'}
+          >
+            {wish.active ? 'Pause' : 'Activate'}
+          </button>
+          {confirmDelete ? (
+            <span className="flex items-center gap-1">
+              <button
+                onClick={onDelete}
+                disabled={isDeleting}
+                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+              >
+                {isDeleting ? 'Deleting…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!wish.active && (
+        <span className="mt-1.5 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-400">
+          Paused
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ============================================================
+// MAIN PAGE
+// ============================================================
+
+type BuilderTab = 'offers' | 'wants' | 'wishes'
+
+export default function WantListBuilderPage() {
+  const { slug } = useParams<{ slug: string }>()
+  const { user } = useAuthStore()
+
+  const { data: event, isLoading: eventLoading, isError: eventError } = useEvent(slug)
+  const { data: listingsData } = useEventListings(slug, { user: user?.username })
+  const { data: offerGroupsData = [] } = useOfferGroups(slug)
+  const { data: wantGroupsData = [] } = useWantGroups(slug)
+
+  const [activeTab, setActiveTab] = useState<BuilderTab>('offers')
+
+  const myListings = listingsData?.results ?? []
+
+  if (eventLoading) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+        <div className="h-8 w-2/3 bg-gray-100 rounded" />
+        <div className="h-4 w-1/3 bg-gray-100 rounded" />
+        <div className="h-64 bg-gray-100 rounded-xl" />
+      </div>
+    )
+  }
+
+  if (eventError || !event) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
+          <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
+          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
+            Back to events
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (!event.is_participant && !event.is_organizer) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
+          <p className="text-sm font-medium text-yellow-700">
+            You must join this event before building your want list.
+          </p>
+          <Link
+            to={`/events/${slug}`}
+            className="mt-3 inline-block text-sm text-indigo-600 hover:underline"
+          >
+            Go to event page to join
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const tabs: { id: BuilderTab; label: string; count?: number }[] = [
+    { id: 'offers', label: 'Offer Groups', count: offerGroupsData.length },
+    { id: 'wants', label: 'Want Groups', count: wantGroupsData.length },
+    { id: 'wishes', label: 'Wishes' },
+  ]
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+      {/* Back link */}
+      <Link
+        to={`/events/${slug}`}
+        className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to {event.name}
+      </Link>
+
+      {/* Header */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h1 className="text-xl font-bold text-gray-900">Want List Builder</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {event.name}
+          <span className="mx-2 text-gray-300">·</span>
+          Build offer groups, want groups, and link them into wishes
+        </p>
+
+        {/* X:Y explained */}
+        <div className="mt-3 rounded-md bg-indigo-50 border border-indigo-100 px-3 py-2.5 text-xs text-gray-600">
+          <strong className="text-indigo-700">How it works:</strong> An{' '}
+          <span className="font-semibold text-indigo-600">Offer Group</span> is a set of your listings
+          with a max-give (X).{' '}
+          A <span className="font-semibold text-purple-600">Want Group</span> is a prioritized list of
+          games/listings you want, with a min-receive (Y).{' '}
+          A <span className="font-semibold text-green-600">Wish</span> links them:{' '}
+          "Give up to X → Receive at least Y."
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === tab.id
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            {tab.label}
+            {tab.count !== undefined && tab.count > 0 && (
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${
+                  activeTab === tab.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Panel content */}
+      <div className="min-h-[300px]">
+        {activeTab === 'offers' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Offer Groups
+              </h2>
+              <p className="text-xs text-gray-400">
+                {myListings.length} listing{myListings.length !== 1 ? 's' : ''} in this event
+              </p>
+            </div>
+            {myListings.length === 0 && (
+              <div className="rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs text-yellow-700">
+                You have no listings in this event yet.{' '}
+                <Link to={`/events/${slug}`} className="underline font-medium">
+                  Add copies from the event page.
+                </Link>
+              </div>
+            )}
+            <OfferGroupsPanel slug={slug!} myListings={myListings} />
+          </div>
+        )}
+
+        {activeTab === 'wants' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Want Groups
+              </h2>
+              <p className="text-xs text-gray-400">
+                Drag to reorder within each tier
+              </p>
+            </div>
+            <WantGroupsPanel slug={slug!} myListings={myListings} />
+          </div>
+        )}
+
+        {activeTab === 'wishes' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Wishes — X:Y links
+              </h2>
+              <p className="text-xs text-gray-400">
+                {offerGroupsData.length} offer · {wantGroupsData.length} want
+              </p>
+            </div>
+            {(offerGroupsData.length === 0 || wantGroupsData.length === 0) && (
+              <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
+                Create at least one offer group and one want group first.
+              </div>
+            )}
+            <WishesPanel slug={slug!} offerGroups={offerGroupsData} wantGroups={wantGroupsData} />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
