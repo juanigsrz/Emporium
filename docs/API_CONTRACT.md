@@ -72,6 +72,9 @@ Copy object shape (key display fields): `owner` = user **id** (int), `owner_user
 | DELETE | `/api/events/{slug}/leave/` | leave |
 | GET/POST | `/api/events/{slug}/listings/` | EventListings; POST `{copy}` adds own copy. `?user=&board_game=` |
 | DELETE | `/api/events/{slug}/listings/{id}/` | remove own listing |
+| GET | `/api/events/{slug}/games/` | **event-scoped catalog**: distinct games with active copies in this event. `?search=` (name), `?ordering=name\|rank\|-copies_count` (default `-copies_count`). Paginated. Powers the want-list builder (global catalog browsing was removed — only games tradeable here matter). |
+
+EventGame item: `{bgg_id, name, year_published, rank, image_url, copies_count}` where `copies_count` = active EventListings of that game **in this event**.
 
 Shapes (pinned from BE):
 - **TradeEvent**: `organizer` = user **id** (int), `organizer_username` = string (use for display/links). Date fields are only `submissions_open_at`, `submissions_close_at`, `wantlist_close_at` (no `wantlist_open_at`/`matching_at`/`results_at`). Plus `allowed_transitions: string[]`, `participants_count`, `is_organizer`, `is_participant`.

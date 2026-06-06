@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMyCopies, usePatchCopy, useWithdrawCopy } from '../../api/copies'
-import type { Copy } from '../../api/copies'
+import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy } from '../../api/copies'
+import type { Copy, CopyCondition } from '../../api/copies'
+import { useGamesList } from '../../api/games'
 import { CONDITION_LABELS } from './constants'
 
 // ---- Constants ----
@@ -393,12 +393,9 @@ function MyCopyCard({ copy }: { copy: Copy }) {
           <span className={`text-xs border rounded px-1.5 py-0.5 font-medium ${statusClass}`}>
             {copy.status.charAt(0) + copy.status.slice(1).toLowerCase()}
           </span>
-          <Link
-            to={`/games/${copy.board_game}`}
-            className="text-xs text-indigo-600 hover:underline ml-auto"
-          >
-            View game
-          </Link>
+          <span className="ml-auto max-w-[60%] truncate text-sm font-semibold text-gray-800">
+            {copy.board_game_name}
+          </span>
         </div>
 
         {/* Condition + language + edition */}
@@ -482,10 +479,134 @@ const STATUS_OPTIONS = [
   { value: 'WITHDRAWN', label: 'Withdrawn' },
 ]
 
+// ---- Add copy panel ----
+
+const ADD_CONDITION_OPTIONS: CopyCondition[] = ['NEW', 'LIKE_NEW', 'EXCELLENT', 'GOOD', 'FAIR', 'POOR']
+
+function AddCopyPanel({ onDone }: { onDone: () => void }) {
+  const [q, setQ] = useState('')
+  const [picked, setPicked] = useState<{ bgg_id: number; name: string } | null>(null)
+  const [condition, setCondition] = useState<CopyCondition>('GOOD')
+  const [language, setLanguage] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  // Global catalog typeahead: you can own ANY game (offering), so this is the
+  // one place the full catalog is still searched — want-lists stay event-scoped.
+  const { data } = useGamesList({ search: q.trim(), ordering: 'rank' })
+  const results = q.trim().length >= 2 && !picked ? (data?.results ?? []).slice(0, 8) : []
+  const create = useCreateCopy()
+
+  const submit = () => {
+    if (!picked) {
+      setError('Pick a game first.')
+      return
+    }
+    setError(null)
+    create.mutate(
+      { board_game: picked.bgg_id, condition, language: language.trim() || undefined },
+      {
+        onSuccess: () => {
+          setPicked(null)
+          setQ('')
+          setLanguage('')
+        },
+        onError: () => setError('Could not add the copy. Please try again.'),
+      }
+    )
+  }
+
+  return (
+    <div className="mb-6 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-800">Add a copy you own</h2>
+        <button onClick={onDone} className="text-xs text-gray-400 hover:text-gray-600">
+          Close
+        </button>
+      </div>
+
+      {picked ? (
+        <div className="mb-3 flex items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 py-2">
+          <span className="text-sm font-medium text-gray-800">{picked.name}</span>
+          <button
+            onClick={() => setPicked(null)}
+            className="ml-auto text-xs text-indigo-500 hover:underline"
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <div className="relative mb-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search the catalog for a game you own…"
+            className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+          {results.length > 0 && (
+            <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+              {results.map((g) => (
+                <li key={g.bgg_id}>
+                  <button
+                    type="button"
+                    onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name })}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+                  >
+                    <span className="truncate text-gray-800">{g.name}</span>
+                    <span className="shrink-0 text-xs text-gray-400">{g.year_published ?? ''}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-xs text-gray-500">
+          Condition
+          <select
+            value={condition}
+            onChange={(e) => setCondition(e.target.value as CopyCondition)}
+            className="mt-1 block rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          >
+            {ADD_CONDITION_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {CONDITION_LABELS[c] ?? c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs text-gray-500">
+          Language (optional)
+          <input
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            placeholder="e.g. English"
+            className="mt-1 block rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+        </label>
+        <button
+          onClick={submit}
+          disabled={create.isPending || !picked}
+          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+        >
+          {create.isPending ? 'Adding…' : 'Add copy'}
+        </button>
+      </div>
+
+      {create.isSuccess && !picked && (
+        <p className="mt-2 text-xs text-green-600">Copy added. Add another or close.</p>
+      )}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </div>
+  )
+}
+
 // ---- Main page ----
 
 export default function MyCopiesPage() {
   const [statusFilter, setStatusFilter] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
   const { data, isLoading, isError } = useMyCopies()
 
   const copies = (data?.results ?? []) as Copy[]
@@ -507,16 +628,18 @@ export default function MyCopiesPage() {
             </p>
           )}
         </div>
-        <Link
-          to="/games"
+        <button
+          onClick={() => setAddOpen((v) => !v)}
           className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm self-start"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          Add copy from game
-        </Link>
+          Add a copy
+        </button>
       </div>
+
+      {addOpen && <AddCopyPanel onDone={() => setAddOpen(false)} />}
 
       {/* Filter */}
       {!isLoading && copies.length > 0 && (
@@ -556,14 +679,14 @@ export default function MyCopiesPage() {
           </svg>
           <p className="text-sm font-medium text-gray-500">No copies yet</p>
           <p className="text-xs text-gray-400 mt-1">
-            Browse the games catalog and add a copy from a game page.
+            Add the board games you own so you can list them in trade events.
           </p>
-          <Link
-            to="/games"
+          <button
+            onClick={() => setAddOpen(true)}
             className="mt-4 inline-block text-sm text-indigo-600 hover:underline font-medium"
           >
-            Browse games
-          </Link>
+            Add a copy
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-200 px-6 py-10 text-center">

@@ -1,8 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 import App from '../App'
 import HomePage from '../features/home/HomePage'
-import GamesPage from '../features/games/GamesPage'
-import GameDetailPage from '../features/games/GameDetailPage'
 import EventsPage from '../features/events/EventsPage'
 import EventDetailPage from '../features/events/EventDetailPage'
 import LoginPage from '../features/login/LoginPage'
@@ -12,6 +10,7 @@ import PublicProfilePage from '../features/profile/PublicProfilePage'
 import MyCopiesPage from '../features/copies/MyCopiesPage'
 import RequireAuth from '../components/RequireAuth'
 import WantListBuilderPage from '../features/trades/WantListBuilderPage'
+import MyWantsPage from '../features/trades/MyWantsPage'
 import MatchRunPage from '../features/matching/MatchRunPage'
 
 export const router = createBrowserRouter([
@@ -20,10 +19,16 @@ export const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <HomePage /> },
-      { path: 'games', element: <GamesPage /> },
-      { path: 'games/:bggId', element: <GameDetailPage /> },
       { path: 'events', element: <EventsPage /> },
       { path: 'events/:slug', element: <EventDetailPage /> },
+      {
+        path: 'events/:slug/wants',
+        element: (
+          <RequireAuth>
+            <MyWantsPage />
+          </RequireAuth>
+        ),
+      },
       {
         path: 'events/:slug/builder',
         element: (

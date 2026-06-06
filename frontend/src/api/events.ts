@@ -119,6 +119,22 @@ export interface EventListingsParams {
   page?: number
 }
 
+/** A canonical game with active copies in this event (event-scoped catalog). */
+export interface EventGame {
+  bgg_id: number
+  name: string
+  year_published: number | null
+  rank: number | null
+  image_url: string
+  copies_count: number
+}
+
+export interface EventGamesParams {
+  search?: string
+  ordering?: 'name' | 'rank' | '-copies_count' | 'copies_count'
+  page?: number
+}
+
 export interface EventsListParams {
   status?: string
   organizer?: string
@@ -135,6 +151,8 @@ export const EVENTS_KEYS = {
   participants: (slug: string) => ['events', 'participants', slug] as const,
   listings: (slug: string, params?: EventListingsParams) =>
     ['events', 'listings', slug, params ?? {}] as const,
+  games: (slug: string, params?: EventGamesParams) =>
+    ['events', 'games', slug, params ?? {}] as const,
 }
 
 // ---- API functions ----
@@ -210,6 +228,21 @@ export async function fetchEventListings(
   return data
 }
 
+export async function fetchEventGames(
+  slug: string,
+  params: EventGamesParams = {}
+): Promise<PaginatedResponse<EventGame>> {
+  const p: Record<string, string> = {}
+  if (params.search) p.search = params.search
+  if (params.ordering) p.ordering = params.ordering
+  if (params.page && params.page > 1) p.page = String(params.page)
+  const { data } = await apiClient.get<PaginatedResponse<EventGame>>(
+    `/events/${slug}/games/`,
+    { params: p }
+  )
+  return data
+}
+
 export async function addEventListing(
   slug: string,
   copyId: number
@@ -259,6 +292,16 @@ export function useEventListings(slug: string | undefined, params: EventListings
     queryFn: () => fetchEventListings(slug!, params),
     enabled: !!slug,
     staleTime: 30_000,
+  })
+}
+
+export function useEventGames(slug: string | undefined, params: EventGamesParams = {}) {
+  return useQuery({
+    queryKey: EVENTS_KEYS.games(slug ?? '', params),
+    queryFn: () => fetchEventGames(slug!, params),
+    enabled: !!slug,
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
   })
 }
 

@@ -33,6 +33,7 @@ from rest_framework.response import Response
 
 from .models import EventListing, EventParticipation, TradeEvent
 from .serializers import (
+    EventGameSerializer,
     EventListingSerializer,
     EventParticipationSerializer,
     TradeEventSerializer,
@@ -285,3 +286,46 @@ class TradeEventViewSet(
 
         listing.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get"], url_path="games")
+    def games(self, request, slug=None):
+        """Event-scoped catalog: canonical games that have active copies here.
+
+        GET /api/events/{slug}/games/?search=&ordering=
+        Powers the want-list builder's browse/search (global catalog browsing is
+        not useful — only games with copies in this event are tradeable).
+        Ordering: `copies_count` (default desc), `name`, `rank`.
+        """
+        from django.db.models import Count, Q
+        from catalog.models import BoardGame
+
+        # Resolve the event directly: self.get_object() would apply the list
+        # filter_backends (incl. ?search= over event names), 404-ing the event.
+        event = get_object_or_404(TradeEvent, slug=slug)
+        listed = Q(copies__event_listings__event=event, copies__event_listings__active=True)
+        qs = (
+            BoardGame.objects
+            .filter(listed)
+            .annotate(copies_count=Count("copies__event_listings", filter=listed, distinct=True))
+            .distinct()
+        )
+
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(name__icontains=search)
+
+        ordering = request.query_params.get("ordering", "-copies_count")
+        order_map = {
+            "name": ["name"],
+            "rank": ["rank", "name"],
+            "-copies_count": ["-copies_count", "name"],
+            "copies_count": ["copies_count", "name"],
+        }
+        qs = qs.order_by(*order_map.get(ordering, ["-copies_count", "name"]))
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            ser = EventGameSerializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(ser.data)
+        ser = EventGameSerializer(qs, many=True, context={"request": request})
+        return Response(ser.data)

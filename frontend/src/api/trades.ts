@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
 import type { PaginatedResponse } from './games'
 
@@ -175,6 +176,21 @@ async function patchWish(slug: string, id: number, active: boolean): Promise<Tra
 
 async function deleteWish(slug: string, id: number): Promise<void> {
   await apiClient.delete(`/events/${slug}/wishes/${id}/`)
+}
+
+// ---- Raw helpers (for sequential orchestration outside React hooks) ----
+// Used by MyWantsPage to lazily create the offer/want/wish trio per item and
+// batch-PATCH want lists on Save. Same endpoints as the hooks above.
+
+export const createOfferGroupRaw = createOfferGroup
+export const createWantGroupRaw = createWantGroup
+export const patchWantGroupRaw = patchWantGroup
+export const createWishRaw = createWish
+
+export function invalidateTrades(qc: QueryClient, slug: string): void {
+  qc.invalidateQueries({ queryKey: TRADES_KEYS.offerGroups(slug) })
+  qc.invalidateQueries({ queryKey: TRADES_KEYS.wantGroups(slug) })
+  qc.invalidateQueries({ queryKey: TRADES_KEYS.wishes(slug) })
 }
 
 // ---- Hooks ----

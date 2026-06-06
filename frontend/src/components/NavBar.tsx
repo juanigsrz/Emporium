@@ -5,7 +5,6 @@ import { logoutApi } from '../api/auth'
 
 const navLinks = [
   { to: '/', label: 'Home' },
-  { to: '/games', label: 'Games' },
   { to: '/events', label: 'Events' },
 ]
 
