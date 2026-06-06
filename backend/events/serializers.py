@@ -161,6 +161,22 @@ class EventListingSerializer(serializers.ModelSerializer):
         return obj.copy.owner.username
 
 
+class EventGameSerializer(serializers.Serializer):
+    """A canonical game that has active copies listed in this event.
+
+    Read-only. `copies_count` is the number of active EventListings of this game
+    *within the event* (annotated on the queryset). Powers the event-scoped
+    catalog used by the want-list builder.
+    """
+
+    bgg_id         = serializers.IntegerField()
+    name           = serializers.CharField()
+    year_published = serializers.IntegerField(allow_null=True)
+    rank           = serializers.IntegerField(allow_null=True)
+    image_url      = serializers.CharField(allow_blank=True)
+    copies_count   = serializers.IntegerField()
+
+
 class TransitionSerializer(serializers.Serializer):
     to = serializers.CharField()
 

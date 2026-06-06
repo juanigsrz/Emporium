@@ -67,14 +67,14 @@ export default function HomePage() {
 
       <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FeatureCard
-          title="Browse Games"
-          description="Search 170k+ board games from BoardGameGeek's catalog."
-          href="/games"
-        />
-        <FeatureCard
           title="Trade Events"
           description="Join an event, list your copies, and build your want list."
           href="/events"
+        />
+        <FeatureCard
+          title="My Copies"
+          description="Add the board games you own, ready to list in trade events."
+          href="/my-copies"
         />
       </div>
     </div>

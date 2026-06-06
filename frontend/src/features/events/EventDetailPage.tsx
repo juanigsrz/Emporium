@@ -785,20 +785,23 @@ export default function EventDetailPage() {
         )}
       </div>
 
-      {/* Want List Builder link (participant only) */}
+      {/* My Wants (participant only) — primary; advanced X-to-Y builder secondary */}
       {token && (event.is_participant || event.is_organizer) && (
         <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-indigo-800">Want List Builder</p>
+            <p className="text-sm font-semibold text-indigo-800">My Wants</p>
             <p className="text-xs text-indigo-500 mt-0.5">
-              Create offer groups, want groups, and link them into X:Y wishes.
+              For each item you offer, pick the games you'd accept in return.{' '}
+              <Link to={`/events/${event.slug}/builder`} className="underline hover:text-indigo-700">
+                Advanced X-to-Y builder
+              </Link>
             </p>
           </div>
           <Link
-            to={`/events/${event.slug}/builder`}
+            to={`/events/${event.slug}/wants`}
             className="shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm"
           >
-            Open Builder
+            Open My Wants
           </Link>
         </div>
       )}

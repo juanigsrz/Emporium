@@ -72,6 +72,10 @@ def listing_detail_url(slug, listing_id):
     return f"/api/events/{slug}/listings/{listing_id}/"
 
 
+def games_url(slug):
+    return f"/api/events/{slug}/games/"
+
+
 # ---------------------------------------------------------------------------
 # Sample CSV helper (reused from copies tests pattern)
 # ---------------------------------------------------------------------------
@@ -506,3 +510,53 @@ class EventListFilterTests(EventTestBase):
         slugs = [e["slug"] for e in resp.data["results"]]
         self.assertIn(self.bob_slug, slugs)
         self.assertNotIn(self.draft_slug, slugs)
+
+
+# ---------------------------------------------------------------------------
+# Event-scoped catalog: GET /api/events/{slug}/games/
+# ---------------------------------------------------------------------------
+
+class EventGamesEndpointTests(EventTestBase):
+    """Only games with active copies in THIS event are returned (event-scoped)."""
+
+    def setUp(self):
+        super().setUp()
+        resp = self.client.post(EVENTS_URL, {"name": "Games Endpoint Event"})
+        self.slug = resp.data["slug"]
+        event = TradeEvent.objects.get(slug=self.slug)
+        # user2 owns a second copy of game1; game1 ends with 2 copies, game2 with 1.
+        self.copy1b = Copy.objects.create(owner=self.user2, board_game=self.game1)
+        EventListing.objects.create(event=event, copy=self.copy1)
+        EventListing.objects.create(event=event, copy=self.copy1b)
+        EventListing.objects.create(event=event, copy=self.copy2)
+
+    def test_lists_only_games_with_copies_in_event(self):
+        resp = self.client.get(games_url(self.slug))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        ids = {g["bgg_id"] for g in resp.data["results"]}
+        self.assertEqual(ids, {self.game1.bgg_id, self.game2.bgg_id})
+
+    def test_copies_count_per_game(self):
+        resp = self.client.get(games_url(self.slug))
+        by_id = {g["bgg_id"]: g["copies_count"] for g in resp.data["results"]}
+        self.assertEqual(by_id[self.game1.bgg_id], 2)
+        self.assertEqual(by_id[self.game2.bgg_id], 1)
+
+    def test_inactive_listing_excluded(self):
+        EventListing.objects.filter(event__slug=self.slug, copy=self.copy2).update(active=False)
+        resp = self.client.get(games_url(self.slug))
+        ids = {g["bgg_id"] for g in resp.data["results"]}
+        self.assertNotIn(self.game2.bgg_id, ids)
+
+    def test_search_filters_and_does_not_404_event(self):
+        # Regression: ?search= must filter games, NOT the event lookup (which the
+        # viewset's list filter would 404).
+        resp = self.client.get(games_url(self.slug), {"search": self.game1.name[:5]})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        ids = {g["bgg_id"] for g in resp.data["results"]}
+        self.assertIn(self.game1.bgg_id, ids)
+
+    def test_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        resp = self.client.get(games_url(self.slug))
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
