@@ -119,6 +119,7 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | description | text blank | |
 | organizer | FK(User, related=events_organized) | |
 | status | choice | DRAFT, SUBMISSIONS_OPEN, WANTLIST_OPEN, MATCHING, MATCH_REVIEW, FINALIZATION, SHIPPING, ARCHIVED |
+| matching_mode | choice default ONETOONE | ONETOONE (online ftm solver) / XTOY (local solver, upload). Selects solver + export/run flow; frozen once MATCHING. |
 | submissions_open_at | datetime null | |
 | submissions_close_at | datetime null | |
 | wantlist_close_at | datetime null | |
@@ -126,6 +127,8 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | regional_restrictions | text blank | |
 | trade_policies | text blank | |
 | algorithm_settings | JSON default dict | solver knobs |
+| money_enabled | bool default False | organizer allows money in trades |
+| max_money_per_user | decimal(10,2) null | per-user spend cap (null = no cap) |
 
 Allowed transitions enforced server-side (see DESIGN §5). Expose
 `allowed_transitions` in the serializer for the FE.
@@ -137,6 +140,7 @@ Allowed transitions enforced server-side (see DESIGN §5). Expose
 | user | FK(User, related=event_participations) | |
 | region | char(64) blank | |
 | shipping_pref | char(120) blank | |
+| max_spend | decimal(10,2) default 0 | user's money budget for the event (set via join; capped by max_money_per_user) |
 unique_together = (event, user).
 
 ### EventListing (a Copy entered into an event = the matchable unit)
@@ -176,17 +180,19 @@ unique_together = (offer_group, event_listing). Validate listing.copy.owner == g
 | user | FK(User, related=want_groups) | |
 | name | char(120) | |
 | min_receive | int default 1 | **Y** — min copies user must receive |
+| duplicate_protection | bool default False | solver must not award >1 copy of the same canonical game; set True by the normal "My Wants" builder, left False by the advanced X-to-Y builder |
 
-### WantGroupItem (a tiered, ranked target)
+### WantGroupItem (a binary want target)
 | field | type | notes |
 |---|---|---|
 | want_group | FK(WantGroup, related=items) | |
 | target_type | choice | BOARD_GAME, LISTING |
 | board_game | FK(BoardGame) null | when target_type=BOARD_GAME (any copy) |
 | event_listing | FK(EventListing) null | when target_type=LISTING (specific) |
-| tier | int default 1 | priority tier (1 = top) |
-| rank | int default 0 | order within tier (drag-drop) |
-Exactly one of board_game / event_listing set (validate).
+| money_amount | decimal(10,2) null | optional money bid: max the user adds to receive this game (placeholder for MIP solver) |
+Exactly one of board_game / event_listing set (validate). Wants are **binary** —
+you want a target or you don't; no priority/tier/rank (neither solver consumes
+priority). Items keep insertion order.
 
 ### TradeWish (ties one OfferGroup → one WantGroup)
 | field | type | notes |

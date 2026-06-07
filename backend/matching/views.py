@@ -95,6 +95,13 @@ class MatchRunListCreateView(APIView):
                 {"detail": "Event must be in MATCHING status to trigger a run."}
             )
 
+        # X-to-Y events are solved locally by the organizer and uploaded.
+        if event.matching_mode == TradeEvent.MatchingMode.XTOY:
+            raise ValidationError(
+                {"detail": "X-to-Y events are matched by uploading a solution to "
+                           "/matches/upload/, not by triggering an online run."}
+            )
+
         match_run = MatchRun.objects.create(
             event=event,
             status=MatchRun.Status.PENDING,
@@ -200,3 +207,72 @@ class MatchRunMineView(APIView):
 
         ser = TradeAssignmentSerializer(qs, many=True)
         return Response(ser.data)
+
+
+# ---------------------------------------------------------------------------
+# Upload (locally-solved solution)
+# ---------------------------------------------------------------------------
+
+class MatchRunUploadView(APIView):
+    """
+    POST /api/events/{slug}/matches/upload/
+
+    Organizer uploads raw solver stdout (X-to-Y: gurobi `give -> take`;
+    1-to-1: ftm `TRADE LOOPS`). Body = plain text. Parsed into a DONE MatchRun
+    with TradeAssignment rows. Organizer-only; event must be in MATCHING.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, slug):
+        from datetime import datetime, timezone
+
+        from events.models import TradeEvent
+        from matching.external_solver import load_solution
+
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can upload a solution.")
+        if event.status != TradeEvent.Status.MATCHING:
+            raise ValidationError(
+                {"detail": "Event must be in MATCHING status to upload a solution."}
+            )
+
+        # Accept a raw text body (text/plain) or a {"output": "..."} JSON payload.
+        # Read request.body for raw text — touching request.data on a non-JSON
+        # body would raise UnsupportedMediaType.
+        content_type = request.content_type or ""
+        if "application/json" in content_type:
+            raw = request.data.get("output", "") if isinstance(request.data, dict) else ""
+        else:
+            raw = request.body.decode("utf-8", "replace")
+        if not raw.strip():
+            raise ValidationError({"detail": "Empty solution upload."})
+
+        algorithm = (
+            "gurobi-xy"
+            if event.matching_mode == TradeEvent.MatchingMode.XTOY
+            else "ftm-upload"
+        )
+        run = MatchRun.objects.create(
+            event=event, status=MatchRun.Status.RUNNING, algorithm=algorithm,
+            started_at=datetime.now(timezone.utc),
+        )
+        try:
+            result, summary, log = load_solution(run, raw)
+        except ValueError as exc:
+            run.delete()  # nothing half-persisted (load_solution is atomic)
+            raise ValidationError({"detail": str(exc)})
+
+        run.result = result
+        run.summary = summary
+        run.log = log
+        run.status = MatchRun.Status.DONE
+        run.finished_at = datetime.now(timezone.utc)
+        run.save(update_fields=[
+            "result", "summary", "log", "status", "finished_at",
+        ])
+        return Response(
+            {"id": run.pk, "status": run.status, "summary": run.summary},
+            status=status.HTTP_201_CREATED,
+        )

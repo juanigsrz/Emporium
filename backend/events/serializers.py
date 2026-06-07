@@ -34,6 +34,9 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "organizer",
             "organizer_username",
             "status",
+            "matching_mode",
+            "money_enabled",
+            "max_money_per_user",
             "submissions_open_at",
             "submissions_close_at",
             "wantlist_close_at",
@@ -61,6 +64,34 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "created",
             "updated",
         ]
+
+    # Statuses at/after which the matching mode is frozen.
+    _MODE_FROZEN_STATUSES = {
+        TradeEvent.Status.MATCHING,
+        TradeEvent.Status.MATCH_REVIEW,
+        TradeEvent.Status.FINALIZATION,
+        TradeEvent.Status.SHIPPING,
+        TradeEvent.Status.ARCHIVED,
+    }
+
+    def validate_matching_mode(self, value):
+        # Freeze the mode once matching has begun — switching solvers mid-run
+        # would invalidate any export/result already produced.
+        if (
+            self.instance is not None
+            and value != self.instance.matching_mode
+            and self.instance.status in self._MODE_FROZEN_STATUSES
+        ):
+            raise serializers.ValidationError(
+                f"matching_mode is frozen once the event reaches "
+                f"{self.instance.status}."
+            )
+        return value
+
+    def validate_max_money_per_user(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("max_money_per_user cannot be negative.")
+        return value
 
     def get_organizer_username(self, obj):
         return obj.organizer.username
@@ -104,6 +135,7 @@ class EventParticipationSerializer(serializers.ModelSerializer):
             "username",
             "region",
             "shipping_pref",
+            "max_spend",
             "created",
         ]
         read_only_fields = ["id", "event", "user", "username", "created"]
@@ -120,6 +152,10 @@ class EventListingSerializer(serializers.ModelSerializer):
     board_game_name  = serializers.SerializerMethodField()
     copy_owner_id    = serializers.IntegerField(source="copy.owner_id", read_only=True)
     copy_owner_username = serializers.SerializerMethodField()
+    # Lightweight distinguishers so copy chips can be told apart at a glance
+    # (e.g. a different language or condition). Full detail is on /copies/{id}/.
+    copy_condition   = serializers.CharField(source="copy.condition", read_only=True)
+    copy_language    = serializers.CharField(source="copy.language", read_only=True)
 
     # Writable: accept copy pk on create
     copy = serializers.PrimaryKeyRelatedField(
@@ -139,6 +175,8 @@ class EventListingSerializer(serializers.ModelSerializer):
             "board_game_name",
             "copy_owner_id",
             "copy_owner_username",
+            "copy_condition",
+            "copy_language",
             "active",
             "created",
         ]
@@ -151,6 +189,8 @@ class EventListingSerializer(serializers.ModelSerializer):
             "board_game_name",
             "copy_owner_id",
             "copy_owner_username",
+            "copy_condition",
+            "copy_language",
             "created",
         ]
 

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing } from '../../api/events'
+import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
 
 import {
@@ -33,6 +34,60 @@ interface Target {
   boardGameId?: number
   listingId?: number
   label: string
+  /** Canonical game this target belongs to — LISTING targets group under it. */
+  gameId: number
+  gameName: string
+}
+
+// A canonical-game row in the want views: one game, its optional "any copy"
+// target plus any specific-copy (LISTING) targets. Collapses the duplicate rows.
+interface GameGroup {
+  gameId: number
+  gameName: string
+  anyTarget?: Target           // BOARD_GAME (any copy)
+  copyTargets: Target[]        // specific LISTING selections
+}
+
+function groupTargetsByGame(targets: Target[]): GameGroup[] {
+  const byGame = new Map<number, GameGroup>()
+  for (const t of targets) {
+    let g = byGame.get(t.gameId)
+    if (!g) {
+      g = { gameId: t.gameId, gameName: t.gameName, copyTargets: [] }
+      byGame.set(t.gameId, g)
+    }
+    if (t.type === 'BOARD_GAME') g.anyTarget = t
+    else g.copyTargets.push(t)
+  }
+  return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
+}
+
+function groupKeys(g: GameGroup): string[] {
+  const keys = g.copyTargets.map((t) => t.key)
+  if (g.anyTarget) keys.push(g.anyTarget.key)
+  return keys
+}
+
+function groupIsOn(editor: Editor, listingId: number, g: GameGroup): boolean {
+  return groupKeys(g).some((k) => editor.isOn(listingId, k))
+}
+
+// Aggregate toggle: on→clear every target of this game; off→want "any copy"
+// (or re-enable the previously-picked specific copies if that's all there is).
+function toggleGroup(editor: Editor, listingId: number, g: GameGroup): void {
+  if (groupIsOn(editor, listingId, g)) {
+    groupKeys(g).forEach((k) => editor.toggle(listingId, k, false))
+  } else if (g.anyTarget) {
+    editor.toggle(listingId, g.anyTarget.key, true)
+  } else {
+    g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, true))
+  }
+}
+
+function groupBadge(g: GameGroup): string {
+  if (g.anyTarget) return 'any copy'
+  const n = g.copyTargets.length
+  return `${n} cop${n === 1 ? 'y' : 'ies'}`
 }
 
 function gameTargetKey(bggId: number): string {
@@ -98,6 +153,8 @@ function buildModel(
                 type: 'BOARD_GAME',
                 boardGameId: item.board_game,
                 label: item.board_game_name ?? `Game ${item.board_game}`,
+                gameId: item.board_game,
+                gameName: item.board_game_name ?? `Game ${item.board_game}`,
               })
             }
           } else if (item.target_type === 'LISTING' && item.event_listing != null) {
@@ -109,6 +166,10 @@ function buildModel(
                 type: 'LISTING',
                 listingId: item.event_listing,
                 label: item.listing_code ?? `Listing ${item.event_listing}`,
+                // board_game_id is the canonical game of the listing's copy →
+                // lets specific-copy wants fold under their game row.
+                gameId: item.board_game_id ?? -item.event_listing,
+                gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
               })
             }
           }
@@ -122,75 +183,217 @@ function buildModel(
 }
 
 // ============================================================
-// Game search (adds "any copy of game" targets)
+// Game browse — paginated card grid of the games available in THIS event.
+// Expand a card to see the concrete copies it resolves to; "Want" toggles a
+// BOARD_GAME target on for ALL my items (refine per-item in the grid).
+// Replaces the old typeahead search; only event-scoped games, never the
+// global 177k catalog.
 // ============================================================
 
-interface GameSearchProps {
+const BROWSE_PAGE_SIZE = 24
+
+interface GameBrowseProps {
   slug: string
-  onPick: (target: Target) => void
-  placeholder?: string
+  editor: Editor
+  myListings: EventListing[]
+  username?: string
 }
 
-// Event-scoped catalog search: only games that have copies in THIS event are
-// tradeable, so we browse /events/{slug}/games/ — never the global 177k catalog.
-function GameSearch({ slug, onPick, placeholder }: GameSearchProps) {
+function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
   const [q, setQ] = useState('')
-  const [focused, setFocused] = useState(false)
-  const { data, isFetching } = useEventGames(slug, { search: q.trim() })
-  const show = focused || q.trim().length >= 1
-  const results = show ? (data?.results ?? []).slice(0, 10) : []
+  const [page, setPage] = useState(1)
+  const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const { data, isFetching } = useEventGames(slug, {
+    search: q.trim(),
+    ordering,
+    page,
+    page_size: BROWSE_PAGE_SIZE,
+  })
+  const games = data?.results ?? []
+  const count = data?.count ?? 0
+  const totalPages = Math.max(1, Math.ceil(count / BROWSE_PAGE_SIZE))
+
+  const isWanted = useCallback(
+    (bggId: number) => {
+      const key = gameTargetKey(bggId)
+      return myListings.some((l) => editor.isOn(l.id, key))
+    },
+    [editor, myListings]
+  )
+
+  function toggleWant(g: { bgg_id: number; name: string }) {
+    const key = gameTargetKey(g.bgg_id)
+    const next = !isWanted(g.bgg_id)
+    editor.addTarget({
+      key, type: 'BOARD_GAME', boardGameId: g.bgg_id, label: g.name,
+      gameId: g.bgg_id, gameName: g.name,
+    })
+    myListings.forEach((l) => editor.toggle(l.id, key, next))
+  }
 
   return (
-    <div className="relative">
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
-        placeholder={placeholder ?? 'Search games available in this event…'}
-        className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
-      />
-      {results.length > 0 && (
-        <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
-          {results.map((g) => (
-            <li key={g.bgg_id}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  onPick({
-                    key: gameTargetKey(g.bgg_id),
-                    type: 'BOARD_GAME',
-                    boardGameId: g.bgg_id,
-                    label: g.name,
-                  })
-                  setQ('')
-                }}
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+    <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setPage(1) }}
+          placeholder="Search games available in this event…"
+          className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+        />
+        <select
+          value={ordering}
+          onChange={(e) => { setOrdering(e.target.value as '-copies_count' | 'name'); setPage(1) }}
+          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-600"
+          aria-label="Order games"
+        >
+          <option value="-copies_count">Most available</option>
+          <option value="name">A–Z</option>
+        </select>
+      </div>
+
+      {games.length === 0 ? (
+        <p className="px-1 py-6 text-center text-sm text-gray-400">
+          {isFetching ? 'Loading games…' : 'No games with copies match.'}
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {games.map((g) => {
+            const wanted = isWanted(g.bgg_id)
+            const open = expanded === g.bgg_id
+            return (
+              <div
+                key={g.bgg_id}
+                className={`flex flex-col overflow-hidden rounded-lg border ${
+                  wanted ? 'border-purple-300 ring-1 ring-purple-200' : 'border-gray-200'
+                }`}
               >
-                <span className="truncate text-gray-800">{g.name}</span>
-                <span className="shrink-0 text-xs font-medium text-indigo-500">
-                  {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                <div className="flex gap-2 p-2">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100">
+                    {g.image_url ? (
+                      <img src={g.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-gray-800" title={g.name}>
+                      {g.name}
+                    </p>
+                    {g.year_published ? (
+                      <p className="text-[11px] text-gray-400">{g.year_published}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(open ? null : g.bgg_id)}
+                      className="mt-0.5 text-[11px] font-medium text-indigo-500 hover:text-indigo-700"
+                      aria-expanded={open}
+                    >
+                      {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'} {open ? '▲' : '▼'}
+                    </button>
+                  </div>
+                </div>
+                {open && (
+                  <div className="border-t border-gray-100 bg-gray-50/60">
+                    <GameCopies
+                      slug={slug}
+                      bggId={g.bgg_id}
+                      username={username}
+                      editor={editor}
+                      myListings={myListings}
+                      selectable
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toggleWant(g)}
+                  title="Want any copy of this game (or expand to pick specific copies)"
+                  className={`mt-auto border-t px-2 py-1.5 text-xs font-semibold transition-colors ${
+                    wanted
+                      ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                      : 'border-gray-100 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600'
+                  }`}
+                >
+                  {wanted ? 'Any copy ✓' : '+ Want any copy'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
       )}
-      {show && !isFetching && results.length === 0 && (
-        <p className="mt-1 text-xs text-gray-400">No matching games with copies in this event.</p>
+
+      {count > BROWSE_PAGE_SIZE && (
+        <div className="mt-3 flex items-center justify-between gap-2 text-xs text-gray-500">
+          <span>{count} games</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || isFetching}
+              className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>Page {page} / {totalPages}</span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || isFetching}
+              className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
-// Concrete copies behind a canonical-game want: a BOARD_GAME want resolves to
-// these specific listings. Own copies are excluded (you won't receive your own).
-function GameCopies({ slug, bggId, username }: { slug: string; bggId: number; username?: string }) {
+const CONDITION_LABEL: Record<string, string> = {
+  NEW: 'New',
+  LIKE_NEW: 'Like New',
+  EXCELLENT: 'Excellent',
+  GOOD: 'Good',
+  FAIR: 'Fair',
+  POOR: 'Poor',
+}
+
+// Concrete copies behind a canonical-game want. Own copies are excluded (you
+// won't receive your own). When `selectable`, each copy is an individual want
+// toggle (a LISTING target on for all my items) — so you can want some copies of
+// a game but not others (different language / missing pieces). Clicking a copy
+// opens its full details.
+interface GameCopiesProps {
+  slug: string
+  bggId: number
+  username?: string
+  editor?: Editor
+  myListings?: EventListing[]
+  selectable?: boolean
+}
+
+function GameCopies({ slug, bggId, username, editor, myListings, selectable }: GameCopiesProps) {
   const { data, isLoading } = useEventListings(slug, { board_game: bggId })
+  const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
   const others = all.filter((l) => l.copy_owner_username !== username)
   const ownCount = all.length - others.length
+
+  const canSelect = !!(selectable && editor && myListings && myListings.length > 0)
+  const isCopyWanted = (listingId: number) =>
+    !!editor && !!myListings && myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
+
+  function toggleCopy(l: EventListing) {
+    if (!editor || !myListings) return
+    const key = listingTargetKey(l.id)
+    const next = !isCopyWanted(l.id)
+    editor.addTarget({
+      key, type: 'LISTING', listingId: l.id, label: l.listing_code,
+      gameId: l.board_game_id, gameName: l.board_game_name,
+    })
+    myListings.forEach((ml) => editor.toggle(ml.id, key, next))
+  }
 
   if (isLoading) return <p className="px-3 py-2 text-xs text-gray-400">Loading copies…</p>
 
@@ -199,24 +402,153 @@ function GameCopies({ slug, bggId, username }: { slug: string; bggId: number; us
       {others.length === 0 ? (
         <p className="text-xs text-gray-400">No copies from other traders in this event yet.</p>
       ) : (
-        <ul className="flex flex-wrap gap-1.5">
-          {others.map((l) => (
-            <li
-              key={l.id}
-              className="inline-flex items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1 text-xs"
-            >
-              <span className="font-mono text-gray-500">{l.listing_code}</span>
-              <span className="text-gray-300">·</span>
-              <span className="text-gray-700">{l.copy_owner_username}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          {canSelect && (
+            <p className="mb-1 text-[11px] font-medium text-gray-400">
+              Pick the specific copies you'd accept:
+            </p>
+          )}
+          <ul className="flex flex-col gap-1">
+            {others.map((l) => {
+              const wanted = canSelect && isCopyWanted(l.id)
+              const meta = [l.copy_language, CONDITION_LABEL[l.copy_condition] || l.copy_condition]
+                .filter(Boolean)
+                .join(' · ')
+              return (
+                <li
+                  key={l.id}
+                  className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
+                    wanted ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  {canSelect && (
+                    <input
+                      type="checkbox"
+                      checked={wanted}
+                      onChange={() => toggleCopy(l)}
+                      className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      aria-label={`Want copy ${l.listing_code}`}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDetailCopyId(l.copy_id)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:underline"
+                    title="View copy details"
+                  >
+                    <span className="font-mono text-gray-500">{l.listing_code}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="shrink-0 text-gray-700">{l.copy_owner_username}</span>
+                    {meta && (
+                      <>
+                        <span className="text-gray-300">·</span>
+                        <span className="truncate text-gray-400">{meta}</span>
+                      </>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
       {ownCount > 0 && (
         <p className="mt-1 text-[11px] text-gray-400">
           ({ownCount} more {ownCount === 1 ? 'is' : 'are'} your own copy — excluded)
         </p>
       )}
+      {detailCopyId != null && (
+        <CopyDetailModal copyId={detailCopyId} onClose={() => setDetailCopyId(null)} />
+      )}
+    </div>
+  )
+}
+
+// Full copy detail popup — lazily fetches GET /copies/{id}/ (readable by any
+// authenticated user) so the wisher can inspect language/condition/missing
+// pieces/notes/photos before committing to a specific copy.
+function CopyDetailRow({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null
+  return (
+    <div className="flex gap-2 py-1.5">
+      <span className="w-28 shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+        {label}
+      </span>
+      <span className="whitespace-pre-wrap text-sm text-gray-700">{value}</span>
+    </div>
+  )
+}
+
+function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => void }) {
+  const { data: copy, isLoading } = useCopy(copyId)
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Copy details"
+    >
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-gray-900">
+              {copy ? copy.board_game_name : 'Copy details'}
+            </h3>
+            {copy && (
+              <p className="font-mono text-xs text-gray-400">
+                {copy.listing_code} · {copy.owner_username}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-gray-400 hover:text-gray-600"
+            aria-label="Close"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {isLoading || !copy ? (
+          <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            <CopyDetailRow label="Condition" value={CONDITION_LABEL[copy.condition] || copy.condition} />
+            <CopyDetailRow label="Language" value={copy.language} />
+            <CopyDetailRow label="Edition" value={copy.edition} />
+            <CopyDetailRow label="Sleeved" value={copy.sleeved !== 'UNKNOWN' ? copy.sleeved : ''} />
+            <CopyDetailRow label="Includes" value={copy.includes_expansions} />
+            <CopyDetailRow label="Missing" value={copy.missing_components} />
+            <CopyDetailRow label="Upgraded" value={copy.upgraded_components} />
+            <CopyDetailRow label="Component notes" value={copy.component_notes} />
+            <CopyDetailRow label="Owner notes" value={copy.owner_notes} />
+            <CopyDetailRow label="Status" value={copy.status !== 'ACTIVE' ? copy.status : ''} />
+            {copy.photo_urls?.length > 0 && (
+              <div className="py-2">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                  Photos
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {copy.photo_urls.map((url, i) => (
+                    <a
+                      key={i}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block h-20 w-20 overflow-hidden rounded border border-gray-200"
+                    >
+                      <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -314,12 +646,11 @@ function useEditor(model: PageModel): {
 // ============================================================
 
 interface VisualModeProps {
-  slug: string
   myListings: EventListing[]
   editor: Editor
 }
 
-function VisualMode({ slug, myListings, editor }: VisualModeProps) {
+function VisualMode({ myListings, editor }: VisualModeProps) {
   const [addingFor, setAddingFor] = useState<number | null>(null)
 
   if (myListings.length === 0) return null
@@ -327,7 +658,9 @@ function VisualMode({ slug, myListings, editor }: VisualModeProps) {
   return (
     <div className="space-y-3">
       {myListings.map((listing) => {
-        const myWants = editor.targets.filter((t) => editor.isOn(listing.id, t.key))
+        const groups = groupTargetsByGame(editor.targets)
+        const myWants = groups.filter((g) => groupIsOn(editor, listing.id, g))
+        const addable = groups.filter((g) => !groupIsOn(editor, listing.id, g))
         return (
           <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -343,25 +676,28 @@ function VisualMode({ slug, myListings, editor }: VisualModeProps) {
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              {myWants.map((t) => (
-                <span
-                  key={t.key}
-                  className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700"
-                >
-                  {t.type === 'LISTING' && (
-                    <span className="font-mono text-purple-400">copy</span>
-                  )}
-                  <span className="max-w-[12rem] truncate">{t.label}</span>
-                  <button
-                    type="button"
-                    onClick={() => editor.toggle(listing.id, t.key, false)}
-                    className="text-purple-400 hover:text-purple-700"
-                    aria-label={`Remove ${t.label}`}
+              {myWants.map((g) => {
+                const specific = !g.anyTarget && g.copyTargets.length > 0
+                return (
+                  <span
+                    key={g.gameId}
+                    className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    <span className="max-w-[12rem] truncate">{g.gameName}</span>
+                    <span className={specific ? 'text-blue-500' : 'text-purple-400'}>
+                      ({groupBadge(g)})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
+                      className="text-purple-400 hover:text-purple-700"
+                      aria-label={`Remove ${g.gameName}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
               {myWants.length === 0 && (
                 <span className="text-xs text-gray-400">No wants yet — add the games you'd accept.</span>
               )}
@@ -369,34 +705,26 @@ function VisualMode({ slug, myListings, editor }: VisualModeProps) {
 
             {addingFor === listing.id ? (
               <div className="mt-3">
-                <GameSearch
-                  slug={slug}
-                  placeholder={`Add a game ${listing.listing_code} would accept…`}
-                  onPick={(t) => {
-                    editor.addTarget(t)
-                    editor.toggle(listing.id, t.key, true)
-                  }}
-                />
-                {/* existing targets quick-add */}
-                {editor.targets.filter((t) => !editor.isOn(listing.id, t.key)).length > 0 && (
-                  <div className="mt-2">
-                    <p className="mb-1 text-xs text-gray-400">Or reuse a want from another item:</p>
+                {addable.length > 0 ? (
+                  <>
+                    <p className="mb-1 text-xs text-gray-400">Add a want this item would accept:</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {editor.targets
-                        .filter((t) => !editor.isOn(listing.id, t.key))
-                        .slice(0, 12)
-                        .map((t) => (
-                          <button
-                            key={t.key}
-                            type="button"
-                            onClick={() => editor.toggle(listing.id, t.key, true)}
-                            className="rounded-full border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-purple-300 hover:text-purple-700"
-                          >
-                            + {t.label}
-                          </button>
-                        ))}
+                      {addable.slice(0, 24).map((g) => (
+                        <button
+                          key={g.gameId}
+                          type="button"
+                          onClick={() => toggleGroup(editor, listing.id, g)}
+                          className="rounded-full border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-purple-300 hover:text-purple-700"
+                        >
+                          + {g.gameName}
+                        </button>
+                      ))}
                     </div>
-                  </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-400">
+                    Every want is already on this item — use “Browse games” above to add more.
+                  </p>
                 )}
                 <button
                   type="button"
@@ -478,41 +806,46 @@ function GridMode({ slug, myListings, editor, username }: GridModeProps) {
           </tr>
         </thead>
         <tbody>
-          {editor.targets.map((t) => {
-            const isOpen = expanded.has(t.key)
+          {groupTargetsByGame(editor.targets).map((g) => {
+            const gkey = String(g.gameId)
+            const isOpen = expanded.has(gkey)
+            const specific = !g.anyTarget && g.copyTargets.length > 0
             return (
-              <Fragment key={t.key}>
+              <Fragment key={gkey}>
                 <tr className="group">
                   <th className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-3 py-2 text-left font-normal group-hover:bg-indigo-50/40">
                     <span className="flex items-center gap-1.5">
-                      {t.type === 'BOARD_GAME' ? (
-                        <button
-                          type="button"
-                          onClick={() => toggleExpand(t.key)}
-                          className="shrink-0 text-gray-400 hover:text-indigo-600"
-                          title="Show the concrete copies this want resolves to"
-                          aria-expanded={isOpen}
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(gkey)}
+                        className="shrink-0 text-gray-400 hover:text-indigo-600"
+                        title="Show the concrete copies this want resolves to"
+                        aria-expanded={isOpen}
+                      >
+                        <svg
+                          className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
                         >
-                          <svg
-                            className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      ) : (
-                        <span className="rounded bg-gray-100 px-1 font-mono text-[10px] text-gray-400">copy</span>
-                      )}
-                      <span className="max-w-[14rem] truncate text-gray-700" title={t.label}>
-                        {t.label}
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      <span className="max-w-[12rem] truncate text-gray-700" title={g.gameName}>
+                        {g.gameName}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                          specific ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                        }`}
+                      >
+                        {groupBadge(g)}
                       </span>
                     </span>
                   </th>
                   {myListings.map((l) => {
-                    const on = editor.isOn(l.id, t.key)
+                    const on = groupIsOn(editor, l.id, g)
                     return (
                       <td
                         key={l.id}
@@ -520,13 +853,13 @@ function GridMode({ slug, myListings, editor, username }: GridModeProps) {
                       >
                         <button
                           type="button"
-                          onClick={() => editor.toggle(l.id, t.key)}
+                          onClick={() => toggleGroup(editor, l.id, g)}
                           className={`m-1 h-5 w-5 rounded border ${
                             on
                               ? 'border-indigo-600 bg-indigo-600 text-white'
                               : 'border-gray-300 bg-white text-transparent hover:border-indigo-400'
                           }`}
-                          title={`${t.label}  ↕  ${l.board_game_name}`}
+                          title={`${g.gameName}  ↕  ${l.board_game_name}`}
                           aria-pressed={on}
                         >
                           <svg className="mx-auto h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -537,14 +870,16 @@ function GridMode({ slug, myListings, editor, username }: GridModeProps) {
                     )
                   })}
                 </tr>
-                {isOpen && t.type === 'BOARD_GAME' && t.boardGameId != null && (
+                {isOpen && (
                   <tr>
                     <td colSpan={colCount} className="sticky left-0 border-b border-gray-200 bg-indigo-50/30">
                       <div className="text-xs">
                         <span className="px-3 py-1 font-medium text-gray-500">
-                          Copies you'd be matched to receive:
+                          {specific
+                            ? 'Specific copies you selected (refine in “Browse games” above):'
+                            : "Copies you'd be matched to receive:"}
                         </span>
-                        <GameCopies slug={slug} bggId={t.boardGameId} username={username} />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} />
                       </div>
                     </td>
                   </tr>
@@ -576,13 +911,11 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t, i) => ({
+    const items: WantGroupItemPayload[] = desired.map((t) => ({
       target_type: t.type,
       ...(t.type === 'BOARD_GAME'
         ? { board_game: t.boardGameId! }
         : { event_listing: t.listingId! }),
-      tier: 1,
-      rank: i,
     }))
 
     let wg = model.wantGroupByListing.get(listingId)
@@ -600,6 +933,9 @@ async function persistChanges(
       wg = await createWantGroupRaw(slug, {
         name: `Wants for ${listing.listing_code}`,
         min_receive: 1,
+        // Normal want builder always protects against duplicate game awards;
+        // the advanced X-to-Y builder leaves this off.
+        duplicate_protection: true,
         items,
       })
       await createWishRaw(slug, { offer_group: og.id, want_group: wg.id, active: true })
@@ -634,6 +970,10 @@ export default function MyWantsPage() {
   )
 
   const { editor } = useEditor(model)
+  const wantGameCount = useMemo(
+    () => new Set(editor.targets.map((t) => t.gameId)).size,
+    [editor.targets]
+  )
 
   const [view, setView] = useState<ViewMode>('visual')
   const [saving, setSaving] = useState(false)
@@ -750,20 +1090,20 @@ export default function MyWantsPage() {
               ))}
             </div>
             <p className="text-xs text-gray-400">
-              {myListings.length} item{myListings.length !== 1 ? 's' : ''} · {editor.targets.length} want
-              {editor.targets.length !== 1 ? 's' : ''}
+              {myListings.length} item{myListings.length !== 1 ? 's' : ''} · {wantGameCount} game
+              {wantGameCount !== 1 ? 's' : ''} wanted
             </p>
           </div>
 
-          {view === 'grid' && (
-            <div className="rounded-lg border border-gray-200 bg-white p-3">
-              <p className="mb-2 text-xs font-medium text-gray-500">Add a want target (row):</p>
-              <GameSearch slug={slug!} onPick={(t) => editor.addTarget(t)} />
-            </div>
-          )}
+          <GameBrowse
+            slug={slug!}
+            editor={editor}
+            myListings={myListings}
+            username={user?.username}
+          />
 
           {view === 'visual' ? (
-            <VisualMode slug={slug!} myListings={myListings} editor={editor} />
+            <VisualMode myListings={myListings} editor={editor} />
           ) : (
             <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} />
           )}

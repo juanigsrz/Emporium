@@ -16,6 +16,7 @@ from .views import (
     MatchRunListCreateView,
     MatchRunMineView,
     MatchRunResultView,
+    MatchRunUploadView,
 )
 
 urlpatterns = [
@@ -23,6 +24,11 @@ urlpatterns = [
         "events/<slug:slug>/matches/",
         MatchRunListCreateView.as_view(),
         name="match-list",
+    ),
+    path(
+        "events/<slug:slug>/matches/upload/",
+        MatchRunUploadView.as_view(),
+        name="match-upload",
     ),
     path(
         "events/<slug:slug>/matches/<int:run_id>/",

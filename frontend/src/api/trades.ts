@@ -37,10 +37,12 @@ export interface WantGroupItem {
   target_type: 'BOARD_GAME' | 'LISTING'
   board_game: number | null
   board_game_name: string | null
+  /** Canonical bgg id for BOTH types — use to group LISTING items under a game. */
+  board_game_id: number | null
   event_listing: number | null
   listing_code: string | null
-  tier: number
-  rank: number
+  /** Optional money bid (decimal string) or null. */
+  money_amount: string | null
 }
 
 export interface WantGroup {
@@ -50,6 +52,7 @@ export interface WantGroup {
   user_username: string
   name: string
   min_receive: number
+  duplicate_protection: boolean
   items: WantGroupItem[]
   created: string
   updated: string
@@ -59,19 +62,20 @@ export interface WantGroupItemPayload {
   target_type: 'BOARD_GAME' | 'LISTING'
   board_game?: number
   event_listing?: number
-  tier: number
-  rank: number
+  money_amount?: number | null
 }
 
 export interface WantGroupPayload {
   name: string
   min_receive: number
+  duplicate_protection?: boolean
   items: WantGroupItemPayload[]
 }
 
 export interface WantGroupPatchPayload {
   name?: string
   min_receive?: number
+  duplicate_protection?: boolean
   items?: WantGroupItemPayload[]
 }
 

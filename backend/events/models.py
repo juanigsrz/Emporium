@@ -61,6 +61,10 @@ class TradeEvent(models.Model):
         SHIPPING         = "SHIPPING",         "Shipping"
         ARCHIVED         = "ARCHIVED",         "Archived"
 
+    class MatchingMode(models.TextChoices):
+        ONETOONE = "ONETOONE", "Old-school 1-to-1 (online solver)"
+        XTOY     = "XTOY",     "X-to-Y (local solver)"
+
     name        = models.CharField(max_length=200)
     slug        = models.SlugField(unique=True, db_index=True, max_length=240)
     description = models.TextField(blank=True)
@@ -73,6 +77,17 @@ class TradeEvent(models.Model):
         max_length=20,
         choices=Status.choices,
         default=Status.DRAFT,
+    )
+    matching_mode = models.CharField(
+        max_length=10,
+        choices=MatchingMode.choices,
+        default=MatchingMode.ONETOONE,
+    )
+
+    # Money trading: organizer enables it and caps per-user spend (null = no cap).
+    money_enabled       = models.BooleanField(default=False)
+    max_money_per_user  = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
     )
 
     # Lifecycle timestamps (all optional)
@@ -150,6 +165,8 @@ class EventParticipation(models.Model):
     )
     region        = models.CharField(max_length=64, blank=True)
     shipping_pref = models.CharField(max_length=120, blank=True)
+    # Money budget the user is willing to spend in this event (0 = none).
+    max_spend     = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     created = models.DateTimeField(auto_now_add=True)
 

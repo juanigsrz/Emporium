@@ -183,11 +183,35 @@ class TradeEventViewSet(
                 "shipping_pref": request.data.get("shipping_pref", ""),
             },
         )
+        # Money budget: settable here so participants can set/update it without a
+        # separate endpoint. Ignored unless the organizer enabled money.
+        if event.money_enabled and "max_spend" in request.data:
+            participation.max_spend = self._clean_max_spend(
+                request.data.get("max_spend"), event
+            )
+            participation.save(update_fields=["max_spend"])
+
         ser = EventParticipationSerializer(participation)
         return Response(
             ser.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _clean_max_spend(value, event):
+        from decimal import Decimal, InvalidOperation
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            raise ValidationError({"max_spend": "Must be a number."})
+        if amount < 0:
+            raise ValidationError({"max_spend": "Cannot be negative."})
+        cap = event.max_money_per_user
+        if cap is not None and amount > cap:
+            raise ValidationError(
+                {"max_spend": f"Cannot exceed the event cap of {cap}."}
+            )
+        return amount
 
     # ------------------------------------------------------------------
     # DELETE /{slug}/leave/
@@ -329,3 +353,21 @@ class TradeEventViewSet(
             return self.get_paginated_response(ser.data)
         ser = EventGameSerializer(qs, many=True, context={"request": request})
         return Response(ser.data)
+
+    @action(detail=True, methods=["get"], url_path="wants-export")
+    def wants_export(self, request, slug=None):
+        """Organizer-only export of the active wishes as a solver wants file.
+
+        Format follows the event's matching_mode (ONETOONE -> OLWLG for the
+        hosted ftm solver; XTOY -> `(NforM) give -> take` for the local solver).
+        """
+        from django.http import HttpResponse
+        from matching.external_solver import build_wants
+
+        event = self.get_object()
+        self._check_organizer(event)
+
+        text = build_wants(event)
+        resp = HttpResponse(text, content_type="text/plain; charset=utf-8")
+        resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.txt"'
+        return resp

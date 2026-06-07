@@ -1,21 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 
 import { useEvent, useEventListings } from '../../api/events'
 import type { EventListing } from '../../api/events'
@@ -60,40 +44,6 @@ function extractErrorMsg(err: unknown): string {
   }
   if (err instanceof Error) return err.message
   return 'An error occurred. Please try again.'
-}
-
-// ---- Drag-sortable item ----
-
-interface SortableItemProps {
-  id: string
-  children: React.ReactNode
-  className?: string
-}
-
-function SortableItem({ id, children, className }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-  return (
-    <div ref={setNodeRef} style={style} className={className}>
-      <div className="flex items-center gap-2">
-        <button
-          {...attributes}
-          {...listeners}
-          className="touch-none shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing p-1"
-          aria-label="Drag to reorder"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
-          </svg>
-        </button>
-        {children}
-      </div>
-    </div>
-  )
 }
 
 // ============================================================
@@ -404,6 +354,7 @@ function OfferGroupForm({ myListings, existing, onSave, onCancel, isSaving }: Of
 interface WantGroupsPanelProps {
   slug: string
   myListings: EventListing[]
+  moneyEnabled: boolean
 }
 
 // A "draft item" used in the local editor before persisting
@@ -415,8 +366,7 @@ interface DraftWantItem {
   board_game_name: string | null
   event_listing: number | null
   listing_code: string | null
-  tier: number
-  rank: number
+  money_amount: string  // '' = none
 }
 
 function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
@@ -424,7 +374,7 @@ function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
   return `listing-${item.event_listing}`
 }
 
-function WantGroupsPanel({ slug, myListings }: WantGroupsPanelProps) {
+function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProps) {
   const { data: groups = [], isLoading } = useWantGroups(slug)
   const createGroup = useCreateWantGroup()
   const deleteGroup = useDeleteWantGroup()
@@ -462,6 +412,7 @@ function WantGroupsPanel({ slug, myListings }: WantGroupsPanelProps) {
             slug={slug}
             group={group}
             myListings={myListings}
+            moneyEnabled={moneyEnabled}
             onClose={() => setEditingId(null)}
           />
         ) : (
@@ -486,6 +437,7 @@ function WantGroupsPanel({ slug, myListings }: WantGroupsPanelProps) {
         <WantGroupEditor
           slug={slug}
           myListings={myListings}
+          moneyEnabled={moneyEnabled}
           onClose={async (created) => {
             if (created) {
               try {
@@ -522,17 +474,6 @@ interface WantGroupCardProps {
 
 function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-
-  // Group items by tier for display
-  const tiers = group.items.reduce<Record<number, WantGroupItem[]>>((acc, item) => {
-    const t = item.tier
-    if (!acc[t]) acc[t] = []
-    acc[t].push(item)
-    return acc
-  }, {})
-  const tierNumbers = Object.keys(tiers)
-    .map(Number)
-    .sort((a, b) => a - b)
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -580,33 +521,29 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardPro
       {group.items.length === 0 ? (
         <p className="text-xs text-gray-400 italic">No targets yet.</p>
       ) : (
-        <div className="space-y-2">
-          {tierNumbers.map((tier) => (
-            <div key={tier}>
-              <span className="text-xs font-medium text-gray-500 mb-1 block">Tier {tier}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {tiers[tier]
-                  .sort((a, b) => a.rank - b.rank)
-                  .map((item) => (
-                    <span
-                      key={item.id}
-                      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${
-                        item.target_type === 'BOARD_GAME'
-                          ? 'bg-purple-50 text-purple-700'
-                          : 'bg-blue-50 text-blue-700'
-                      }`}
-                    >
-                      {item.target_type === 'LISTING' && (
-                        <span className="font-mono text-gray-400">{item.listing_code}</span>
-                      )}
-                      {item.target_type === 'LISTING' ? item.board_game_name : item.board_game_name}
-                      {item.target_type === 'BOARD_GAME' && (
-                        <span className="text-gray-400">(any copy)</span>
-                      )}
-                    </span>
-                  ))}
-              </div>
-            </div>
+        <div className="flex flex-wrap gap-1.5">
+          {group.items.map((item) => (
+            <span
+              key={item.id}
+              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${
+                item.target_type === 'BOARD_GAME'
+                  ? 'bg-purple-50 text-purple-700'
+                  : 'bg-blue-50 text-blue-700'
+              }`}
+            >
+              {item.target_type === 'LISTING' && (
+                <span className="font-mono text-gray-400">{item.listing_code}</span>
+              )}
+              {item.board_game_name}
+              {item.target_type === 'BOARD_GAME' && (
+                <span className="text-gray-400">(any copy)</span>
+              )}
+              {item.money_amount != null && (
+                <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
+                  +${item.money_amount}
+                </span>
+              )}
+            </span>
           ))}
         </div>
       )}
@@ -614,19 +551,20 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardPro
   )
 }
 
-// The drag-and-drop editor for a want group
+// The add/remove editor for a want group
 
 interface WantGroupEditorProps {
   slug: string
   group?: WantGroup
   myListings: EventListing[]
+  moneyEnabled: boolean
   onClose: (
     created?: { name: string; min_receive: number; items: WantGroupItemPayload[] }
   ) => void
   isCreating?: boolean
 }
 
-function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantGroupEditorProps) {
+function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCreating }: WantGroupEditorProps) {
   const patchGroup = usePatchWantGroup()
 
   const [name, setName] = useState(group?.name ?? '')
@@ -639,12 +577,10 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
       board_game_name: i.board_game_name,
       event_listing: i.event_listing,
       listing_code: i.listing_code,
-      tier: i.tier,
-      rank: i.rank,
+      money_amount: i.money_amount ?? '',
     }))
   )
   const [gameSearch, setGameSearch] = useState('')
-  const [activeTier, setActiveTier] = useState(1)
   const [formError, setFormError] = useState<string | null>(null)
   const [duplicateWarn, setDuplicateWarn] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -655,21 +591,6 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
     page: 1,
   })
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
-    })
-  )
-
-  // Items in the current view: filtered to activeTier, sorted by rank
-  const tiers = [...new Set(items.map((i) => i.tier))].sort((a, b) => a - b)
-  if (!tiers.includes(activeTier) && tiers.length > 0) {
-    // activeTier no longer exists, switch to first
-  }
-  const tierItems = items.filter((i) => i.tier === activeTier).sort((a, b) => a.rank - b.rank)
-  const tierItemIds = tierItems.map((i) => i.localId)
-
   function addBoardGame(game: GameListItem) {
     const key = `bg-${game.bgg_id}`
     if (items.some((i) => i.localId === key)) {
@@ -677,7 +598,6 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
       setTimeout(() => setDuplicateWarn(null), 3000)
       return
     }
-    const maxRank = Math.max(0, ...items.filter((i) => i.tier === activeTier).map((i) => i.rank))
     setItems((prev) => [
       ...prev,
       {
@@ -687,8 +607,7 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
         board_game_name: game.name,
         event_listing: null,
         listing_code: null,
-        tier: activeTier,
-        rank: maxRank + 1,
+        money_amount: '',
       },
     ])
     setGameSearch('')
@@ -701,7 +620,6 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
       setTimeout(() => setDuplicateWarn(null), 3000)
       return
     }
-    const maxRank = Math.max(0, ...items.filter((i) => i.tier === activeTier).map((i) => i.rank))
     setItems((prev) => [
       ...prev,
       {
@@ -711,76 +629,29 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
         board_game_name: listing.board_game_name,
         event_listing: listing.id,
         listing_code: listing.listing_code,
-        tier: activeTier,
-        rank: maxRank + 1,
+        money_amount: '',
       },
     ])
   }
 
   function removeItem(localId: string) {
-    setItems((prev) => {
-      const filtered = prev.filter((i) => i.localId !== localId)
-      // Re-index ranks within each tier
-      const tiers = [...new Set(filtered.map((i) => i.tier))]
-      return tiers.flatMap((t) =>
-        filtered
-          .filter((i) => i.tier === t)
-          .sort((a, b) => a.rank - b.rank)
-          .map((item, idx) => ({ ...item, rank: idx + 1 }))
-      )
-    })
+    setItems((prev) => prev.filter((i) => i.localId !== localId))
   }
 
-  function addTier() {
-    const nextTier = tiers.length > 0 ? Math.max(...tiers) + 1 : 1
-    setActiveTier(nextTier)
+  function setMoney(localId: string, amount: string) {
+    setItems((prev) => prev.map((i) => (i.localId === localId ? { ...i, money_amount: amount } : i)))
   }
-
-  function removeTier(tier: number) {
-    setItems((prev) => prev.filter((i) => i.tier !== tier))
-    // Switch to a remaining tier
-    const remaining = [...new Set(items.filter((i) => i.tier !== tier).map((i) => i.tier))].sort(
-      (a, b) => a - b
-    )
-    setActiveTier(remaining[0] ?? 1)
-  }
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event
-      if (!over || active.id === over.id) return
-
-      setItems((prev) => {
-        const tierItemsLocal = prev.filter((i) => i.tier === activeTier).sort((a, b) => a.rank - b.rank)
-        const oldIndex = tierItemsLocal.findIndex((i) => i.localId === active.id)
-        const newIndex = tierItemsLocal.findIndex((i) => i.localId === over.id)
-        if (oldIndex === -1 || newIndex === -1) return prev
-
-        const reordered = arrayMove(tierItemsLocal, oldIndex, newIndex).map((item, idx) => ({
-          ...item,
-          rank: idx + 1,
-        }))
-        // Merge back with items from other tiers
-        return [...prev.filter((i) => i.tier !== activeTier), ...reordered]
-      })
-    },
-    [activeTier]
-  )
 
   function buildPayloadItems(): WantGroupItemPayload[] {
-    // Sort by tier then rank for the full list
-    const sorted = [...items].sort((a, b) => a.tier - b.tier || a.rank - b.rank)
-    return sorted.map((item) => {
-      const base: WantGroupItemPayload = {
-        target_type: item.target_type,
-        tier: item.tier,
-        rank: item.rank,
-      }
+    return items.map((item) => {
+      const base: WantGroupItemPayload = { target_type: item.target_type }
       if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
         base.board_game = item.board_game
       } else if (item.target_type === 'LISTING' && item.event_listing != null) {
         base.event_listing = item.event_listing
       }
+      const trimmed = item.money_amount.trim()
+      base.money_amount = moneyEnabled && trimmed !== '' ? Number(trimmed) : null
       return base
     })
   }
@@ -846,90 +717,59 @@ function WantGroupEditor({ slug, group, myListings, onClose, isCreating }: WantG
         </div>
       )}
 
-      {/* Tier tabs */}
+      {/* Targets list */}
       <div>
-        <div className="flex items-center gap-1 flex-wrap mb-2">
-          <span className="text-xs font-medium text-gray-600 mr-1">Tiers:</span>
-          {tiers.map((tier) => (
-            <div key={tier} className="flex items-center">
-              <button
-                type="button"
-                onClick={() => setActiveTier(tier)}
-                className={`rounded-l px-2.5 py-1 text-xs font-medium transition-colors ${
-                  activeTier === tier
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-purple-50'
-                }`}
-              >
-                Tier {tier}
-                <span className="ml-1 text-gray-300">
-                  ({items.filter((i) => i.tier === tier).length})
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => removeTier(tier)}
-                className={`rounded-r border border-l-0 px-1.5 py-1 text-xs transition-colors ${
-                  activeTier === tier
-                    ? 'bg-purple-700 text-white border-purple-700 hover:bg-purple-800'
-                    : 'bg-white border-gray-300 text-gray-400 hover:text-red-500'
-                }`}
-                aria-label={`Remove tier ${tier}`}
-              >
-                ×
-              </button>
+        <p className="text-xs font-medium text-gray-600 mb-2">
+          Games you'd like to receive ({items.length})
+        </p>
+        <div className="space-y-1.5 min-h-[40px]">
+          {items.length === 0 ? (
+            <div className="rounded-md border-2 border-dashed border-purple-200 py-4 text-center text-xs text-gray-400">
+              Search below to add games you want
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={addTier}
-            className="rounded px-2.5 py-1 text-xs font-medium bg-white border border-dashed border-gray-300 text-gray-400 hover:border-purple-400 hover:text-purple-500 transition-colors"
-          >
-            + Tier
-          </button>
-        </div>
-
-        {/* Drag-and-drop list for active tier */}
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={tierItemIds} strategy={verticalListSortingStrategy}>
-            <div className="space-y-1.5 min-h-[40px]">
-              {tierItems.length === 0 ? (
-                <div className="rounded-md border-2 border-dashed border-purple-200 py-4 text-center text-xs text-gray-400">
-                  Drop targets here or search below to add
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.localId}
+                className="rounded-md border border-gray-200 bg-white px-3 py-2 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <span className="text-sm text-gray-800 font-medium truncate block">
+                    {item.board_game_name}
+                  </span>
+                  {item.target_type === 'LISTING' ? (
+                    <span className="text-xs text-blue-600 font-mono">{item.listing_code} (specific)</span>
+                  ) : (
+                    <span className="text-xs text-purple-500">any copy</span>
+                  )}
                 </div>
-              ) : (
-                tierItems.map((item) => (
-                  <SortableItem
-                    key={item.localId}
-                    id={item.localId}
-                    className="rounded-md border border-gray-200 bg-white px-3 py-2"
-                  >
-                    <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <span className="text-sm text-gray-800 font-medium truncate block">
-                          {item.board_game_name}
-                        </span>
-                        {item.target_type === 'LISTING' ? (
-                          <span className="text-xs text-blue-600 font-mono">{item.listing_code} (specific)</span>
-                        ) : (
-                          <span className="text-xs text-purple-500">any copy</span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.localId)}
-                        className="shrink-0 text-xs text-gray-300 hover:text-red-500 transition-colors"
-                        aria-label="Remove target"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </SortableItem>
-                ))
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
+                {moneyEnabled && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="text-xs text-gray-400">+$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={item.money_amount}
+                      onChange={(e) => setMoney(item.localId, e.target.value)}
+                      placeholder="0"
+                      title="Max money you'll add to receive this game"
+                      className="w-20 rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.localId)}
+                  className="shrink-0 text-xs text-gray-300 hover:text-red-500 transition-colors"
+                  aria-label="Remove target"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Add game target via search */}
@@ -1387,7 +1227,7 @@ export default function WantListBuilderPage() {
           <strong className="text-indigo-700">How it works:</strong> An{' '}
           <span className="font-semibold text-indigo-600">Offer Group</span> is a set of your listings
           with a max-give (X).{' '}
-          A <span className="font-semibold text-purple-600">Want Group</span> is a prioritized list of
+          A <span className="font-semibold text-purple-600">Want Group</span> is a list of
           games/listings you want, with a min-receive (Y).{' '}
           A <span className="font-semibold text-green-600">Wish</span> links them:{' '}
           "Give up to X → Receive at least Y."
@@ -1451,10 +1291,10 @@ export default function WantListBuilderPage() {
                 Want Groups
               </h2>
               <p className="text-xs text-gray-400">
-                Drag to reorder within each tier
+                Games you'd like to receive
               </p>
             </div>
-            <WantGroupsPanel slug={slug!} myListings={myListings} />
+            <WantGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} />
           </div>
         )}
 

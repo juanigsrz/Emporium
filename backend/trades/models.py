@@ -106,6 +106,10 @@ class WantGroup(models.Model):
     )
     name         = models.CharField(max_length=120)
     min_receive  = models.PositiveIntegerField(default=1)  # Y
+    # Set by the normal game-browse want builder: the solver must not award the
+    # user more than one copy of the same canonical game. The advanced X-to-Y
+    # builder leaves this off.
+    duplicate_protection = models.BooleanField(default=False)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -151,16 +155,20 @@ class WantGroupItem(models.Model):
         blank=True,
         related_name="want_memberships",
     )
-    tier = models.PositiveIntegerField(default=1)   # priority tier (1 = top)
-    rank = models.IntegerField(default=0)            # order within tier
+    # Optional money bid: the most the user will pay to receive this game/copy.
+    # Only meaningful when the event has money_enabled. Placeholder for the MIP
+    # solver (not yet consumed by the matcher).
+    money_amount  = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
 
     class Meta:
-        ordering = ["tier", "rank", "id"]
+        ordering = ["id"]
 
     def __str__(self):
         return (
             f"WantGroupItem(group={self.want_group_id}, "
-            f"type={self.target_type}, tier={self.tier}, rank={self.rank})"
+            f"type={self.target_type})"
         )
 
     def clean(self):
