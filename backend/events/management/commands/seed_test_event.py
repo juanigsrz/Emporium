@@ -27,6 +27,7 @@ from django.db import transaction
 from catalog.models import BoardGame
 from copies.models import Copy
 from events.models import EventListing, EventParticipation, TradeEvent
+from trades.models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish
 
 User = get_user_model()
 
@@ -52,6 +53,16 @@ class Command(BaseCommand):
             help="Event status to set (default WANTLIST_OPEN so want-lists are buildable).",
         )
         parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducibility.")
+        parser.add_argument(
+            "--wants-min", type=int, default=2, help="Min want targets per listing."
+        )
+        parser.add_argument(
+            "--wants-max", type=int, default=4, help="Max want targets per listing."
+        )
+        parser.add_argument(
+            "--money-cap", type=float, default=50.0,
+            help="Per-user money cap (enables money trading). 0 disables money.",
+        )
         parser.add_argument(
             "--reset",
             action="store_true",
@@ -107,12 +118,16 @@ class Command(BaseCommand):
             existing.delete()
             Copy.objects.filter(owner__in=traders).delete()
 
+        money_cap = opts["money_cap"]
+        money_enabled = money_cap > 0
         event = TradeEvent.objects.create(
             name="Test MathTrade 2026",
             slug=slug,
             description="Auto-seeded testing event with many users and copies.",
             organizer=organizer,
             status=opts["status"],
+            money_enabled=money_enabled,
+            max_money_per_user=(round(money_cap, 2) if money_enabled else None),
         )
 
         # --- copies + participations + submitted listings ---
@@ -122,7 +137,13 @@ class Command(BaseCommand):
             EventParticipation.objects.get_or_create(
                 event=event,
                 user=u,
-                defaults={"region": rng.choice(["NA", "EU", "SA", "APAC"])},
+                defaults={
+                    "region": rng.choice(["NA", "EU", "SA", "APAC"]),
+                    "max_spend": (
+                        round(rng.uniform(money_cap * 0.4, money_cap), 2)
+                        if money_enabled else 0
+                    ),
+                },
             )
             k = rng.randint(lo, hi)
             for _ in range(k):
@@ -139,6 +160,57 @@ class Command(BaseCommand):
 
         EventListing.objects.bulk_create(listings)
 
+        # --- want lists (one offer+want+wish trio per listing, like the normal
+        #     "My Wants" page builds) so the event has real wishes to match ---
+        saved = list(
+            EventListing.objects
+            .filter(event=event)
+            .select_related("copy")
+        )
+        listings_by_owner = {}
+        games_by_owner = {}
+        all_games = set()
+        for el in saved:
+            listings_by_owner.setdefault(el.copy.owner_id, []).append(el)
+            games_by_owner.setdefault(el.copy.owner_id, set()).add(el.copy.board_game_id)
+            all_games.add(el.copy.board_game_id)
+
+        wmin, wmax = opts["wants_min"], opts["wants_max"]
+        n_wishes = n_money_wants = 0
+        for u in traders:
+            # Games owned by OTHERS (so a match is actually possible).
+            candidates = sorted(all_games - games_by_owner.get(u.id, set()))
+            if not candidates:
+                continue
+            for el in listings_by_owner.get(u.id, []):
+                k = min(rng.randint(wmin, wmax), len(candidates))
+                wanted_games = rng.sample(candidates, k)
+
+                og = OfferGroup.objects.create(
+                    event=event, user=u, name=el.copy.listing_code, max_give=1
+                )
+                OfferGroupItem.objects.create(offer_group=og, event_listing=el)
+
+                wg = WantGroup.objects.create(
+                    event=event, user=u, name=f"Wants for {el.copy.listing_code}",
+                    min_receive=1, duplicate_protection=True,
+                )
+                for bgg_id in wanted_games:
+                    money = None
+                    if money_enabled and rng.random() < 0.3:
+                        money = round(rng.uniform(5, min(money_cap, 30)), 2)
+                        n_money_wants += 1
+                    WantGroupItem.objects.create(
+                        want_group=wg,
+                        target_type=WantGroupItem.TargetType.BOARD_GAME,
+                        board_game_id=bgg_id,
+                        money_amount=money,
+                    )
+                TradeWish.objects.create(
+                    event=event, user=u, offer_group=og, want_group=wg, active=True
+                )
+                n_wishes += 1
+
         # --- report ---
         distinct_games = len({el.copy.board_game_id for el in listings})
         self.stdout.write(self.style.SUCCESS(f"Seeded event '{event.slug}' ({event.status})"))
@@ -147,5 +219,8 @@ class Command(BaseCommand):
             f"  traders:     {len(traders)}  ({TRADER_PREFIX}01..{TRADER_PREFIX}{n_users:02d}, password: {PASSWORD})\n"
             f"  copies:      {total_copies} submitted listings\n"
             f"  game pool:   {len(pool)} games, {distinct_games} distinct games actually listed\n"
+            f"  wishes:      {n_wishes} (one per listing)\n"
+            f"  money:       {'enabled, cap ' + str(round(money_cap, 2)) if money_enabled else 'disabled'}"
+            f"{', ' + str(n_money_wants) + ' money wants' if money_enabled else ''}\n"
             f"  frontend:    /events/{event.slug}\n"
         )

@@ -122,6 +122,30 @@ async function fetchMyAssignments(slug: string, id: number): Promise<PaginatedRe
   return data
 }
 
+/** GET the solver wants file (text) for the event's matching_mode. Organizer-only. */
+export async function fetchWantsExport(slug: string): Promise<string> {
+  const { data } = await apiClient.get<string>(`/events/${slug}/wants-export/`, {
+    responseType: 'text',
+  })
+  return data
+}
+
+export interface MatchUploadResponse {
+  id: number
+  status: MatchRunStatus
+  summary: MatchRunSummary
+}
+
+/** POST raw solver stdout; backend parses it into a DONE run. Organizer-only. */
+async function uploadSolution(slug: string, output: string): Promise<MatchUploadResponse> {
+  const { data } = await apiClient.post<MatchUploadResponse>(
+    `/events/${slug}/matches/upload/`,
+    output,
+    { headers: { 'Content-Type': 'text/plain' } }
+  )
+  return data
+}
+
 // ---- Hooks ----
 
 const ACTIVE_STATUSES: MatchRunStatus[] = ['PENDING', 'RUNNING']
@@ -172,6 +196,17 @@ export function useTriggerMatchRun() {
   return useMutation({
     mutationFn: (slug: string) => triggerMatchRun(slug),
     onSuccess: (_data, slug) => {
+      qc.invalidateQueries({ queryKey: MATCHING_KEYS.runs(slug) })
+    },
+  })
+}
+
+export function useUploadSolution() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ slug, output }: { slug: string; output: string }) =>
+      uploadSolution(slug, output),
+    onSuccess: (_data, { slug }) => {
       qc.invalidateQueries({ queryKey: MATCHING_KEYS.runs(slug) })
     },
   })

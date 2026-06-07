@@ -8,6 +8,8 @@ import {
   useMatchResult,
   useMyAssignments,
   useTriggerMatchRun,
+  useUploadSolution,
+  fetchWantsExport,
 } from '../../api/matching'
 import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
 
@@ -129,6 +131,112 @@ function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (i
         {trigger.isPending ? 'Triggering…' : 'Run matching'}
       </button>
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
+    </div>
+  )
+}
+
+// ---- X-to-Y solve panel (organizer, MATCHING) — export wants + upload solution ----
+
+function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: number) => void }) {
+  const upload = useUploadSolution()
+  const [output, setOutput] = useState('')
+  const [open, setOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleDownload() {
+    setError(null)
+    setDownloading(true)
+    try {
+      const text = await fetchWantsExport(slug)
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${slug}-wants.txt`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) file.text().then(setOutput)
+  }
+
+  async function handleUpload() {
+    setError(null)
+    if (!output.trim()) {
+      setError('Paste or load the solver output first.')
+      return
+    }
+    try {
+      const run = await upload.mutateAsync({ slug, output })
+      onUploaded(run.id)
+      setOutput('')
+      setOpen(false)
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-2 w-full sm:w-80">
+      <button
+        onClick={handleDownload}
+        disabled={downloading}
+        className="w-full rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60 transition-colors shadow-sm"
+      >
+        {downloading ? 'Preparing…' : 'Download wants.txt'}
+      </button>
+      <p className="text-xs text-violet-600">
+        Run the solver locally (Gurobi), then upload its output.
+      </p>
+      {open ? (
+        <div className="space-y-2">
+          <textarea
+            value={output}
+            onChange={(e) => setOutput(e.target.value)}
+            placeholder="Paste solver output…"
+            rows={4}
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+          />
+          <input
+            type="file"
+            accept=".txt,text/plain"
+            onChange={handleFile}
+            className="block w-full text-xs text-gray-500 file:mr-2 file:rounded file:border-0 file:bg-violet-100 file:px-2 file:py-1 file:text-violet-700"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setOpen(false); setError(null) }}
+              className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={upload.isPending}
+              className="flex-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:opacity-60 transition-colors"
+            >
+              {upload.isPending ? 'Uploading…' : 'Upload solution'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full rounded-md border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+        >
+          Upload solution…
+        </button>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }
@@ -736,7 +844,11 @@ export default function MatchRunPage() {
           <p className="text-sm text-gray-500 mt-0.5">{event.name}</p>
         </div>
         {canTrigger && token && (
-          <TriggerRunButton slug={slug!} onTriggered={handleTriggered} />
+          event.matching_mode === 'XTOY' ? (
+            <XToYSolvePanel slug={slug!} onUploaded={handleTriggered} />
+          ) : (
+            <TriggerRunButton slug={slug!} onTriggered={handleTriggered} />
+          )
         )}
         {!canTrigger && event.is_organizer && event.status !== 'MATCHING' && (
           <p className="text-xs text-gray-400">
@@ -765,7 +877,7 @@ export default function MatchRunPage() {
               <p className="text-xs text-gray-400">No runs yet.</p>
               {canTrigger && (
                 <p className="text-xs text-gray-400 mt-1">
-                  Click "Run matching" to start the first run.
+                  Use the action above to create the first run.
                 </p>
               )}
             </div>

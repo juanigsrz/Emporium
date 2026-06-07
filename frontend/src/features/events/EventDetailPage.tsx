@@ -12,10 +12,14 @@ import {
   usePatchEvent,
   useAddEventListing,
   useRemoveEventListing,
+  useEventParticipants,
+  useSetEventBudget,
   EVENT_STATUSES,
   EVENT_STATUS_LABELS,
+  MATCHING_MODE_LABELS,
+  MATCHING_MODE_FROZEN_STATUSES,
 } from '../../api/events'
-import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
+import type { TradeEvent, EventListing, EventStatus, MatchingMode } from '../../api/events'
 import { useCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
@@ -243,6 +247,50 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
   )
 }
 
+// ---- Organizer: matching mode selector ----
+
+function MatchingModeCard({ event }: { event: TradeEvent }) {
+  const patchEvent = usePatchEvent()
+  const [error, setError] = useState<string | null>(null)
+  const frozen = MATCHING_MODE_FROZEN_STATUSES.includes(event.status)
+
+  async function handleChange(mode: MatchingMode) {
+    if (mode === event.matching_mode) return
+    setError(null)
+    try {
+      await patchEvent.mutateAsync({ slug: event.slug, payload: { matching_mode: mode } })
+    } catch (err: unknown) {
+      setError(extractErrorMsg(err) ?? 'Failed to update matching mode.')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+        Matching mode
+      </p>
+      <select
+        value={event.matching_mode}
+        onChange={(e) => handleChange(e.target.value as MatchingMode)}
+        disabled={frozen || patchEvent.isPending}
+        className="w-full sm:w-auto py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
+        aria-label="Matching mode"
+      >
+        {(['ONETOONE', 'XTOY'] as MatchingMode[]).map((m) => (
+          <option key={m} value={m}>{MATCHING_MODE_LABELS[m]}</option>
+        ))}
+      </select>
+      <p className="text-xs text-gray-400 mt-2">
+        {event.matching_mode === 'ONETOONE'
+          ? 'Classic 1-to-1 trades, solved by the hosted solver — click Run on the matching page.'
+          : 'X-to-Y trades: export wants.txt, run the solver locally, upload the result on the matching page.'}
+      </p>
+      {frozen && <p className="text-xs text-gray-400 mt-1">Locked — matching has started.</p>}
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+    </div>
+  )
+}
+
 // ---- Organizer: edit event form ----
 
 const editEventSchema = z.object({
@@ -254,6 +302,8 @@ const editEventSchema = z.object({
   submissions_open_at: z.string().optional(),
   submissions_close_at: z.string().optional(),
   wantlist_close_at: z.string().optional(),
+  money_enabled: z.boolean().optional(),
+  max_money_per_user: z.string().optional(),
 })
 
 type EditEventFormValues = z.infer<typeof editEventSchema>
@@ -276,6 +326,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<EditEventFormValues>({
     resolver: zodResolver(editEventSchema),
@@ -288,8 +339,11 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       submissions_open_at: toLocalDatetimeValue(event.submissions_open_at),
       submissions_close_at: toLocalDatetimeValue(event.submissions_close_at),
       wantlist_close_at: toLocalDatetimeValue(event.wantlist_close_at),
+      money_enabled: event.money_enabled,
+      max_money_per_user: event.max_money_per_user ?? '',
     },
   })
+  const moneyEnabled = watch('money_enabled')
 
   async function onSubmit(values: EditEventFormValues) {
     setServerError(null)
@@ -310,6 +364,10 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             : null,
           wantlist_close_at: values.wantlist_close_at
             ? new Date(values.wantlist_close_at).toISOString()
+            : null,
+          money_enabled: !!values.money_enabled,
+          max_money_per_user: values.money_enabled
+            ? (values.max_money_per_user?.trim() || null)
             : null,
         },
       })
@@ -397,6 +455,33 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                 </div>
               ))}
             </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Money trading</p>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  {...register('money_enabled')}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Allow members to use money in trades
+              </label>
+              {moneyEnabled && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Max money per user (leave blank for no cap)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="e.g. 50.00"
+                    {...register('max_money_per_user')}
+                    className={`${inputCls(false)} sm:max-w-[12rem]`}
+                  />
+                </div>
+              )}
+            </div>
           </form>
         </div>
 
@@ -418,6 +503,67 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ---- Participant money budget ----
+
+function ParticipantBudgetCard({ event, username }: { event: TradeEvent; username: string }) {
+  const { data: participantsData } = useEventParticipants(event.slug)
+  const setBudget = useSetEventBudget()
+  const me = participantsData?.results.find((p) => p.username === username)
+  const current = me?.max_spend ?? '0'
+
+  const [value, setValue] = useState<string>('')
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Sync once the participant record loads.
+  const effective = value !== '' ? value : current
+
+  async function handleSave() {
+    setError(null)
+    setSaved(false)
+    try {
+      await setBudget.mutateAsync({ slug: event.slug, maxSpend: effective || '0' })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (err: unknown) {
+      setError(extractErrorMsg(err) ?? 'Failed to save budget.')
+    }
+  }
+
+  const cap = event.max_money_per_user
+  return (
+    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+        Your money budget
+      </p>
+      <p className="text-xs text-emerald-600 mb-2">
+        The most you're willing to spend in this event.
+        {cap ? ` Cap: ${cap}.` : ' No cap set.'}
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-gray-500">$</span>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={effective}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-32 rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <button
+          onClick={handleSave}
+          disabled={setBudget.isPending}
+          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+        >
+          {setBudget.isPending ? 'Saving…' : 'Save budget'}
+        </button>
+        {saved && <span className="text-xs text-emerald-600">Saved ✓</span>}
+      </div>
+      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
   )
 }
@@ -743,6 +889,9 @@ export default function EventDetailPage() {
         <OrganizerLifecycleControls event={event} />
       )}
 
+      {/* Organizer matching mode */}
+      {event.is_organizer && <MatchingModeCard event={event} />}
+
       {/* Deadlines + Policies row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Deadlines */}
@@ -804,6 +953,11 @@ export default function EventDetailPage() {
             Open My Wants
           </Link>
         </div>
+      )}
+
+      {/* Money budget (participant only, when money is enabled) */}
+      {token && event.money_enabled && event.is_participant && user && (
+        <ParticipantBudgetCard event={event} username={user.username} />
       )}
 
       {/* My listings (participant only) */}

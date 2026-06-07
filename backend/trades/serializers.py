@@ -17,7 +17,7 @@ OfferGroup output fields:
 WantGroup output fields:
     id, event, user, user_username, name, min_receive,
     items: [{id, target_type, board_game, board_game_name, event_listing,
-             listing_code, board_game_name (for LISTING), tier, rank}],
+             listing_code, board_game_name (for LISTING)}],
     created, updated
 
 TradeWish output fields:
@@ -188,14 +188,17 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
 
     Read:
         id, target_type, board_game (bgg_id int or null), board_game_name,
-        event_listing (id int or null), listing_code, tier, rank
+        event_listing (id int or null), listing_code
 
     Write (nested in WantGroup):
-        target_type, board_game (bgg_id), event_listing (id), tier, rank
+        target_type, board_game (bgg_id), event_listing (id)
+
+    Wants are binary — no priority/tier/rank. Items keep insertion order.
     """
 
     # Display-only companions
     board_game_name = serializers.SerializerMethodField()
+    board_game_id   = serializers.SerializerMethodField()
     listing_code    = serializers.SerializerMethodField()
 
     # Writable FK references
@@ -218,18 +221,26 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
             "target_type",
             "board_game",       # bgg_id int
             "board_game_name",
+            "board_game_id",    # canonical bgg_id for BOTH types (FE grouping)
             "event_listing",    # EventListing pk int
             "listing_code",
-            "tier",
-            "rank",
+            "money_amount",     # optional $ bid, null when none
         ]
-        read_only_fields = ["id", "board_game_name", "listing_code"]
+        read_only_fields = ["id", "board_game_name", "board_game_id", "listing_code"]
 
     def get_board_game_name(self, obj):
         if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
             return obj.board_game.name
         if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
             return obj.event_listing.copy.board_game.name
+        return None
+
+    def get_board_game_id(self, obj):
+        """Canonical game id (bgg_id) for grouping — works for LISTING too."""
+        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
+            return obj.board_game_id
+        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
+            return obj.event_listing.copy.board_game_id
         return None
 
     def get_listing_code(self, obj):
@@ -265,6 +276,12 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
                 {"target_type": f"Invalid target_type: {target_type}"}
             )
 
+        money = data.get("money_amount")
+        if money is not None and money < 0:
+            raise serializers.ValidationError(
+                {"money_amount": "money_amount cannot be negative."}
+            )
+
         return data
 
 
@@ -274,7 +291,7 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
 
 class WantGroupSerializer(serializers.ModelSerializer):
     """
-    Read: full group + nested items ordered by (tier, rank).
+    Read: full group + nested items (insertion order — wants are binary).
     Write (POST): name, min_receive, items (list of item dicts).
     Write (PATCH): name, min_receive, items (REPLACES entire item list when provided).
     """
@@ -292,6 +309,7 @@ class WantGroupSerializer(serializers.ModelSerializer):
             "user_username",
             "name",
             "min_receive",
+            "duplicate_protection",
             "items",
             "created",
             "updated",
