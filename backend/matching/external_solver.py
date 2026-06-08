@@ -146,6 +146,7 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
             lines.append(f"#! DUP-PROTECT ({w.user.username}) wish={w.id}")
         if not event.money_enabled:
             continue
+        # Buy side (P): max the user pays to receive a wanted game.
         for it in w.want_group.items.all():
             if it.money_amount is None:
                 continue
@@ -155,6 +156,14 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
                 el = by_id.get(it.event_listing_id)
                 token = f"listing={el.copy.listing_code}" if el else f"listing_id={it.event_listing_id}"
             lines.append(f"#! MONEY-WANT ({w.user.username}) {token} max={it.money_amount}")
+        # Sell side (Q): min the user accepts to give one of their listings.
+        for ogi in w.offer_group.items.all():
+            if ogi.money_amount is None:
+                continue
+            lines.append(
+                f"#! MONEY-OFFER ({w.user.username}) "
+                f"listing={ogi.event_listing.copy.listing_code} min={ogi.money_amount}"
+            )
 
     return ("\n".join(lines) + "\n") if lines else ""
 

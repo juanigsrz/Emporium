@@ -11,6 +11,8 @@ export interface OfferGroupItem {
   listing_code: string
   board_game_name: string
   board_game_id: number
+  /** Sell-side min money the owner accepts for this listing (Q), or null. */
+  money_amount: string | null
 }
 
 export interface OfferGroup {
@@ -30,6 +32,8 @@ export interface OfferGroupPayload {
   name: string
   max_give: number
   item_listing_ids: number[]
+  /** Sell-side asks keyed by listing id: { "<listing_id>": amount } */
+  item_money?: Record<string, number | null>
 }
 
 export interface WantGroupItem {

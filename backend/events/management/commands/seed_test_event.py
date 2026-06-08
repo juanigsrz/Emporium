@@ -176,7 +176,7 @@ class Command(BaseCommand):
             all_games.add(el.copy.board_game_id)
 
         wmin, wmax = opts["wants_min"], opts["wants_max"]
-        n_wishes = n_money_wants = 0
+        n_wishes = n_money_wants = n_money_offers = 0
         for u in traders:
             # Games owned by OTHERS (so a match is actually possible).
             candidates = sorted(all_games - games_by_owner.get(u.id, set()))
@@ -189,7 +189,14 @@ class Command(BaseCommand):
                 og = OfferGroup.objects.create(
                     event=event, user=u, name=el.copy.listing_code, max_give=1
                 )
-                OfferGroupItem.objects.create(offer_group=og, event_listing=el)
+                # Sell side (Q): ~40% of listings accept money, min ask.
+                sell_q = None
+                if money_enabled and rng.random() < 0.4:
+                    sell_q = round(rng.uniform(5, min(money_cap, 25)), 2)
+                    n_money_offers += 1
+                OfferGroupItem.objects.create(
+                    offer_group=og, event_listing=el, money_amount=sell_q
+                )
 
                 wg = WantGroup.objects.create(
                     event=event, user=u, name=f"Wants for {el.copy.listing_code}",
@@ -221,6 +228,6 @@ class Command(BaseCommand):
             f"  game pool:   {len(pool)} games, {distinct_games} distinct games actually listed\n"
             f"  wishes:      {n_wishes} (one per listing)\n"
             f"  money:       {'enabled, cap ' + str(round(money_cap, 2)) if money_enabled else 'disabled'}"
-            f"{', ' + str(n_money_wants) + ' money wants' if money_enabled else ''}\n"
+            f"{', ' + str(n_money_wants) + ' buy bids, ' + str(n_money_offers) + ' sell asks' if money_enabled else ''}\n"
             f"  frontend:    /events/{event.slug}\n"
         )

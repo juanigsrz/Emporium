@@ -185,7 +185,8 @@ function buildModel(
 // ============================================================
 // Game browse — paginated card grid of the games available in THIS event.
 // Expand a card to see the concrete copies it resolves to; "Want" toggles a
-// BOARD_GAME target on for ALL my items (refine per-item in the grid).
+// BOARD_GAME target on for ALL my items, then the inline "Offering N/M" panel
+// (or the grid) refines which of my offered items go toward that want.
 // Replaces the old typeahead search; only event-scoped games, never the
 // global 177k catalog.
 // ============================================================
@@ -204,6 +205,15 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [offerOpen, setOfferOpen] = useState<number | null>(null)
+
+  // Game groups keyed by canonical id — drives the per-card "which of my items
+  // offer for this want" panel (same model the grid uses, surfaced inline here).
+  const groupByGame = useMemo(() => {
+    const m = new Map<number, GameGroup>()
+    for (const grp of groupTargetsByGame(editor.targets)) m.set(grp.gameId, grp)
+    return m
+  }, [editor.targets])
 
   const { data, isFetching } = useEventGames(slug, {
     search: q.trim(),
@@ -304,6 +314,49 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
                     />
                   </div>
                 )}
+                {(() => {
+                  const group = groupByGame.get(g.bgg_id)
+                  if (!group || myListings.length < 2) return null
+                  const offeringCount = myListings.filter((l) => groupIsOn(editor, l.id, group)).length
+                  if (offeringCount === 0) return null
+                  const panelOpen = offerOpen === g.bgg_id
+                  return (
+                    <div className="border-t border-gray-100 bg-indigo-50/40">
+                      <button
+                        type="button"
+                        onClick={() => setOfferOpen(panelOpen ? null : g.bgg_id)}
+                        className="w-full px-2 py-1 text-left text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                        aria-expanded={panelOpen}
+                        title="Pick which of your offered items you'd give for this game"
+                      >
+                        Offering {offeringCount}/{myListings.length} of your items {panelOpen ? '▲' : '▾'}
+                      </button>
+                      {panelOpen && (
+                        <ul className="max-h-40 space-y-0.5 overflow-y-auto px-2 pb-2">
+                          {myListings.map((l) => {
+                            const on = groupIsOn(editor, l.id, group)
+                            return (
+                              <li key={l.id}>
+                                <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => toggleGroup(editor, l.id, group)}
+                                    className="h-3 w-3 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="truncate text-gray-700" title={l.board_game_name}>
+                                    {l.board_game_name}
+                                  </span>
+                                  <span className="ml-auto shrink-0 font-mono text-gray-400">{l.listing_code}</span>
+                                </label>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )
+                })()}
                 <button
                   type="button"
                   onClick={() => toggleWant(g)}

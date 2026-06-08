@@ -53,9 +53,10 @@ function extractErrorMsg(err: unknown): string {
 interface OfferGroupsPanelProps {
   slug: string
   myListings: EventListing[]
+  moneyEnabled: boolean
 }
 
-function OfferGroupsPanel({ slug, myListings }: OfferGroupsPanelProps) {
+function OfferGroupsPanel({ slug, myListings, moneyEnabled }: OfferGroupsPanelProps) {
   const { data: groups = [], isLoading } = useOfferGroups(slug)
   const createGroup = useCreateOfferGroup()
   const patchGroup = usePatchOfferGroup()
@@ -93,6 +94,7 @@ function OfferGroupsPanel({ slug, myListings }: OfferGroupsPanelProps) {
             key={group.id}
             slug={slug}
             myListings={myListings}
+            moneyEnabled={moneyEnabled}
             existing={group}
             onSave={async (payload) => {
               setError(null)
@@ -128,6 +130,7 @@ function OfferGroupsPanel({ slug, myListings }: OfferGroupsPanelProps) {
         <OfferGroupForm
           slug={slug}
           myListings={myListings}
+          moneyEnabled={moneyEnabled}
           onSave={async (payload) => {
             setError(null)
             try {
@@ -216,6 +219,11 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting }: OfferGroupCardP
             >
               <span className="font-mono text-gray-400">{item.listing_code}</span>
               {item.board_game_name}
+              {item.money_amount != null && (
+                <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
+                  ≥${item.money_amount}
+                </span>
+              )}
             </span>
           ))}
         </div>
@@ -227,18 +235,32 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting }: OfferGroupCardP
 interface OfferGroupFormProps {
   slug: string
   myListings: EventListing[]
+  moneyEnabled: boolean
   existing?: OfferGroup
-  onSave: (payload: { name: string; max_give: number; item_listing_ids: number[] }) => Promise<void>
+  onSave: (payload: {
+    name: string
+    max_give: number
+    item_listing_ids: number[]
+    item_money?: Record<string, number | null>
+  }) => Promise<void>
   onCancel: () => void
   isSaving: boolean
 }
 
-function OfferGroupForm({ myListings, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
   const [name, setName] = useState(existing?.name ?? '')
   const [maxGive, setMaxGive] = useState(String(existing?.max_give ?? 1))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(existing?.items.map((i) => i.event_listing) ?? [])
   )
+  // Sell-side ask (Q) per listing id, as raw input strings ('' = not for sale).
+  const [moneyById, setMoneyById] = useState<Record<number, string>>(() => {
+    const m: Record<number, string> = {}
+    for (const i of existing?.items ?? []) {
+      if (i.money_amount != null) m[i.event_listing] = i.money_amount
+    }
+    return m
+  })
   const [formError, setFormError] = useState<string | null>(null)
 
   function toggleListing(id: number) {
@@ -258,7 +280,16 @@ function OfferGroupForm({ myListings, existing, onSave, onCancel, isSaving }: Of
     if (isNaN(mg) || mg < 1) { setFormError('Max give must be at least 1.'); return }
     if (selectedIds.size === 0) { setFormError('Select at least one listing.'); return }
     if (mg > selectedIds.size) { setFormError(`Max give (${mg}) cannot exceed the number of selected listings (${selectedIds.size}).`); return }
-    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds) })
+
+    let item_money: Record<string, number | null> | undefined
+    if (moneyEnabled) {
+      item_money = {}
+      for (const id of selectedIds) {
+        const raw = (moneyById[id] ?? '').trim()
+        item_money[String(id)] = raw === '' ? null : Number(raw)
+      }
+    }
+    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds), item_money })
   }
 
   return (
@@ -321,6 +352,26 @@ function OfferGroupForm({ myListings, existing, onSave, onCancel, isSaving }: Of
                 />
                 <span className="font-medium">{listing.board_game_name}</span>
                 <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
+                {moneyEnabled && selectedIds.has(listing.id) && (
+                  <span
+                    className="ml-auto flex items-center gap-1"
+                    onClick={(e) => e.preventDefault()}
+                    title="Least money you'll accept to give this (leave blank = game-only)"
+                  >
+                    <span className="text-xs text-gray-400">accept ≥$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={moneyById[listing.id] ?? ''}
+                      onChange={(e) =>
+                        setMoneyById((m) => ({ ...m, [listing.id]: e.target.value }))
+                      }
+                      placeholder="—"
+                      className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                  </span>
+                )}
               </label>
             ))}
           </div>
@@ -540,7 +591,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardPro
               )}
               {item.money_amount != null && (
                 <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
-                  +${item.money_amount}
+                  pay ≤${item.money_amount}
                 </span>
               )}
             </span>
@@ -745,7 +796,7 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
                 </div>
                 {moneyEnabled && (
                   <div className="flex shrink-0 items-center gap-1">
-                    <span className="text-xs text-gray-400">+$</span>
+                    <span className="text-xs text-gray-400">pay ≤$</span>
                     <input
                       type="number"
                       min={0}
@@ -753,7 +804,7 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
                       value={item.money_amount}
                       onChange={(e) => setMoney(item.localId, e.target.value)}
                       placeholder="0"
-                      title="Max money you'll add to receive this game"
+                      title="Most money you'll pay to receive this game (needs a seller who accepts money)"
                       className="w-20 rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </div>
@@ -1231,6 +1282,14 @@ export default function WantListBuilderPage() {
           games/listings you want, with a min-receive (Y).{' '}
           A <span className="font-semibold text-green-600">Wish</span> links them:{' '}
           "Give up to X → Receive at least Y."
+          {event.money_enabled && (
+            <>
+              {' '}
+              <span className="font-semibold text-emerald-700">Money:</span> set the most
+              you'll <em>pay</em> for a wanted game, and the least you'll <em>accept</em> to
+              give one of yours. A money trade happens only when a buyer's max ≥ a seller's min.
+            </>
+          )}
         </div>
       </div>
 
@@ -1280,7 +1339,7 @@ export default function WantListBuilderPage() {
                 </Link>
               </div>
             )}
-            <OfferGroupsPanel slug={slug!} myListings={myListings} />
+            <OfferGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} />
           </div>
         )}
 

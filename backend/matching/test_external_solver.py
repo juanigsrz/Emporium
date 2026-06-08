@@ -320,8 +320,12 @@ class PlaceholderHeaderTests(MatchingTestBase):
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
         item = cls.wish_a.want_group.items.first()
-        item.money_amount = 30
+        item.money_amount = 30   # buy bid P
         item.save(update_fields=["money_amount"])
+        # sell ask Q on the offered listing (el_a1)
+        ogi = cls.wish_a.offer_group.items.first()
+        ogi.money_amount = 20
+        ogi.save(update_fields=["money_amount"])
 
     def test_header_has_money_budget_dup_and_money_want(self):
         text = external_solver.build_wants(self.event)
@@ -330,6 +334,10 @@ class PlaceholderHeaderTests(MatchingTestBase):
         self.assertIn(f"#! DUP-PROTECT ({self.user_a.username}) wish={self.wish_a.id}", text)
         self.assertIn(
             f"#! MONEY-WANT ({self.user_a.username}) game={self.game_terra.bgg_id} max=30.00",
+            text,
+        )
+        self.assertIn(
+            f"#! MONEY-OFFER ({self.user_a.username}) listing={self.copy_a1.listing_code} min=20.00",
             text,
         )
 

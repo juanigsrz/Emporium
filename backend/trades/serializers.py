@@ -60,6 +60,7 @@ class OfferGroupItemSerializer(serializers.ModelSerializer):
             "listing_code",
             "board_game_name",
             "board_game_id",
+            "money_amount",    # Q: min money owner accepts (null = not for sale)
         ]
         read_only_fields = fields
 
@@ -86,6 +87,13 @@ class OfferGroupSerializer(serializers.ModelSerializer):
         required=False,
         default=list,
     )
+    # Write-only: optional sell-side money asks, keyed by EventListing id (string).
+    # {"<listing_id>": <Q>} — the min money the owner accepts for that listing.
+    item_money = serializers.DictField(
+        child=serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True),
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = OfferGroup
@@ -99,6 +107,7 @@ class OfferGroupSerializer(serializers.ModelSerializer):
             "rules",
             "items",
             "item_listing_ids",
+            "item_money",
             "created",
             "updated",
         ]
@@ -143,9 +152,23 @@ class OfferGroupSerializer(serializers.ModelSerializer):
 
         return list(listings)
 
+    def _money_map(self, item_money):
+        """Normalise {str id: Q} → {int id: Q}; reject negatives."""
+        out = {}
+        for k, v in (item_money or {}).items():
+            if v is None:
+                continue
+            if v < 0:
+                raise serializers.ValidationError(
+                    {"item_money": "money amounts cannot be negative."}
+                )
+            out[int(k)] = v
+        return out
+
     @transaction.atomic
     def create(self, validated_data):
         listing_ids = validated_data.pop("item_listing_ids", [])
+        money_map   = self._money_map(validated_data.pop("item_money", None))
         event = validated_data["event"]
         user  = validated_data["user"]
 
@@ -153,13 +176,16 @@ class OfferGroupSerializer(serializers.ModelSerializer):
         group = OfferGroup.objects.create(**validated_data)
 
         for el in listings:
-            OfferGroupItem.objects.create(offer_group=group, event_listing=el)
+            OfferGroupItem.objects.create(
+                offer_group=group, event_listing=el, money_amount=money_map.get(el.id)
+            )
 
         return group
 
     @transaction.atomic
     def update(self, instance, validated_data):
         listing_ids = validated_data.pop("item_listing_ids", None)
+        money_map   = self._money_map(validated_data.pop("item_money", None))
         event = instance.event
         user  = instance.user
 
@@ -173,7 +199,9 @@ class OfferGroupSerializer(serializers.ModelSerializer):
             listings = self._resolve_listings(listing_ids, event, user)
             instance.items.all().delete()
             for el in listings:
-                OfferGroupItem.objects.create(offer_group=instance, event_listing=el)
+                OfferGroupItem.objects.create(
+                    offer_group=instance, event_listing=el, money_amount=money_map.get(el.id)
+                )
 
         return instance
 

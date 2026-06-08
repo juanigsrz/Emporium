@@ -354,6 +354,17 @@ class EventJoinLeaveTests(EventTestBase):
         resp = self.client.get(event_url(self.slug))
         self.assertEqual(resp.data["participants_count"], initial + 1)
 
+    def test_organizer_can_join_own_event(self):
+        # user1 is the organizer (created the event in setUp). They may also trade.
+        resp = self.client.post(join_url(self.slug))
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        ev = self.client.get(event_url(self.slug)).data
+        self.assertTrue(ev["is_organizer"])
+        self.assertTrue(ev["is_participant"])
+        # and can leave again
+        resp = self.client.delete(leave_url(self.slug))
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+
 
 # ---------------------------------------------------------------------------
 # 11–15: Listings

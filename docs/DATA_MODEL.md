@@ -170,6 +170,7 @@ unique_together = (event, copy). Matching operates on `EventListing`s.
 |---|---|---|
 | offer_group | FK(OfferGroup, related=items) | |
 | event_listing | FK(EventListing, related=offer_memberships) | user's own listing |
+| money_amount | decimal(10,2) null | sell-side **Q**: min money the owner accepts to give this listing for money (null = not for sale). Money trade feasible only when a buyer's `WantGroupItem.money_amount` (P) ≥ this Q. Placeholder for MIP. |
 unique_together = (offer_group, event_listing). Validate listing.copy.owner == group.user.
 
 ### WantGroup (reusable; targets the user wants)
@@ -189,7 +190,7 @@ unique_together = (offer_group, event_listing). Validate listing.copy.owner == g
 | target_type | choice | BOARD_GAME, LISTING |
 | board_game | FK(BoardGame) null | when target_type=BOARD_GAME (any copy) |
 | event_listing | FK(EventListing) null | when target_type=LISTING (specific) |
-| money_amount | decimal(10,2) null | optional money bid: max the user adds to receive this game (placeholder for MIP solver) |
+| money_amount | decimal(10,2) null | buy-side **P**: max money the user pays to receive this game (not a priority sweetener — needs a seller accepting money, see OfferGroupItem.money_amount). Placeholder for MIP. |
 Exactly one of board_game / event_listing set (validate). Wants are **binary** —
 you want a target or you don't; no priority/tier/rank (neither solver consumes
 priority). Items keep insertion order.
