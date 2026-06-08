@@ -85,7 +85,7 @@ Shapes (pinned from BE):
 ## Trades (offer/want groups + wishes) — all event-scoped, mine by default
 | method | path | notes |
 |---|---|---|
-| GET/POST | `/api/events/{slug}/offer-groups/` | `{name,max_give,item_listing_ids:[...]}` |
+| GET/POST | `/api/events/{slug}/offer-groups/` | `{name,max_give,item_listing_ids:[...],item_money?}`. `item_money` is the sell side: `{"<listing_id>": Q}` — min money the owner accepts to give that listing (null = not for sale). Items echo `money_amount` on read. |
 | GET/PATCH/DELETE | `/api/events/{slug}/offer-groups/{id}/` | owner-only |
 | GET/POST | `/api/events/{slug}/want-groups/` | `{name,min_receive,duplicate_protection?,items:[{target_type,board_game?,event_listing?,money_amount?}]}`. Wants are **binary** — no tier/rank. `duplicate_protection` (default false) is set true by the normal "My Wants" builder. Each item also returns `board_game_id` (canonical bgg id for BOTH types — use to group LISTING items under their game). `money_amount` is an optional money bid (decimal string / null). |
 | GET/PATCH/DELETE | `/api/events/{slug}/want-groups/{id}/` | owner-only; PATCH bulk-replaces the item set (insertion order) |

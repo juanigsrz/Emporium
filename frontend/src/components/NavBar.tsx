@@ -45,9 +45,21 @@ export default function NavBar() {
           {/* Brand */}
           <Link
             to="/"
-            className="text-xl font-bold tracking-tight hover:text-indigo-200 transition-colors"
+            className="group flex items-center gap-2.5 transition-colors hover:text-indigo-100"
           >
-            MathTrade
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-indigo-600 ring-1 ring-white/15 transition-transform group-hover:-rotate-6">
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" className="text-indigo-100">
+                <g fill="currentColor">
+                  <circle cx="4.5" cy="4.5" r="1.7" />
+                  <circle cx="11.5" cy="4.5" r="1.7" />
+                  <circle cx="4.5" cy="11.5" r="1.7" />
+                  <circle cx="11.5" cy="11.5" r="1.7" />
+                </g>
+              </svg>
+            </span>
+            <span className="font-display text-[1.4rem] font-semibold leading-none tracking-tight">
+              MathTrade
+            </span>
           </Link>
 
           {/* Desktop nav */}

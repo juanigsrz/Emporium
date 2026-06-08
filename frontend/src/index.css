@@ -1,3 +1,95 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================
+   "Tabletop Almanac" — global atmosphere & typography.
+   Visual-only layer; sits on top of the retuned Tailwind tokens.
+   ============================================================ */
+
+@layer base {
+  :root {
+    --paper: #ece1cd;        /* page parchment */
+    --paper-hi: #f6efdd;     /* upper light wash */
+    --ink: #1d1810;          /* near-black warm */
+    --teal: #0e615e;         /* signature accent */
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    color: var(--ink);
+    background-color: var(--paper);
+    /* layered: fine paper grain + two soft warm light washes */
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E"),
+      radial-gradient(1200px 620px at 82% -12%, rgba(246, 239, 221, 0.85), transparent 60%),
+      radial-gradient(1000px 520px at -12% 112%, rgba(228, 215, 186, 0.7), transparent 55%);
+    background-attachment: fixed, fixed, fixed;
+    background-repeat: repeat, no-repeat, no-repeat;
+    font-feature-settings: "kern", "liga", "calt";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Editorial display serif for the big titles (true headings only). */
+  h1, h2 {
+    font-family: theme('fontFamily.display');
+    font-optical-sizing: auto;
+    font-variation-settings: "SOFT" 0, "WONK" 0;
+    letter-spacing: -0.014em;
+    line-height: 1.08;
+  }
+
+  /* Monospace numerals/codes get tabular alignment for tidy columns. */
+  code, kbd, samp, pre, .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: #95cbc6;      /* teal-200 */
+    color: #062d2c;           /* teal-900 */
+  }
+
+  /* Warm, slim scrollbars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #cabd9f transparent;   /* stone-300 thumb */
+  }
+  *::-webkit-scrollbar { width: 11px; height: 11px; }
+  *::-webkit-scrollbar-thumb {
+    background: #cabd9f;
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: #b3a482; }
+
+  /* Clear, on-brand keyboard focus (offset avoids clashing with ring-* utils). */
+  :focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+}
+
+@layer utilities {
+  /* Gentle per-route entrance. Opacity-only so it never creates a containing
+     block (keeps `position: fixed` modals/overlays anchored to the viewport). */
+  @keyframes page-enter {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  main > * {
+    animation: page-enter 0.4s ease both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    main > * { animation: none; }
+  }
+}

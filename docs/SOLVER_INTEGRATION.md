@@ -328,22 +328,27 @@ the real `ftm`/`main.py` → upload → assert cycles match.
 
 Money trading and per-want duplicate-protection are stored but **not yet solved**
 (neither the C++ `ftm` nor the current gurobi model consume them). The MIP
-formulation that handles them lands later. Until then `build_wants` prepends
-**comment lines** (`#! …`) that both parsers ignore, so the export round-trips
-unchanged while carrying the data forward:
+formulation that handles them lands later. Money is a **two-sided market**, not a
+priority sweetener: a buyer sets the most they'll pay for a game (**P**), a seller
+sets the least they'll accept to give theirs (**Q**), and a money trade is feasible
+only when P ≥ Q. Until the MIP lands `build_wants` prepends **comment lines**
+(`#! …`) that both parsers ignore, so the export round-trips unchanged while
+carrying the data forward:
 
 ```
 #! MONEY-ENABLED max_per_user=50.00
 #! BUDGET (trader01) 25.00
 #! DUP-PROTECT (trader01) wish=42
-#! MONEY-WANT (trader01) game=174430 max=30.00
+#! MONEY-WANT (trader01) game=174430 max=30.00     ← buy side P
+#! MONEY-OFFER (trader01) listing=C-6WTGG3 min=13.60 ← sell side Q
 ```
 
 Sources: `TradeEvent.money_enabled` / `max_money_per_user`,
 `EventParticipation.max_spend`, `WantGroup.duplicate_protection`,
-`WantGroupItem.money_amount` (see DATA_MODEL.md). `parse_ftm` reads only after
-`TRADE LOOPS` and `parse_gurobi` only after `Trade Results`, so these `#!` lines
-are inert — covered by `PlaceholderHeaderTests`.
+`WantGroupItem.money_amount` (P), `OfferGroupItem.money_amount` (Q) — see
+DATA_MODEL.md. `parse_ftm` reads only after `TRADE LOOPS` and `parse_gurobi`
+only after `Trade Results`, so these `#!` lines are inert — covered by
+`PlaceholderHeaderTests`.
 
 ---
 

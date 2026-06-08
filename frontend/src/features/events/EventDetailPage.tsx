@@ -106,8 +106,9 @@ function JoinLeaveButton({
     )
   }
 
-  // Organizer can't join/leave
-  if (event.is_organizer) return null
+  // Organizers may also participate (trade) in their own event — they just join
+  // like anyone else; this creates an EventParticipation and unlocks the
+  // budget / listings / wants sections below.
 
   // Can only join when submissions open or draft (best-effort; server validates)
   const joinableStatuses: EventStatus[] = ['DRAFT', 'SUBMISSIONS_OPEN', 'WANTLIST_OPEN']
@@ -178,7 +179,7 @@ function JoinLeaveButton({
           disabled={join.isPending}
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors shadow-sm"
         >
-          {join.isPending ? 'Joining…' : 'Join event'}
+          {join.isPending ? 'Joining…' : event.is_organizer ? 'Join as trader' : 'Join event'}
         </button>
       ) : (
         <span className="text-sm text-gray-400">Event not open for joining</span>
