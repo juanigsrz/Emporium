@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy } from '../../api/copies'
+import { useQueryClient } from '@tanstack/react-query'
+import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy, COPIES_KEYS } from '../../api/copies'
 import type { Copy, CopyCondition } from '../../api/copies'
 import { useGamesList } from '../../api/games'
 import { CONDITION_LABELS } from './constants'
 import { useMyRatings, useSetRating, ratingMap } from '../../api/ratings'
+import { useStartImport, useImportJob } from '../../api/bgg'
+import { useMyProfile } from '../../api/profiles'
 
 // ---- Constants ----
 
@@ -400,6 +403,11 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
   const conditionClass = CONDITION_COLOR[copy.condition] ?? 'bg-gray-50 text-gray-700 border-gray-200'
   const statusClass = STATUS_COLOR[copy.status] ?? 'bg-gray-100 text-gray-400 border-gray-200'
   const isWithdrawn = copy.status === 'WITHDRAWN'
+  const isPendingCopy = copy.is_pending === true
+
+  const missingFields: string[] = []
+  if (!copy.language) missingFields.push('language')
+  if (!copy.condition) missingFields.push('condition')
 
   async function handleWithdraw() {
     await withdrawCopy.mutateAsync(copy.id)
@@ -419,6 +427,26 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
       )}
 
       <div className={`p-4 border-b border-gray-100 last:border-0 ${isWithdrawn ? 'opacity-60' : ''}`}>
+        {/* Pending banner */}
+        {isPendingCopy && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <svg className="w-3.5 h-3.5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs text-amber-800 font-medium truncate">
+                Complete details: {missingFields.join(', ')}
+              </span>
+            </div>
+            <button
+              onClick={() => setEditOpen(true)}
+              className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              Complete
+            </button>
+          </div>
+        )}
+
         {/* Top: listing code + status + game link */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <span className="font-mono text-xs text-gray-400 border border-gray-100 rounded px-1.5 py-0.5">
@@ -475,6 +503,15 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
               >
                 Withdraw
               </button>
+              {isPendingCopy && (
+                <span
+                  title="Complete details before adding to an event."
+                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 cursor-not-allowed select-none"
+                  aria-disabled="true"
+                >
+                  Add to event
+                </span>
+              )}
             </>
           )}
           <div className="ml-auto">
@@ -517,6 +554,148 @@ const STATUS_OPTIONS = [
   { value: 'TRADED', label: 'Traded' },
   { value: 'WITHDRAWN', label: 'Withdrawn' },
 ]
+
+// ---- BGG Import panel ----
+
+function BggImportPanel() {
+  const qc = useQueryClient()
+  const { data: profile } = useMyProfile()
+  const startImport = useStartImport()
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [skipDuplicates, setSkipDuplicates] = useState(true)
+  const [geeklistId, setGeeklistId] = useState('')
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importResult, setImportResult] = useState<Record<string, number> | null>(null)
+
+  const { data: job } = useImportJob(jobId)
+  const isRunning = job != null && (job.status === 'PENDING' || job.status === 'RUNNING')
+
+  if (job?.status === 'DONE' && importResult == null) {
+    setImportResult(job.summary)
+    setJobId(null)
+    qc.invalidateQueries({ queryKey: COPIES_KEYS.mine() })
+  }
+
+  const hasBggUsername = !!(profile?.bgg_username)
+
+  async function handleOwnedImport() {
+    setImportError(null)
+    setImportResult(null)
+    try {
+      const j = await startImport.mutateAsync({
+        kind: 'OWNED',
+        options: { skip_duplicates: skipDuplicates },
+      })
+      setJobId(j.id)
+    } catch {
+      setImportError('Failed to start import. Please try again.')
+    }
+  }
+
+  async function handleGeeklistImport() {
+    const id = geeklistId.trim()
+    if (!id) {
+      setImportError('Enter a geeklist ID.')
+      return
+    }
+    setImportError(null)
+    setImportResult(null)
+    try {
+      const j = await startImport.mutateAsync({
+        kind: 'GEEKLIST',
+        source_ref: id,
+        options: { skip_duplicates: skipDuplicates },
+      })
+      setJobId(j.id)
+    } catch {
+      setImportError('Failed to start import. Please try again.')
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4">
+      <h2 className="text-sm font-semibold text-gray-800 mb-3">Import from BGG</h2>
+
+      {/* Skip duplicates checkbox */}
+      <label className="flex items-center gap-2 text-xs text-gray-600 mb-3">
+        <input
+          type="checkbox"
+          checked={skipDuplicates}
+          onChange={(e) => setSkipDuplicates(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+        />
+        Skip existing duplicates
+      </label>
+
+      <div className="flex flex-wrap gap-3 items-end">
+        {/* Owned import */}
+        <div className="flex flex-col gap-1">
+          {!hasBggUsername && (
+            <p className="text-xs text-amber-600">
+              Set your{' '}
+              <a href="/profile" className="underline hover:text-amber-800">
+                BGG username
+              </a>{' '}
+              first.
+            </p>
+          )}
+          <button
+            onClick={handleOwnedImport}
+            disabled={!hasBggUsername || isRunning || startImport.isPending}
+            title={!hasBggUsername ? 'Set your BGG username in your profile first.' : undefined}
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 transition-colors"
+          >
+            {isRunning ? 'Importing…' : 'Import owned from BGG'}
+          </button>
+        </div>
+
+        {/* Geeklist import */}
+        <div className="flex items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-gray-500">
+            Geeklist ID
+            <input
+              value={geeklistId}
+              onChange={(e) => setGeeklistId(e.target.value)}
+              placeholder="e.g. 123456"
+              className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-200"
+            />
+          </label>
+          <button
+            onClick={handleGeeklistImport}
+            disabled={isRunning || startImport.isPending}
+            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 transition-colors"
+          >
+            {isRunning ? 'Importing…' : 'Import from geeklist'}
+          </button>
+        </div>
+      </div>
+
+      {isRunning && (
+        <p className="mt-2 text-xs text-teal-600 flex items-center gap-1">
+          <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          Importing…
+        </p>
+      )}
+      {importResult != null && (
+        <p className="mt-2 text-xs text-teal-700">
+          Import done — {importResult.created ?? 0} created
+          {importResult.skipped != null ? `, ${importResult.skipped} skipped` : ''}
+          {importResult.pending != null && importResult.pending > 0
+            ? `, ${importResult.pending} need details`
+            : ''}
+          .
+        </p>
+      )}
+      {job?.status === 'FAILED' && (
+        <p className="mt-2 text-xs text-red-600">Import failed. Check your BGG username or geeklist ID.</p>
+      )}
+      {importError && <p className="mt-2 text-xs text-red-600">{importError}</p>}
+    </div>
+  )
+}
 
 // ---- Add copy panel ----
 
@@ -681,6 +860,8 @@ export default function MyCopiesPage() {
       </div>
 
       {addOpen && <AddCopyPanel onDone={() => setAddOpen(false)} />}
+
+      <BggImportPanel />
 
       {/* Filter */}
       {!isLoading && copies.length > 0 && (

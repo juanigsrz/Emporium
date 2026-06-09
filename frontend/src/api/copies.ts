@@ -29,6 +29,8 @@ export interface Copy {
   pickup_available: boolean
   photo_urls: string[]
   status: CopyStatus
+  is_pending: boolean
+  import_source: string
   created: string
   updated: string
 }
