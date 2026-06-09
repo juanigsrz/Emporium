@@ -64,4 +64,7 @@ urlpatterns = [
 
     # Matching: match runs, results, assignments (event-scoped)
     path("api/", include("matching.urls")),
+
+    # BGG: import jobs (wishlist/ratings/owned/geeklist)
+    path("api/", include("bgg.urls")),
 ]
