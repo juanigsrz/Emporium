@@ -86,6 +86,35 @@ def _blocked_with(user_id, block_pairs):
     return out
 
 
+def _load_coords():
+    """user_id -> (lat, lng, max_trade_distance_km) for users with a Profile."""
+    from accounts.models import Profile
+    return {
+        p.user_id: (p.latitude, p.longitude, p.max_trade_distance_km)
+        for p in Profile.objects.all()
+    }
+
+
+def _distance_blocked(user_id, coords):
+    """Owner ids too far from this wisher (per the wisher's max_trade_distance_km)."""
+    from accounts.geo import haversine_km
+    me = coords.get(user_id)
+    if not me or me[2] is None:  # (lat, lng, max_km); no self-limit -> block nobody
+        return set()
+    lat, lng, max_km = me
+    if lat is None or lng is None:
+        return set()
+    blocked = set()
+    for other_id, (olat, olng, _omax) in coords.items():
+        if other_id == user_id:
+            continue
+        if olat is None or olng is None:
+            continue
+        if haversine_km(lat, lng, olat, olng) > max_km:
+            blocked.add(other_id)
+    return blocked
+
+
 def _expand(want_items, user_id, by_game, by_id, blocked):
     """Canonical wants -> concrete listing_codes (others' active copies).
 
@@ -171,10 +200,12 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
 def _build_onetoone(listings, wishes, by_game, by_id, block_pairs) -> str:
     """OLWLG: one `(user) CODE : wishlist` line per active listing."""
     blocked_cache = {}
+    coords = _load_coords()
     wishlist_map = defaultdict(set)  # listing_id -> set(codes)
     for w in wishes:
         blocked = blocked_cache.setdefault(
-            w.user_id, _blocked_with(w.user_id, block_pairs)
+            w.user_id,
+            _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
         )
         exp = set(_expand(w.want_group.items.all(), w.user_id, by_game, by_id, blocked))
         for ogi in w.offer_group.items.all():
@@ -195,10 +226,12 @@ def _build_onetoone(listings, wishes, by_game, by_id, block_pairs) -> str:
 def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
     """gurobi: one `(NforM) give -> take` line per active wish."""
     blocked_cache = {}
+    coords = _load_coords()
     lines = []
     for w in wishes:
         blocked = blocked_cache.setdefault(
-            w.user_id, _blocked_with(w.user_id, block_pairs)
+            w.user_id,
+            _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
         )
         give = sorted(
             ogi.event_listing.copy.listing_code
