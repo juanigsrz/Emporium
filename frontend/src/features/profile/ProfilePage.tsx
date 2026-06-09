@@ -12,8 +12,68 @@ import {
   fetchWishlists,
   createWishlistEntry,
   deleteWishlistEntry,
+  useMyProfile,
   type PatchProfilePayload,
 } from '../../api/profiles'
+import { useStartImport, useImportJob, type ImportKind } from '../../api/bgg'
+import { useMyRatings } from '../../api/ratings'
+
+// ---- Shared BGG import button (used by Wishlist + Ratings tabs) ----
+function BggImportButton({
+  kind,
+  label,
+  onDone,
+}: {
+  kind: ImportKind
+  label: string
+  onDone: () => void
+}) {
+  const { data: profile } = useMyProfile()
+  const start = useStartImport()
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const job = useImportJob(jobId)
+  const running = ['PENDING', 'RUNNING'].includes(job.data?.status ?? '')
+
+  useEffect(() => {
+    if (job.data?.status === 'DONE') {
+      const matched = job.data.summary?.matched ?? 0
+      const skipped = job.data.summary?.skipped ?? 0
+      setMsg(`Done — ${matched} matched, ${skipped} skipped.`)
+      setJobId(null)
+      onDone()
+    } else if (job.data?.status === 'FAILED') {
+      setMsg('Failed. Check your BGG username and try again.')
+      setJobId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.data?.status])
+
+  if (!profile?.bgg_username) {
+    return (
+      <span className="text-xs text-gray-400">
+        Set your BoardGameGeek username in the Profile tab to enable.
+      </span>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          setMsg(null)
+          start.mutateAsync({ kind }).then((j) => setJobId(j.id))
+        }}
+        disabled={running || start.isPending}
+        className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+      >
+        {running ? 'Working…' : label}
+      </button>
+      {msg && <span className="text-xs text-green-600">{msg}</span>}
+    </div>
+  )
+}
 
 const profileSchema = z.object({
   display_name: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
@@ -315,6 +375,14 @@ function WishlistSection() {
     <section>
       <h2 className="text-lg font-semibold text-gray-800 mb-3">Wishlist</h2>
 
+      <div className="mb-4">
+        <BggImportButton
+          kind="WISHLIST"
+          label="Sync BGG wishlist"
+          onDone={() => qc.invalidateQueries({ queryKey: ['wishlists'] })}
+        />
+      </div>
+
       <div className="flex flex-wrap gap-2 mb-4 max-w-lg">
         <input
           type="number"
@@ -369,14 +437,67 @@ function WishlistSection() {
   )
 }
 
+// ---- Ratings Section (review-only) ----
+function RatingsSection() {
+  const qc = useQueryClient()
+  const { data: ratings = [], isLoading } = useMyRatings()
+  const [filter, setFilter] = useState('')
+
+  const shown = ratings
+    .filter((r) => r.board_game_name.toLowerCase().includes(filter.trim().toLowerCase()))
+    .sort((a, b) => a.board_game_name.localeCompare(b.board_game_name))
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-gray-800 mb-3">Game Ratings</h2>
+
+      <div className="mb-4">
+        <BggImportButton
+          kind="RATINGS"
+          label="Import ratings from BGG"
+          onDone={() => qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })}
+        />
+      </div>
+
+      <input
+        type="text"
+        placeholder="Filter your rated games…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="w-full max-w-sm mb-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          {ratings.length === 0
+            ? 'No ratings yet. Import from BGG or rate games in the want builder.'
+            : 'No matches.'}
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md max-w-sm">
+          {shown.map((r) => (
+            <li key={r.id} className="flex items-center justify-between px-3 py-2 gap-2">
+              <span className="text-sm text-gray-800 truncate">{r.board_game_name}</span>
+              <span className="text-sm font-semibold text-indigo-600">{Number(r.value)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 // ---- Page ----
 export default function ProfilePage() {
-  const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist'>('profile')
+  const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist' | 'ratings'>('profile')
 
   const tabs: { key: typeof tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
     { key: 'blocks', label: 'Blocked Users' },
     { key: 'wishlist', label: 'Wishlist' },
+    { key: 'ratings', label: 'Ratings' },
   ]
 
   return (
@@ -403,6 +524,7 @@ export default function ProfilePage() {
       {tab === 'profile' && <ProfileEdit />}
       {tab === 'blocks' && <BlocksSection />}
       {tab === 'wishlist' && <WishlistSection />}
+      {tab === 'ratings' && <RatingsSection />}
     </div>
   )
 }
