@@ -769,51 +769,6 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
   )
 }
 
-// ---- All listings section (public) ----
-
-function AllListingsSection({ event }: { event: TradeEvent }) {
-  const { data, isLoading } = useEventListings(event.slug)
-  const listings = data?.results ?? []
-
-  return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-gray-800 mb-3">
-        All Listings
-        {data && (
-          <span className="ml-2 text-xs font-normal text-gray-400">
-            ({data.count})
-          </span>
-        )}
-      </h3>
-      {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-8 bg-gray-50 rounded animate-pulse" />
-          ))}
-        </div>
-      ) : listings.length === 0 ? (
-        <p className="text-xs text-gray-400">No listings yet.</p>
-      ) : (
-        <div className="divide-y divide-gray-100">
-          {listings.map((listing) => (
-            <div key={listing.id} className="flex items-center justify-between py-2 gap-2">
-              <div className="min-w-0">
-                <span className="text-sm text-gray-800 truncate block">{listing.board_game_name}</span>
-                <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
-              </div>
-              <Link
-                to={`/u/${listing.copy_owner_username}`}
-                className="shrink-0 text-xs text-indigo-500 hover:underline"
-              >
-                {listing.copy_owner_username}
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
 
 // ---- Deadline row helper ----
 
@@ -1056,8 +1011,6 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* All listings */}
-      <AllListingsSection event={event} />
     </div>
   )
 }
