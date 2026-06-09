@@ -25,3 +25,13 @@ export function useSetRating() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ratings', 'mine'] }),
   })
 }
+
+export function useDeleteRating() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/game-ratings/${id}/`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ratings', 'mine'] }),
+  })
+}
