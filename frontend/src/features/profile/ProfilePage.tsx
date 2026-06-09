@@ -222,6 +222,10 @@ function ProfileEdit() {
                   id="location"
                   type="text"
                   autoComplete="off"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="location-suggestions"
+                  aria-expanded={showSuggestions && suggestions.length > 0}
                   {...register('location')}
                   onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
@@ -230,9 +234,13 @@ function ProfileEdit() {
                   }`}
                 />
                 {showSuggestions && suggestions.length > 0 && (
-                  <ul className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                  <ul
+                    id="location-suggestions"
+                    role="listbox"
+                    className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+                  >
                     {suggestions.map((s) => (
-                      <li key={`${s.display_name}-${s.lat}-${s.lon}`}>
+                      <li key={`${s.display_name}-${s.lat}-${s.lon}`} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => {
