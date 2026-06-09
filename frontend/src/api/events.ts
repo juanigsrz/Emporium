@@ -77,6 +77,11 @@ export interface TradeEvent {
   regional_restrictions: string
   trade_policies: string
   algorithm_settings: Record<string, unknown>
+  // Location gate (organizer-writable)
+  require_location: boolean
+  center_latitude: number | null
+  center_longitude: number | null
+  max_distance_km: number | null
   // Computed
   allowed_transitions: EventStatus[]
   participants_count: number
@@ -113,6 +118,10 @@ export interface EventCreatePayload {
   wantlist_close_at?: string | null
   money_enabled?: boolean
   max_money_per_user?: string | null
+  require_location?: boolean
+  center_latitude?: number | null
+  center_longitude?: number | null
+  max_distance_km?: number | null
 }
 
 export type EventPatchPayload = Partial<EventCreatePayload> & {
@@ -138,6 +147,7 @@ export interface EventListing {
   copy_owner_username: string
   copy_condition: string
   copy_language: string
+  owner_too_far?: boolean
   active: boolean
   created: string
 }

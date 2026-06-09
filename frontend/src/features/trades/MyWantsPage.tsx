@@ -438,7 +438,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
     !!editor && !!myListings && myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
 
   function toggleCopy(l: EventListing) {
-    if (!editor || !myListings) return
+    if (!editor || !myListings || l.owner_too_far) return
     const key = listingTargetKey(l.id)
     const next = !isCopyWanted(l.id)
     editor.addTarget({
@@ -463,7 +463,8 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
           )}
           <ul className="flex flex-col gap-1">
             {others.map((l) => {
-              const wanted = canSelect && isCopyWanted(l.id)
+              const tooFar = !!l.owner_too_far
+              const wanted = canSelect && !tooFar && isCopyWanted(l.id)
               const meta = [l.copy_language, CONDITION_LABEL[l.copy_condition] || l.copy_condition]
                 .filter(Boolean)
                 .join(' · ')
@@ -471,23 +472,29 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                 <li
                   key={l.id}
                   className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
-                    wanted ? 'border-purple-300 bg-purple-50' : 'border-gray-200 bg-white'
+                    tooFar
+                      ? 'border-gray-100 bg-gray-50 opacity-50'
+                      : wanted
+                      ? 'border-purple-300 bg-purple-50'
+                      : 'border-gray-200 bg-white'
                   }`}
                 >
                   {canSelect && (
                     <input
                       type="checkbox"
                       checked={wanted}
+                      disabled={tooFar}
                       onChange={() => toggleCopy(l)}
-                      className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                      className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
                       aria-label={`Want copy ${l.listing_code}`}
                     />
                   )}
                   <button
                     type="button"
-                    onClick={() => setDetailCopyId(l.copy_id)}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:underline"
-                    title="View copy details"
+                    onClick={() => !tooFar && setDetailCopyId(l.copy_id)}
+                    disabled={tooFar}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:underline disabled:cursor-default disabled:no-underline"
+                    title={tooFar ? 'Owner is too far away' : 'View copy details'}
                   >
                     <span className="font-mono text-gray-500">{l.listing_code}</span>
                     <span className="text-gray-300">·</span>
@@ -497,6 +504,11 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                         <span className="text-gray-300">·</span>
                         <span className="truncate text-gray-400">{meta}</span>
                       </>
+                    )}
+                    {tooFar && (
+                      <span className="ml-auto shrink-0 rounded bg-orange-100 px-1 py-0.5 text-[10px] font-medium text-orange-600">
+                        too far
+                      </span>
                     )}
                   </button>
                 </li>
