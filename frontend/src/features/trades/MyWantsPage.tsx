@@ -1,11 +1,11 @@
-import { Fragment, useMemo, useState, useCallback } from 'react'
+import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing } from '../../api/events'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
-import { useMyRatings, ratingMap } from '../../api/ratings'
+import { useMyRatings, ratingMap, useSetRating, useDeleteRating } from '../../api/ratings'
 
 import {
   useOfferGroups,
@@ -213,7 +213,206 @@ interface GameBrowseProps {
   moneyEnabled: boolean
 }
 
-function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
+interface GameCardControlsProps {
+  slug: string
+  bggId: number
+  wanted: boolean
+  moneyEnabled: boolean
+  priceValue: string
+  onPriceChange: (value: string) => void
+  customWantGroups: WantGroup[]
+}
+
+function GameCardControls({
+  slug,
+  bggId,
+  wanted,
+  moneyEnabled,
+  priceValue,
+  onPriceChange,
+  customWantGroups,
+}: GameCardControlsProps) {
+  const qc = useQueryClient()
+  const { data: ratings = [] } = useMyRatings()
+  const setRating = useSetRating()
+  const delRating = useDeleteRating()
+  const rating = ratings.find((r) => r.board_game === bggId)
+
+  const [ratingInput, setRatingInput] = useState<string>(rating ? String(Number(rating.value)) : '')
+  const [groupSel, setGroupSel] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [groupMsg, setGroupMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRatingInput(rating ? String(Number(rating.value)) : '')
+  }, [rating])
+
+  function commitRating() {
+    const raw = ratingInput.trim()
+    if (raw === '') {
+      if (rating) delRating.mutate(rating.id)
+      return
+    }
+    const v = Number(raw)
+    if (!Number.isNaN(v) && v >= 1 && v <= 10) setRating.mutate({ board_game: bggId, value: v })
+  }
+
+  async function addToExisting(groupId: number) {
+    setGroupMsg(null)
+    const group = customWantGroups.find((g) => g.id === groupId)
+    if (!group) return
+    if (group.items.some((i) => i.target_type === 'BOARD_GAME' && i.board_game === bggId)) {
+      setGroupMsg('Already in that group.')
+      return
+    }
+    const items: WantGroupItemPayload[] = [
+      ...group.items.map((i) => ({
+        target_type: i.target_type,
+        ...(i.target_type === 'BOARD_GAME'
+          ? { board_game: i.board_game! }
+          : { event_listing: i.event_listing! }),
+        money_amount: i.money_amount != null ? Number(i.money_amount) : null,
+      })),
+      { target_type: 'BOARD_GAME', board_game: bggId, money_amount: null },
+    ]
+    try {
+      await patchWantGroupRaw(slug, group.id, { items })
+      invalidateTrades(qc, slug)
+      setGroupMsg('Added.')
+    } catch {
+      setGroupMsg('Could not add.')
+    }
+  }
+
+  async function createAndAdd() {
+    const name = newName.trim()
+    if (!name) return
+    setGroupMsg(null)
+    try {
+      await createWantGroupRaw(slug, {
+        name,
+        min_receive: 1,
+        items: [{ target_type: 'BOARD_GAME', board_game: bggId, money_amount: null }],
+      })
+      invalidateTrades(qc, slug)
+      setShowNew(false)
+      setNewName('')
+      setGroupMsg('Group created.')
+    } catch {
+      setGroupMsg('Could not create group.')
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-b border-gray-100 px-3 py-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500">My rating</span>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          step={0.5}
+          value={ratingInput}
+          onChange={(e) => setRatingInput(e.target.value)}
+          onBlur={commitRating}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          placeholder="—"
+          className="w-16 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+        />
+        {rating && (
+          <button
+            type="button"
+            onClick={() => {
+              setRatingInput('')
+              delRating.mutate(rating.id)
+            }}
+            className="text-gray-300 hover:text-red-500"
+            aria-label="Clear rating"
+          >
+            ×
+          </button>
+        )}
+        {(setRating.isSuccess || delRating.isSuccess) && <span className="text-green-600">✓</span>}
+      </div>
+
+      {moneyEnabled && (
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">Pay up to $</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={priceValue}
+            disabled={!wanted}
+            onChange={(e) => onPriceChange(e.target.value)}
+            placeholder={wanted ? '0' : 'want it first'}
+            title={wanted ? "Most money you'll pay to receive this game" : 'Select a copy / want this game to set a price'}
+            className="w-24 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-gray-500">Add to group</span>
+        <select
+          value={groupSel}
+          onChange={(e) => {
+            const val = e.target.value
+            setGroupSel('')
+            if (val === '__new__') {
+              setShowNew(true)
+            } else if (val) {
+              addToExisting(Number(val))
+            }
+          }}
+          className="rounded border border-gray-300 px-1.5 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-400"
+        >
+          <option value="">Choose…</option>
+          {customWantGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+          <option value="__new__">+ New group…</option>
+        </select>
+        {groupMsg && <span className="text-gray-400">{groupMsg}</span>}
+      </div>
+
+      {showNew && (
+        <div className="flex items-center gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="New group name"
+            className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+          />
+          <button
+            type="button"
+            onClick={createAndAdd}
+            className="rounded bg-purple-600 px-2 py-0.5 font-medium text-white hover:bg-purple-500"
+          >
+            Create
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowNew(false)
+              setNewName('')
+            }}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled }: GameBrowseProps) {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
@@ -367,6 +566,23 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
                 </div>
                 {open && (
                   <div className="border-t border-gray-100 bg-gray-50/60">
+                    {(() => {
+                      const group = groupByGame.get(g.bgg_id)
+                      const wantedForControls = group
+                        ? myListings.some((l) => groupIsOn(editor, l.id, group))
+                        : false
+                      return (
+                        <GameCardControls
+                          slug={slug}
+                          bggId={g.bgg_id}
+                          wanted={wantedForControls}
+                          moneyEnabled={moneyEnabled}
+                          priceValue={editor.priceForGame(g.bgg_id)}
+                          onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
+                          customWantGroups={customWantGroups}
+                        />
+                      )
+                    })()}
                     <GameCopies
                       slug={slug}
                       bggId={g.bgg_id}
