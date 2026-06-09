@@ -65,7 +65,10 @@ function BggImportButton({
         type="button"
         onClick={() => {
           setMsg(null)
-          start.mutateAsync({ kind }).then((j) => setJobId(j.id))
+          start
+            .mutateAsync({ kind })
+            .then((j) => setJobId(j.id))
+            .catch(() => setMsg('Could not start the import. Try again.'))
         }}
         disabled={running || start.isPending}
         className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
