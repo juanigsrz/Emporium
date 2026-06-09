@@ -108,6 +108,10 @@ class Copy(models.Model):
     # Media (URL list only; no binary upload in v1)
     photo_urls = models.JSONField(default=list)
 
+    # Import provenance
+    is_pending = models.BooleanField(default=False)
+    import_source = models.CharField(max_length=40, blank=True, default="")
+
     # Lifecycle
     status = models.CharField(
         max_length=16,
@@ -137,6 +141,9 @@ class Copy(models.Model):
                     f"{MAX_CODE_RETRIES} attempts."
                 )
         super().save(*args, **kwargs)
+
+    def recompute_pending(self):
+        self.is_pending = not (self.language and self.condition)
 
     def __str__(self):
         return f"{self.listing_code} — {self.board_game_id} ({self.owner})"
