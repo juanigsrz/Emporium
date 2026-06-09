@@ -10,6 +10,9 @@ export interface Profile {
   avatar_url: string
   ratings_count?: number
   average_score?: number | null
+  latitude: number | null
+  longitude: number | null
+  max_trade_distance_km: number | null
 }
 
 export interface PatchProfilePayload {
@@ -19,6 +22,7 @@ export interface PatchProfilePayload {
   location?: string
   region?: string
   avatar_url?: string
+  max_trade_distance_km?: number | null
 }
 
 export async function fetchMyProfile(): Promise<Profile> {
