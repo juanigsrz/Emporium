@@ -14,10 +14,12 @@ Endpoints:
 from django.contrib.auth import get_user_model
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, status
+from rest_framework.response import Response
 
-from .models import Profile, TradeRating, UserBlock, Wishlist
+from .models import GameRating, Profile, TradeRating, UserBlock, Wishlist
 from .serializers import (
+    GameRatingSerializer,
     ProfileSerializer,
     TradeRatingSerializer,
     UserBlockSerializer,
@@ -25,6 +27,41 @@ from .serializers import (
 )
 
 User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# GameRating endpoints
+# ---------------------------------------------------------------------------
+
+class GameRatingListCreateView(generics.ListCreateAPIView):
+    """GET /api/game-ratings/ — list own ratings. POST — upsert a rating."""
+
+    serializer_class = GameRatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return GameRating.objects.filter(user=self.request.user).select_related("board_game")
+
+    def create(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        obj, _ = GameRating.objects.update_or_create(
+            user=request.user,
+            board_game=ser.validated_data["board_game"],
+            defaults={"value": ser.validated_data["value"]},
+        )
+        out = self.get_serializer(obj)
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+
+class GameRatingDestroyView(generics.DestroyAPIView):
+    """DELETE /api/game-ratings/{id}/ — delete own rating."""
+
+    serializer_class = GameRatingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return GameRating.objects.filter(user=self.request.user)
 
 
 # ---------------------------------------------------------------------------

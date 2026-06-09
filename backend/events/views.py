@@ -175,6 +175,7 @@ class TradeEventViewSet(
     @action(detail=True, methods=["post"], url_path="join")
     def join(self, request, slug=None):
         event = self.get_object()
+        self._enforce_location_gate(event, request.user)
         participation, created = EventParticipation.objects.get_or_create(
             event=event,
             user=request.user,
@@ -196,6 +197,24 @@ class TradeEventViewSet(
             ser.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _enforce_location_gate(event, user):
+        from accounts.geo import haversine_km
+        if not event.require_location:
+            return
+        profile = getattr(user, "profile", None)
+        lat = getattr(profile, "latitude", None)
+        lng = getattr(profile, "longitude", None)
+        if lat is None or lng is None:
+            raise ValidationError({"location": "Set your location on your profile to join this event."})
+        if (event.center_latitude is not None and event.center_longitude is not None
+                and event.max_distance_km is not None):
+            dist = haversine_km(lat, lng, event.center_latitude, event.center_longitude)
+            if dist > event.max_distance_km:
+                raise ValidationError(
+                    {"location": f"You are {dist:.0f} km from the event area (limit {event.max_distance_km} km)."}
+                )
 
     @staticmethod
     def _clean_max_spend(value, event):
@@ -286,6 +305,12 @@ class TradeEventViewSet(
         if copy.owner != request.user:
             raise PermissionDenied("You can only add your own copies to an event.")
 
+        if copy.is_pending:
+            raise ValidationError(
+                {"copy": "This copy is incomplete (missing language and/or condition). "
+                         "Complete its details before adding it to an event."}
+            )
+
         # Reject duplicate
         if EventListing.objects.filter(event=event, copy=copy).exists():
             raise ValidationError(
@@ -338,10 +363,24 @@ class TradeEventViewSet(
         if search:
             qs = qs.filter(name__icontains=search)
 
+        if request.query_params.get("wishlisted") in ("true", "1"):
+            from accounts.models import Wishlist
+            ids = Wishlist.objects.filter(user=request.user).values_list("board_game_bgg_id", flat=True)
+            qs = qs.filter(bgg_id__in=list(ids))
+
+        min_rating = request.query_params.get("min_rating")
+        if min_rating:
+            qs = qs.filter(average__gte=float(min_rating))
+
+        is_expansion = request.query_params.get("is_expansion")
+        if is_expansion in ("true", "false"):
+            qs = qs.filter(is_expansion=(is_expansion == "true"))
+
         ordering = request.query_params.get("ordering", "-copies_count")
         order_map = {
             "name": ["name"],
             "rank": ["rank", "name"],
+            "-average": ["-average", "name"],
             "-copies_count": ["-copies_count", "name"],
             "copies_count": ["copies_count", "name"],
         }

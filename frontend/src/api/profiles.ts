@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { apiClient } from './client'
 
 export interface Profile {
@@ -10,6 +11,9 @@ export interface Profile {
   avatar_url: string
   ratings_count?: number
   average_score?: number | null
+  latitude: number | null
+  longitude: number | null
+  max_trade_distance_km: number | null
 }
 
 export interface PatchProfilePayload {
@@ -19,11 +23,20 @@ export interface PatchProfilePayload {
   location?: string
   region?: string
   avatar_url?: string
+  max_trade_distance_km?: number | null
 }
 
 export async function fetchMyProfile(): Promise<Profile> {
   const { data } = await apiClient.get<Profile>('/profiles/me/')
   return data
+}
+
+export function useMyProfile() {
+  return useQuery({
+    queryKey: ['profile', 'me'],
+    queryFn: fetchMyProfile,
+    staleTime: 60_000,
+  })
 }
 
 export async function patchMyProfile(payload: PatchProfilePayload): Promise<Profile> {

@@ -53,13 +53,22 @@ class CopySerializer(serializers.ModelSerializer):
             "pickup_available",
             "photo_urls",
             "status",
+            "is_pending",
+            "import_source",
             "created",
             "updated",
         ]
-        read_only_fields = ["id", "listing_code", "owner", "created", "updated"]
+        read_only_fields = ["id", "listing_code", "owner", "is_pending", "import_source", "created", "updated"]
 
     def get_owner_username(self, obj):
         return obj.owner.username
 
     def get_board_game_name(self, obj):
         return obj.board_game.name
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        if instance.is_pending:
+            instance.recompute_pending()
+            instance.save(update_fields=["is_pending", "updated"])
+        return instance
