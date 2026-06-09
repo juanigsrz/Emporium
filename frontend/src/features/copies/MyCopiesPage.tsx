@@ -6,6 +6,7 @@ import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy } from '../..
 import type { Copy, CopyCondition } from '../../api/copies'
 import { useGamesList } from '../../api/games'
 import { CONDITION_LABELS } from './constants'
+import { useMyRatings, useSetRating, ratingMap } from '../../api/ratings'
 
 // ---- Constants ----
 
@@ -356,9 +357,42 @@ function WithdrawDialog({ copy, onConfirm, onCancel, isPending }: WithdrawDialog
   )
 }
 
+// ---- Inline rating widget ----
+
+function RatingInput({ bggId, currentRating }: { bggId: number; currentRating?: number }) {
+  const setRating = useSetRating()
+  const [draft, setDraft] = useState<string>(currentRating != null ? String(currentRating) : '')
+
+  function handleBlur() {
+    const v = parseFloat(draft)
+    if (!isNaN(v) && v >= 1 && v <= 10) {
+      setRating.mutate({ board_game: bggId, value: v })
+    }
+  }
+
+  return (
+    <label className="flex items-center gap-1 text-xs text-gray-400">
+      My rating:
+      <input
+        type="number"
+        min={1}
+        max={10}
+        step={0.5}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleBlur}
+        placeholder="—"
+        className="w-14 rounded border border-gray-200 px-1.5 py-0.5 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+        aria-label="My rating (1–10)"
+      />
+      {setRating.isPending && <span className="text-indigo-400">…</span>}
+    </label>
+  )
+}
+
 // ---- Copy management card ----
 
-function MyCopyCard({ copy }: { copy: Copy }) {
+function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
   const [editOpen, setEditOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const withdrawCopy = useWithdrawCopy()
@@ -425,23 +459,28 @@ function MyCopyCard({ copy }: { copy: Copy }) {
           <p className="text-xs text-gray-500 line-clamp-2 mb-2">{copy.owner_notes}</p>
         )}
 
-        {/* Actions */}
-        {!isWithdrawn && (
-          <div className="flex gap-2 mt-3">
-            <button
-              onClick={() => setEditOpen(true)}
-              className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => setWithdrawOpen(true)}
-              className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-            >
-              Withdraw
-            </button>
+        {/* Actions + rating */}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {!isWithdrawn && (
+            <>
+              <button
+                onClick={() => setEditOpen(true)}
+                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setWithdrawOpen(true)}
+                className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Withdraw
+              </button>
+            </>
+          )}
+          <div className="ml-auto">
+            <RatingInput bggId={copy.board_game} currentRating={rmap.get(copy.board_game)} />
           </div>
-        )}
+        </div>
       </div>
     </>
   )
@@ -608,6 +647,8 @@ export default function MyCopiesPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const { data, isLoading, isError } = useMyCopies()
+  const { data: ratingsData = [] } = useMyRatings()
+  const rmap = ratingMap(ratingsData)
 
   const copies = (data?.results ?? []) as Copy[]
   const filtered = statusFilter
@@ -701,7 +742,7 @@ export default function MyCopiesPage() {
       ) : (
         <div className="rounded-lg border border-gray-200 overflow-hidden">
           {filtered.map((copy) => (
-            <MyCopyCard key={copy.id} copy={copy} />
+            <MyCopyCard key={copy.id} copy={copy} rmap={rmap} />
           ))}
         </div>
       )}

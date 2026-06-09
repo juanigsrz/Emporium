@@ -7,6 +7,7 @@ import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
 import { useMyProfile } from '../../api/profiles'
 import { useStartImport, useImportJob } from '../../api/bgg'
+import { useMyRatings, ratingMap } from '../../api/ratings'
 
 import {
   useOfferGroups,
@@ -936,9 +937,10 @@ interface GridModeProps {
   myListings: EventListing[]
   editor: Editor
   username?: string
+  ratings: Map<number, number>
 }
 
-function GridMode({ slug, myListings, editor, username }: GridModeProps) {
+function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -959,6 +961,26 @@ function GridMode({ slug, myListings, editor, username }: GridModeProps) {
   const colCount = myListings.length + 1
 
   return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded-md border px-2 py-1 text-xs"
+          onClick={() => {
+            for (const g of groupTargetsByGame(editor.targets)) {
+              const wantRating = ratings.get(g.gameId)
+              if (wantRating == null) continue
+              for (const l of myListings) {
+                const ownRating = ratings.get(l.board_game_id)
+                if (ownRating == null) continue
+                if (ownRating <= wantRating && !groupIsOn(editor, l.id, g)) toggleGroup(editor, l.id, g)
+              }
+            }
+          }}
+        >
+          Auto-tick by rating (give &le;-rated for &ge;-rated)
+        </button>
+      </div>
     <div className="overflow-auto rounded-xl border border-gray-200 bg-white" style={{ maxHeight: '70vh' }}>
       <table className="border-separate border-spacing-0 text-sm">
         <thead>
@@ -1067,6 +1089,7 @@ function GridMode({ slug, myListings, editor, username }: GridModeProps) {
         </tbody>
       </table>
     </div>
+    </div>
   )
 }
 
@@ -1152,9 +1175,33 @@ export default function MyWantsPage() {
     [editor.targets]
   )
 
+  const { data: ratingsData = [] } = useMyRatings()
+  const rmap = useMemo(() => ratingMap(ratingsData), [ratingsData])
+
   const [view, setView] = useState<ViewMode>('visual')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Ratings import
+  const { data: profile } = useMyProfile()
+  const startImport = useStartImport()
+  const [ratingsJobId, setRatingsJobId] = useState<number | null>(null)
+  const [ratingsMsg, setRatingsMsg] = useState<string | null>(null)
+  const ratingsJob = useImportJob(ratingsJobId)
+  const ratingsImporting = ['PENDING', 'RUNNING'].includes(ratingsJob.data?.status ?? '')
+  useEffect(() => {
+    if (ratingsJob.data?.status === 'DONE') {
+      const matched = ratingsJob.data.summary?.matched ?? 0
+      const skipped = ratingsJob.data.summary?.skipped ?? 0
+      setRatingsMsg(`Ratings imported! ${matched} matched, ${skipped} skipped.`)
+      setRatingsJobId(null)
+      qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })
+    } else if (ratingsJob.data?.status === 'FAILED') {
+      setRatingsMsg('Import failed. Check your BGG username.')
+      setRatingsJobId(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ratingsJob.data?.status])
 
   const handleSave = useCallback(async () => {
     if (!slug) return
@@ -1272,6 +1319,31 @@ export default function MyWantsPage() {
             </p>
           </div>
 
+          {/* Import ratings from BGG */}
+          <div className="flex flex-wrap items-center gap-2">
+            {profile?.bgg_username ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRatingsMsg(null)
+                  startImport.mutateAsync({ kind: 'RATINGS' }).then((j) => setRatingsJobId(j.id))
+                }}
+                disabled={ratingsImporting || startImport.isPending}
+                className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50"
+              >
+                {ratingsImporting ? 'Importing ratings…' : 'Import ratings from BGG'}
+              </button>
+            ) : (
+              <span className="text-xs text-gray-400">
+                <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
+                {' '}to import ratings
+              </span>
+            )}
+            {ratingsMsg && !ratingsImporting && (
+              <span className="text-xs text-green-600">{ratingsMsg}</span>
+            )}
+          </div>
+
           <GameBrowse
             slug={slug!}
             editor={editor}
@@ -1282,7 +1354,7 @@ export default function MyWantsPage() {
           {view === 'visual' ? (
             <VisualMode myListings={myListings} editor={editor} />
           ) : (
-            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} />
+            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} />
           )}
         </>
       )}
