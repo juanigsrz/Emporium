@@ -114,8 +114,10 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | pickup_available | bool default False | |
 | photo_urls | JSON default list | v1: list of URLs, no binary upload |
 | status | choice | ACTIVE, RESERVED, TRADED, WITHDRAWN |
+| is_pending | bool default False | True when language or condition is blank; recomputed on PATCH |
+| import_source | char(40) blank | tag for import origin, e.g. `"bgg"`; empty for manual copies |
 
-`listing_code` generated server-side on create.
+`listing_code` generated server-side on create. A copy with `is_pending=True` cannot be entered into an event.
 
 ---
 

@@ -60,7 +60,7 @@ Game list item:
 | POST | `/api/copies/` | create with `board_game=<bgg_id>` (owner = request.user). Returns full copy + `listing_code`. |
 | GET/PATCH/DELETE | `/api/copies/{id}/` | owner-only write. |
 
-Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`.
+Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`. `is_pending` (bool, read-only): `true` when the copy is missing `language` and/or `condition` (set automatically on PATCH when pending; cleared once both fields are present). `import_source` (str, read-only): tag identifying the import origin (e.g. `"bgg"`; empty for manually created copies). A pending copy cannot be added to an event — `POST /listings/` returns **400** with `{"copy": "..."}` if `is_pending` is true.
 
 ## Events
 | method | path | notes |

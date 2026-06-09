@@ -305,6 +305,12 @@ class TradeEventViewSet(
         if copy.owner != request.user:
             raise PermissionDenied("You can only add your own copies to an event.")
 
+        if copy.is_pending:
+            raise ValidationError(
+                {"copy": "This copy is incomplete (missing language and/or condition). "
+                         "Complete its details before adding it to an event."}
+            )
+
         # Reject duplicate
         if EventListing.objects.filter(event=event, copy=copy).exists():
             raise ValidationError(
