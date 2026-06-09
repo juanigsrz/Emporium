@@ -1495,6 +1495,12 @@ export default function MyWantsPage() {
         </div>
       </div>
 
+      {event.inputs_locked && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This event is locked for matching — want lists can no longer be edited.
+        </div>
+      )}
+
       {myListings.length === 0 ? (
         <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
           You have no items in this event yet.{' '}
@@ -1544,7 +1550,7 @@ export default function MyWantsPage() {
       )}
 
       {/* Sticky save bar */}
-      {editor.dirtyCount > 0 && (
+      {editor.dirtyCount > 0 && !event.inputs_locked && (
         <div className="sticky bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-gray-300 bg-white px-5 py-2.5 shadow-lg">
           <span className="text-sm text-gray-600">
             {editor.dirtyCount} unsaved change{editor.dirtyCount !== 1 ? 's' : ''}
