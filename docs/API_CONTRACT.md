@@ -68,7 +68,7 @@ Copy object shape (key display fields): `owner` = user **id** (int), `owner_user
 | GET/PATCH/DELETE | `/api/events/{slug}/` | organizer-only write; serializer includes `allowed_transitions` |
 | POST | `/api/events/{slug}/transition/` | `{to: "WANTLIST_OPEN"}` organizer-only, validated |
 | GET | `/api/events/{slug}/participants/` | list participations |
-| POST | `/api/events/{slug}/join/` | join (creates EventParticipation) |
+| POST | `/api/events/{slug}/join/` | join (creates EventParticipation). **400** if `require_location` is set and user has no location on their profile, or if they are outside `max_distance_km` from the event centre. |
 | DELETE | `/api/events/{slug}/leave/` | leave |
 | GET/POST | `/api/events/{slug}/listings/` | EventListings; POST `{copy}` adds own copy. `?user=&board_game=` |
 | DELETE | `/api/events/{slug}/listings/{id}/` | remove own listing |
@@ -78,7 +78,7 @@ Copy object shape (key display fields): `owner` = user **id** (int), `owner_user
 EventGame item: `{bgg_id, name, year_published, rank, image_url, copies_count}` where `copies_count` = active EventListings of that game **in this event**.
 
 Shapes (pinned from BE):
-- **TradeEvent**: `organizer` = user **id** (int), `organizer_username` = string (use for display/links). Date fields are only `submissions_open_at`, `submissions_close_at`, `wantlist_close_at` (no `wantlist_open_at`/`matching_at`/`results_at`). Plus `allowed_transitions: string[]`, `participants_count`, `is_organizer`, `is_participant`. `matching_mode`: `"ONETOONE"` (default, online ftm solver) | `"XTOY"` (local solver, upload) — organizer-writable, frozen once status reaches `MATCHING`. `money_enabled: bool` + `max_money_per_user` (decimal string or `null` = no cap) — organizer-writable money config.
+- **TradeEvent**: `organizer` = user **id** (int), `organizer_username` = string (use for display/links). Date fields are only `submissions_open_at`, `submissions_close_at`, `wantlist_close_at` (no `wantlist_open_at`/`matching_at`/`results_at`). Plus `allowed_transitions: string[]`, `participants_count`, `is_organizer`, `is_participant`. `matching_mode`: `"ONETOONE"` (default, online ftm solver) | `"XTOY"` (local solver, upload) — organizer-writable, frozen once status reaches `MATCHING`. `money_enabled: bool` + `max_money_per_user` (decimal string or `null` = no cap) — organizer-writable money config. Location gate fields (organizer-writable): `require_location: bool` (default `false`), `center_latitude: float|null`, `center_longitude: float|null`, `max_distance_km: float|null`. When `require_location` is `true`, joining users must have a profile location set; if `center_latitude/longitude` and `max_distance_km` are also set, the user must be within that radius of the event centre.
 - **EventListing**: `{id, listing_code, board_game_name, board_game_id, copy_id, copy_owner_id, copy_owner_username, copy_condition, copy_language, active, created}`. (Write: POST `{copy: <copy_id>}`.) `copy_condition`/`copy_language` are lightweight distinguishers; full copy detail is on `GET /copies/{id}/`.
 - **EventParticipant**: `{user: <id>, username, region, shipping_pref, max_spend, created}`. `max_spend` (decimal string) is the user's money budget; set it by POSTing `{max_spend}` to `/join/` (ignored unless `money_enabled`; rejected if it exceeds `max_money_per_user`).
 
