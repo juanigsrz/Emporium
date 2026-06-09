@@ -9,6 +9,8 @@ from django.urls import path
 from .views import (
     BlockDestroyView,
     BlockListCreateView,
+    GameRatingDestroyView,
+    GameRatingListCreateView,
     ProfileDetailView,
     ProfileMeView,
     RatingListCreateView,
@@ -31,4 +33,8 @@ urlpatterns = [
 
     # Ratings
     path("ratings/", RatingListCreateView.as_view(), name="rating-list-create"),
+
+    # Game ratings (F2)
+    path("game-ratings/", GameRatingListCreateView.as_view(), name="game-rating-list-create"),
+    path("game-ratings/<int:pk>/", GameRatingDestroyView.as_view(), name="game-rating-destroy"),
 ]

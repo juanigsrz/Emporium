@@ -36,6 +36,8 @@ path/shape without updating this file.
 | GET/POST/DELETE | `/api/blocks/` | list/create/delete `UserBlock` (mine). POST body `{"blocked": "<username>"}`; item shape `{id, blocker, blocked, created}` |
 | GET/POST/DELETE | `/api/wishlists/` | general wishlist (mine), body/filter `board_game_bgg_id` (int; becomes FK `board_game` in F2), `note` |
 | GET/POST | `/api/ratings/` | trade ratings; body/filter `event_id` (int; becomes FK `event` in F4), `ratee` (username), `score`, `comment` |
+| GET/POST | `/api/game-ratings/` | personal game ratings (mine only). POST = upsert on (user, board_game). Body: `{board_game: <bgg_id>, value: "8.5"}` (1–10, one decimal). Returns `{id, board_game, board_game_name, value, created, updated}`. |
+| DELETE | `/api/game-ratings/{id}/` | delete own game rating |
 
 ## Catalog (games)
 | method | path | notes |

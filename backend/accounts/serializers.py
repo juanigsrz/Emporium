@@ -8,9 +8,29 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .geo import geocode
-from .models import Profile, TradeRating, UserBlock, Wishlist
+from catalog.models import BoardGame
+from .models import GameRating, Profile, TradeRating, UserBlock, Wishlist
 
 User = get_user_model()
+
+
+# ---------------------------------------------------------------------------
+# GameRating
+# ---------------------------------------------------------------------------
+
+class GameRatingSerializer(serializers.ModelSerializer):
+    board_game = serializers.PrimaryKeyRelatedField(queryset=BoardGame.objects.all())
+    board_game_name = serializers.CharField(source="board_game.name", read_only=True)
+
+    class Meta:
+        model = GameRating
+        fields = ["id", "board_game", "board_game_name", "value", "created", "updated"]
+        read_only_fields = ["id", "board_game_name", "created", "updated"]
+
+    def validate_value(self, v):
+        if v < 1 or v > 10:
+            raise serializers.ValidationError("Rating must be between 1 and 10.")
+        return v
 
 
 # ---------------------------------------------------------------------------
