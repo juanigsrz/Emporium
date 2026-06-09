@@ -54,9 +54,10 @@ interface OfferGroupsPanelProps {
   slug: string
   myListings: EventListing[]
   moneyEnabled: boolean
+  locked?: boolean
 }
 
-function OfferGroupsPanel({ slug, myListings, moneyEnabled }: OfferGroupsPanelProps) {
+function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroupsPanelProps) {
   const { data: groups = [], isLoading } = useOfferGroups(slug)
   const createGroup = useCreateOfferGroup()
   const patchGroup = usePatchOfferGroup()
@@ -122,6 +123,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled }: OfferGroupsPanelPr
               }
             }}
             isDeleting={deleteGroup.isPending}
+            locked={locked}
           />
         )
       )}
@@ -145,7 +147,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled }: OfferGroupsPanelPr
         />
       )}
 
-      {!showForm && (
+      {!showForm && !locked && (
         <button
           onClick={() => setShowForm(true)}
           className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
@@ -162,9 +164,10 @@ interface OfferGroupCardProps {
   onEdit: () => void
   onDelete: () => void
   isDeleting: boolean
+  locked?: boolean
 }
 
-function OfferGroupCard({ group, onEdit, onDelete, isDeleting }: OfferGroupCardProps) {
+function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGroupCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3">
@@ -175,38 +178,40 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting }: OfferGroupCardP
             Give up to {group.max_give}
           </span>
         </div>
-        <div className="flex gap-1 shrink-0">
-          <button
-            onClick={onEdit}
-            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
-          >
-            Edit
-          </button>
-          {confirmDelete ? (
-            <span className="flex items-center gap-1">
-              <button
-                onClick={onDelete}
-                disabled={isDeleting}
-                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
-              >
-                {isDeleting ? 'Deleting…' : 'Confirm'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
-              >
-                Cancel
-              </button>
-            </span>
-          ) : (
+        {!locked && (
+          <div className="flex gap-1 shrink-0">
             <button
-              onClick={() => setConfirmDelete(true)}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              onClick={onEdit}
+              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
-              Delete
+              Edit
             </button>
-          )}
-        </div>
+            {confirmDelete ? (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+                >
+                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {group.items.length === 0 ? (
         <p className="text-xs text-gray-400 italic">No listings in this group.</p>
@@ -406,6 +411,7 @@ interface WantGroupsPanelProps {
   slug: string
   myListings: EventListing[]
   moneyEnabled: boolean
+  locked?: boolean
 }
 
 // A "draft item" used in the local editor before persisting
@@ -425,7 +431,7 @@ function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
   return `listing-${item.event_listing}`
 }
 
-function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProps) {
+function WantGroupsPanel({ slug, myListings, moneyEnabled, locked }: WantGroupsPanelProps) {
   const { data: groups = [], isLoading } = useWantGroups(slug)
   const createGroup = useCreateWantGroup()
   const patchGroup = usePatchWantGroup()
@@ -489,6 +495,7 @@ function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProp
                 setError(extractErrorMsg(e))
               }
             }}
+            locked={locked}
           />
         )
       )}
@@ -513,7 +520,7 @@ function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProp
         />
       )}
 
-      {!showForm && editingId === null && (
+      {!showForm && editingId === null && !locked && (
         <button
           onClick={() => setShowForm(true)}
           className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors"
@@ -531,9 +538,10 @@ interface WantGroupCardProps {
   onDelete: () => void
   isDeleting: boolean
   onToggleDuplicateProtection: (value: boolean) => void
+  locked?: boolean
 }
 
-function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateProtection }: WantGroupCardProps) {
+function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateProtection, locked }: WantGroupCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -545,38 +553,40 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
             Receive at least {group.min_receive}
           </span>
         </div>
-        <div className="flex gap-1 shrink-0">
-          <button
-            onClick={onEdit}
-            className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
-          >
-            Edit
-          </button>
-          {confirmDelete ? (
-            <span className="flex items-center gap-1">
-              <button
-                onClick={onDelete}
-                disabled={isDeleting}
-                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
-              >
-                {isDeleting ? 'Deleting…' : 'Confirm'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
-              >
-                Cancel
-              </button>
-            </span>
-          ) : (
+        {!locked && (
+          <div className="flex gap-1 shrink-0">
             <button
-              onClick={() => setConfirmDelete(true)}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              onClick={onEdit}
+              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
-              Delete
+              Edit
             </button>
-          )}
-        </div>
+            {confirmDelete ? (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+                >
+                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-xs text-gray-600 mb-2">
@@ -584,7 +594,8 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
           type="checkbox"
           checked={group.duplicate_protection}
           onChange={(e) => onToggleDuplicateProtection(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+          disabled={locked}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
         Duplication-protected (never award more than one copy of the same game)
       </label>
@@ -942,9 +953,10 @@ interface WishesPanelProps {
   slug: string
   offerGroups: OfferGroup[]
   wantGroups: WantGroup[]
+  locked?: boolean
 }
 
-function WishesPanel({ slug, offerGroups, wantGroups }: WishesPanelProps) {
+function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps) {
   const { data: wishes = [], isLoading } = useWishes(slug)
   const createWish = useCreateWish()
   const toggleWish = useToggleWish()
@@ -1024,6 +1036,7 @@ function WishesPanel({ slug, offerGroups, wantGroups }: WishesPanelProps) {
           }}
           isToggling={toggleWish.isPending}
           isDeleting={deleteWish.isPending}
+          locked={locked}
         />
       ))}
 
@@ -1108,14 +1121,14 @@ function WishesPanel({ slug, offerGroups, wantGroups }: WishesPanelProps) {
             </button>
           </div>
         </div>
-      ) : (
+      ) : !locked ? (
         <button
           onClick={() => setShowForm(true)}
           className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-green-300 hover:text-green-500 transition-colors"
         >
           + New wish
         </button>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -1126,9 +1139,10 @@ interface WishCardProps {
   onDelete: () => void
   isToggling: boolean
   isDeleting: boolean
+  locked?: boolean
 }
 
-function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting }: WishCardProps) {
+function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting, locked }: WishCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -1156,44 +1170,46 @@ function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting }: WishCard
           </p>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={onToggle}
-            disabled={isToggling}
-            className={`rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-              wish.active
-                ? 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
-                : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'
-            }`}
-            title={wish.active ? 'Deactivate wish' : 'Activate wish'}
-          >
-            {wish.active ? 'Pause' : 'Activate'}
-          </button>
-          {confirmDelete ? (
-            <span className="flex items-center gap-1">
-              <button
-                onClick={onDelete}
-                disabled={isDeleting}
-                className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
-              >
-                {isDeleting ? 'Deleting…' : 'Confirm'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
-              >
-                Cancel
-              </button>
-            </span>
-          ) : (
+        {!locked && (
+          <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => setConfirmDelete(true)}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              onClick={onToggle}
+              disabled={isToggling}
+              className={`rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                wish.active
+                  ? 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'
+              }`}
+              title={wish.active ? 'Deactivate wish' : 'Activate wish'}
             >
-              Delete
+              {wish.active ? 'Pause' : 'Activate'}
             </button>
-          )}
-        </div>
+            {confirmDelete ? (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
+                >
+                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {!wish.active && (
@@ -1271,6 +1287,8 @@ export default function WantListBuilderPage() {
     { id: 'wishes', label: 'Wishes' },
   ]
 
+  const locked = event.inputs_locked
+
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
       {/* Back link */}
@@ -1312,6 +1330,12 @@ export default function WantListBuilderPage() {
           )}
         </div>
       </div>
+
+      {locked && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This event is locked for matching — want lists can no longer be edited.
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
@@ -1359,7 +1383,7 @@ export default function WantListBuilderPage() {
                 </Link>
               </div>
             )}
-            <OfferGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} />
+            <OfferGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} locked={locked} />
           </div>
         )}
 
@@ -1373,7 +1397,7 @@ export default function WantListBuilderPage() {
                 Games you'd like to receive
               </p>
             </div>
-            <WantGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} />
+            <WantGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} locked={locked} />
           </div>
         )}
 
@@ -1392,7 +1416,7 @@ export default function WantListBuilderPage() {
                 Create at least one offer group and one want group first.
               </div>
             )}
-            <WishesPanel slug={slug!} offerGroups={offerGroupsData} wantGroups={wantGroupsData} />
+            <WishesPanel slug={slug!} offerGroups={offerGroupsData} wantGroups={wantGroupsData} locked={locked} />
           </div>
         )}
       </div>

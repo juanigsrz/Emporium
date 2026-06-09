@@ -23,6 +23,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
     participants_count  = serializers.SerializerMethodField()
     is_organizer        = serializers.SerializerMethodField()
     is_participant      = serializers.SerializerMethodField()
+    inputs_locked       = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TradeEvent
@@ -52,6 +53,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "participants_count",
             "is_organizer",
             "is_participant",
+            "inputs_locked",
             "created",
             "updated",
         ]
@@ -65,6 +67,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "participants_count",
             "is_organizer",
             "is_participant",
+            "inputs_locked",
             "created",
             "updated",
         ]

@@ -290,6 +290,9 @@ class TradeEventViewSet(
         return Response(ser.data)
 
     def _listings_create(self, request, event):
+        if event.inputs_locked:
+            raise PermissionDenied("Listings are locked — this event has moved to matching.")
+
         copy_id = request.data.get("copy")
         if not copy_id:
             raise ValidationError({"copy": "This field is required."})
@@ -328,6 +331,10 @@ class TradeEventViewSet(
     )
     def listing_detail(self, request, slug=None, listing_id=None):
         event = self.get_object()
+
+        if event.inputs_locked:
+            raise PermissionDenied("Listings are locked — this event has moved to matching.")
+
         listing = get_object_or_404(EventListing, pk=listing_id, event=event)
 
         if listing.copy.owner != request.user:

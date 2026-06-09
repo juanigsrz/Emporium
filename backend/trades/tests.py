@@ -39,7 +39,7 @@ from rest_framework.test import APITestCase
 from catalog.models import BoardGame
 from catalog.tasks import import_boardgames_csv
 from copies.models import Copy
-from events.models import EventListing, TradeEvent
+from events.models import EventListing, TradeEvent, WANTLIST_LOCKED_STATUSES
 
 User = get_user_model()
 
@@ -910,3 +910,187 @@ class MoneyAndDupProtectionTests(TradeTestBase):
             "item_money": {str(self.el1a.id): "-3"},
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# Status-lock: wants + listings blocked once event is MATCHING or later
+# ---------------------------------------------------------------------------
+
+class StatusLockTests(TradeTestBase):
+    """Want-group / offer-group / wish / listing mutations 403 from MATCHING onward."""
+
+    LOCKED_STATUSES = sorted(WANTLIST_LOCKED_STATUSES)
+
+    def _set_status(self, s):
+        self.event.status = s
+        self.event.save(update_fields=["status"])
+
+    def _reset_status(self):
+        self.event.status = "WANTLIST_OPEN"
+        self.event.save(update_fields=["status"])
+
+    # ------------------------------------------------------------------
+    # Want-group create
+    # ------------------------------------------------------------------
+
+    def test_wantgroup_create_blocked_after_matching(self):
+        self._set_status("MATCHING")
+        resp = self.client.post(want_groups_url(self.slug), {
+            "name": "x", "min_receive": 1,
+            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+        }, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_wantgroup_create_allowed_in_wantlist_open(self):
+        resp = self.client.post(want_groups_url(self.slug), {
+            "name": "y", "min_receive": 1,
+            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_wantgroup_create_blocked_all_locked_statuses(self):
+        for s in self.LOCKED_STATUSES:
+            with self.subTest(status=s):
+                self._set_status(s)
+                resp = self.client.post(want_groups_url(self.slug), {
+                    "name": "z", "min_receive": 1,
+                    "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+                }, format="json")
+                self._reset_status()
+                self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, f"Expected 403 for status={s}")
+
+    # ------------------------------------------------------------------
+    # Offer-group create
+    # ------------------------------------------------------------------
+
+    def test_offergroup_create_blocked_after_matching(self):
+        self._set_status("MATCHING")
+        resp = self.client.post(offer_groups_url(self.slug), {
+            "name": "og", "max_give": 1,
+            "item_listing_ids": [self.el1a.id],
+        }, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ------------------------------------------------------------------
+    # Want-group patch / delete
+    # ------------------------------------------------------------------
+
+    def test_wantgroup_patch_blocked_after_matching(self):
+        # Create the group while open
+        wg_resp = self.client.post(want_groups_url(self.slug), {
+            "name": "Patch target", "min_receive": 1,
+            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id}],
+        }, format="json")
+        wg_id = wg_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.patch(want_group_url(self.slug, wg_id), {"name": "hacked"}, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_wantgroup_delete_blocked_after_matching(self):
+        wg_resp = self.client.post(want_groups_url(self.slug), {
+            "name": "Del target", "min_receive": 1, "items": [],
+        }, format="json")
+        wg_id = wg_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.delete(want_group_url(self.slug, wg_id))
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ------------------------------------------------------------------
+    # Offer-group patch / delete
+    # ------------------------------------------------------------------
+
+    def test_offergroup_patch_blocked_after_matching(self):
+        og_resp = self.client.post(offer_groups_url(self.slug), {
+            "name": "og patch", "max_give": 1,
+            "item_listing_ids": [self.el1a.id],
+        }, format="json")
+        og_id = og_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.patch(offer_group_url(self.slug, og_id), {"name": "hacked"}, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_offergroup_delete_blocked_after_matching(self):
+        og_resp = self.client.post(offer_groups_url(self.slug), {
+            "name": "og del", "max_give": 1,
+            "item_listing_ids": [],
+        }, format="json")
+        og_id = og_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.delete(offer_group_url(self.slug, og_id))
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ------------------------------------------------------------------
+    # Wish create / patch / delete
+    # ------------------------------------------------------------------
+
+    def _make_og_and_wg(self):
+        """Helper: create offer + want group while event is open."""
+        og = self.client.post(offer_groups_url(self.slug), {
+            "name": "og wish", "max_give": 1,
+            "item_listing_ids": [self.el1a.id],
+        }, format="json").data
+        wg = self.client.post(want_groups_url(self.slug), {
+            "name": "wg wish", "min_receive": 1,
+            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id}],
+        }, format="json").data
+        return og["id"], wg["id"]
+
+    def test_wish_create_blocked_after_matching(self):
+        og_id, wg_id = self._make_og_and_wg()
+        self._set_status("MATCHING")
+        resp = self.client.post(wishes_url(self.slug), {
+            "offer_group": og_id, "want_group": wg_id,
+        }, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_wish_patch_blocked_after_matching(self):
+        og_id, wg_id = self._make_og_and_wg()
+        wish_resp = self.client.post(wishes_url(self.slug), {
+            "offer_group": og_id, "want_group": wg_id,
+        }, format="json")
+        wish_id = wish_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.patch(wish_url(self.slug, wish_id), {"active": False}, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_wish_delete_blocked_after_matching(self):
+        og_id, wg_id = self._make_og_and_wg()
+        wish_resp = self.client.post(wishes_url(self.slug), {
+            "offer_group": og_id, "want_group": wg_id,
+        }, format="json")
+        wish_id = wish_resp.data["id"]
+
+        self._set_status("MATCHING")
+        resp = self.client.delete(wish_url(self.slug, wish_id))
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    # ------------------------------------------------------------------
+    # Listing create / delete (events/views.py)
+    # ------------------------------------------------------------------
+
+    def test_listing_create_blocked_after_matching(self):
+        # First remove el1a so we can add it again later
+        self._set_status("MATCHING")
+        resp = self.client.post(listings_url(self.slug), {"copy": self.copy1a.id}, format="json")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_listing_delete_blocked_after_matching(self):
+        self._set_status("MATCHING")
+        resp = self.client.delete(f"{listings_url(self.slug)}{self.el1a.id}/")
+        self._reset_status()
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)

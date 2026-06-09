@@ -60,6 +60,10 @@ class EventScopedMixin:
     def _get_event(self, slug):
         return get_object_or_404(TradeEvent, slug=slug)
 
+    def _assert_editable(self, event):
+        if event.inputs_locked:
+            raise PermissionDenied("Want lists are locked — this event has moved to matching.")
+
     def _serializer_context(self, request, event):
         return {"request": request, "event": event}
 
@@ -99,6 +103,7 @@ class OfferGroupListCreateView(EventScopedMixin, APIView):
 
     def post(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
         ser = OfferGroupSerializer(data=request.data, context=ctx)
         ser.is_valid(raise_exception=True)
@@ -143,6 +148,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
 
     def patch(self, request, slug, pk):
         event, group = self._get_group(slug, pk, request)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
         ser = OfferGroupSerializer(group, data=request.data, partial=True, context=ctx)
         ser.is_valid(raise_exception=True)
@@ -157,6 +163,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
 
     def delete(self, request, slug, pk):
         event, group = self._get_group(slug, pk, request)
+        self._assert_editable(event)
         group.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -186,6 +193,7 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
 
     def post(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
 
         # Validate event_listing items belong to this event before saving.
@@ -258,6 +266,7 @@ class WantGroupDetailView(EventScopedMixin, APIView):
 
     def patch(self, request, slug, pk):
         event, group = self._get_group(slug, pk, request)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
 
         # Validate event scoping of any listing references in the incoming items
@@ -275,6 +284,7 @@ class WantGroupDetailView(EventScopedMixin, APIView):
 
     def delete(self, request, slug, pk):
         event, group = self._get_group(slug, pk, request)
+        self._assert_editable(event)
         group.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -301,6 +311,7 @@ class TradeWishListCreateView(EventScopedMixin, APIView):
 
     def post(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
         ser = TradeWishSerializer(data=request.data, context=ctx)
         ser.is_valid(raise_exception=True)
@@ -344,6 +355,7 @@ class TradeWishDetailView(EventScopedMixin, APIView):
 
     def patch(self, request, slug, pk):
         event, wish = self._get_wish(slug, pk, request)
+        self._assert_editable(event)
         ctx = self._serializer_context(request, event)
         ser = TradeWishSerializer(wish, data=request.data, partial=True, context=ctx)
         ser.is_valid(raise_exception=True)
@@ -358,5 +370,6 @@ class TradeWishDetailView(EventScopedMixin, APIView):
 
     def delete(self, request, slug, pk):
         event, wish = self._get_wish(slug, pk, request)
+        self._assert_editable(event)
         wish.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
