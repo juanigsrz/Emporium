@@ -11,6 +11,7 @@ from .views import (
     BlockListCreateView,
     GameRatingDestroyView,
     GameRatingListCreateView,
+    GeocodeSearchView,
     ProfileDetailView,
     ProfileMeView,
     RatingListCreateView,
@@ -37,4 +38,7 @@ urlpatterns = [
     # Game ratings (F2)
     path("game-ratings/", GameRatingListCreateView.as_view(), name="game-rating-list-create"),
     path("game-ratings/<int:pk>/", GameRatingDestroyView.as_view(), name="game-rating-destroy"),
+
+    # Geocoding
+    path("geocode/search/", GeocodeSearchView.as_view(), name="geocode-search"),
 ]
