@@ -31,7 +31,7 @@ path/shape without updating this file.
 ## Profiles / social (accounts)
 | method | path | notes |
 |---|---|---|
-| GET/PATCH | `/api/profiles/me/` | current user's Profile |
+| GET/PATCH | `/api/profiles/me/` | current user's Profile. Read-only: `latitude`, `longitude` (floats or null, geocoded from `location` on save). Writable: `max_trade_distance_km` (int or null). |
 | GET | `/api/profiles/{username}/` | public profile + ratings summary |
 | GET/POST/DELETE | `/api/blocks/` | list/create/delete `UserBlock` (mine). POST body `{"blocked": "<username>"}`; item shape `{id, blocker, blocked, created}` |
 | GET/POST/DELETE | `/api/wishlists/` | general wishlist (mine), body/filter `board_game_bgg_id` (int; becomes FK `board_game` in F2), `note` |

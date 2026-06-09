@@ -7,6 +7,7 @@ Serializers for Profile, UserBlock, Wishlist, TradeRating.
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from .geo import geocode
 from .models import Profile, TradeRating, UserBlock, Wishlist
 
 User = get_user_model()
@@ -37,10 +38,29 @@ class ProfileSerializer(serializers.ModelSerializer):
             "avatar_url",
             "ratings_count",
             "average_score",
+            "latitude",
+            "longitude",
+            "max_trade_distance_km",
             "created",
             "updated",
         ]
-        read_only_fields = ["username", "email", "created", "updated"]
+        read_only_fields = ["username", "email", "latitude", "longitude", "created", "updated"]
+
+    def update(self, instance, validated_data):
+        new_location = validated_data.get("location", instance.location)
+        location_changed = "location" in validated_data and new_location != instance.location
+        instance = super().update(instance, validated_data)
+        if location_changed:
+            if new_location.strip():
+                try:
+                    coords = geocode(new_location)
+                except Exception:  # noqa: BLE001 — geocoding is best-effort
+                    coords = None
+                instance.latitude, instance.longitude = coords if coords else (None, None)
+            else:
+                instance.latitude = instance.longitude = None
+            instance.save(update_fields=["latitude", "longitude", "updated"])
+        return instance
 
     def get_ratings_count(self, obj):
         return obj.user.ratings_received.count()
