@@ -255,7 +255,13 @@ function GameCardControls({
       return
     }
     const v = Number(raw)
-    if (!Number.isNaN(v) && v >= 1 && v <= 10) setRating.mutate({ board_game: bggId, value: v })
+    if (!Number.isNaN(v) && v >= 1 && v <= 10) {
+      setRating.mutate({ board_game: bggId, value: v })
+    } else {
+      // Out-of-range / invalid input — revert to the persisted value so the
+      // field never displays a value that wasn't saved.
+      setRatingInput(rating ? String(Number(rating.value)) : '')
+    }
   }
 
   async function addToExisting(groupId: number) {
