@@ -114,6 +114,8 @@ interface PageModel {
   baseMatrix: Map<number, Set<string>>
   /** All want targets referenced by any of my lists, keyed for dedupe. */
   baseTargets: Map<string, Target>
+  /** Canonical gameId -> existing buy-price (money_amount as string), server truth. */
+  baseMoneyByGame: Map<number, string>
 }
 
 function buildModel(
@@ -137,6 +139,7 @@ function buildModel(
   const wantGroupByListing = new Map<number, WantGroup>()
   const baseMatrix = new Map<number, Set<string>>()
   const baseTargets = new Map<string, Target>()
+  const baseMoneyByGame = new Map<number, string>()
 
   for (const listing of myListings) {
     const og = offerGroupByListing.get(listing.id)
@@ -150,6 +153,9 @@ function buildModel(
           if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
             const key = gameTargetKey(item.board_game)
             set.add(key)
+            if (item.money_amount != null && !baseMoneyByGame.has(item.board_game)) {
+              baseMoneyByGame.set(item.board_game, item.money_amount)
+            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -163,6 +169,10 @@ function buildModel(
           } else if (item.target_type === 'LISTING' && item.event_listing != null) {
             const key = listingTargetKey(item.event_listing)
             set.add(key)
+            const lgid = item.board_game_id ?? -item.event_listing
+            if (item.money_amount != null && !baseMoneyByGame.has(lgid)) {
+              baseMoneyByGame.set(lgid, item.money_amount)
+            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -182,7 +192,7 @@ function buildModel(
     baseMatrix.set(listing.id, set)
   }
 
-  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets }
+  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
 }
 
 // ============================================================
@@ -741,6 +751,10 @@ interface Editor {
   isOn: (listingId: number, targetKey: string) => boolean
   toggle: (listingId: number, targetKey: string, next?: boolean) => void
   addTarget: (t: Target) => void
+  /** Current buy-price (string; '' = none) for a canonical game. */
+  priceForGame: (gameId: number) => string
+  /** Stage a buy-price change for a canonical game. */
+  setMoney: (gameId: number, value: string) => void
   dirtyCount: number
   changedListingIds: Set<number>
   reset: () => void
@@ -753,6 +767,7 @@ function useEditor(model: PageModel): {
 } {
   const [changes, setChanges] = useState<Map<string, boolean>>(new Map())
   const [sessionTargets, setSessionTargets] = useState<Map<string, Target>>(new Map())
+  const [moneyByGame, setMoneyByGame] = useState<Map<number, string>>(new Map())
 
   const targets = useMemo(() => {
     const merged = new Map<string, Target>(model.baseTargets)
@@ -793,16 +808,52 @@ function useEditor(model: PageModel): {
     })
   }, [])
 
+  const priceForGame = useCallback(
+    (gameId: number): string => {
+      if (moneyByGame.has(gameId)) return moneyByGame.get(gameId)!
+      return model.baseMoneyByGame.get(gameId) ?? ''
+    },
+    [moneyByGame, model.baseMoneyByGame]
+  )
+
+  const setMoney = useCallback(
+    (gameId: number, value: string) => {
+      setMoneyByGame((prev) => {
+        const m = new Map(prev)
+        const base = model.baseMoneyByGame.get(gameId) ?? ''
+        if (value === base) m.delete(gameId)
+        else m.set(gameId, value)
+        return m
+      })
+    },
+    [model.baseMoneyByGame]
+  )
+
   const reset = useCallback(() => {
     setChanges(new Map())
     setSessionTargets(new Map())
+    setMoneyByGame(new Map())
   }, [])
 
   const changedListingIds = useMemo(() => {
     const s = new Set<number>()
     for (const ck of changes.keys()) s.add(Number(ck.split('::')[0]))
+    if (moneyByGame.size > 0) {
+      const affectedKeys = new Set<string>()
+      for (const t of targets) {
+        if (moneyByGame.has(t.gameId)) affectedKeys.add(t.key)
+      }
+      for (const [listingId] of model.baseMatrix) {
+        for (const k of affectedKeys) {
+          if (isOn(listingId, k)) {
+            s.add(listingId)
+            break
+          }
+        }
+      }
+    }
     return s
-  }, [changes])
+  }, [changes, moneyByGame, targets, model.baseMatrix, isOn])
 
   return {
     editor: {
@@ -810,7 +861,9 @@ function useEditor(model: PageModel): {
       isOn,
       toggle,
       addTarget,
-      dirtyCount: changes.size,
+      priceForGame,
+      setMoney,
+      dirtyCount: changes.size + moneyByGame.size,
       changedListingIds,
       reset,
     },
@@ -1101,7 +1154,8 @@ async function persistChanges(
   slug: string,
   model: PageModel,
   editor: Editor,
-  myListings: EventListing[]
+  myListings: EventListing[],
+  moneyEnabled: boolean
 ): Promise<void> {
   const listingById = new Map(myListings.map((l) => [l.id, l]))
 
@@ -1111,12 +1165,19 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => ({
-      target_type: t.type,
-      ...(t.type === 'BOARD_GAME'
-        ? { board_game: t.boardGameId! }
-        : { event_listing: t.listingId! }),
-    }))
+    const items: WantGroupItemPayload[] = desired.map((t) => {
+      const item: WantGroupItemPayload = {
+        target_type: t.type,
+        ...(t.type === 'BOARD_GAME'
+          ? { board_game: t.boardGameId! }
+          : { event_listing: t.listingId! }),
+      }
+      if (moneyEnabled) {
+        const raw = editor.priceForGame(t.gameId).trim()
+        item.money_amount = raw === '' ? null : Number(raw)
+      }
+      return item
+    })
 
     let wg = model.wantGroupByListing.get(listingId)
 
@@ -1208,7 +1269,7 @@ export default function MyWantsPage() {
     setSaving(true)
     setSaveError(null)
     try {
-      await persistChanges(slug, model, editor, myListings)
+      await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
       invalidateTrades(qc, slug)
       editor.reset()
     } catch (err) {
@@ -1218,7 +1279,7 @@ export default function MyWantsPage() {
     } finally {
       setSaving(false)
     }
-  }, [slug, model, editor, myListings, qc])
+  }, [slug, model, editor, myListings, qc, event?.money_enabled])
 
   if (eventLoading) {
     return (
