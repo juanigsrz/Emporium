@@ -40,6 +40,14 @@ unique_together = (blocker, blocked). A blocked pair is never matched together.
 | note | char(200) blank | |
 unique_together = (user, board_game).
 
+### GameRating (F2)
+| field | type | notes |
+|---|---|---|
+| user | FK(User, related=game_ratings) | |
+| board_game | FK(BoardGame, related=ratings) | |
+| value | decimal(3,1) (1–10) | personal rating |
+unique_together = (user, board_game). POST is an upsert — re-posting updates `value`.
+
 ### TradeRating
 | field | type | notes |
 |---|---|---|
