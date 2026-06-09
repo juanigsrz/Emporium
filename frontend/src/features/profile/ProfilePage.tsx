@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   fetchMyProfile,
   patchMyProfile,
@@ -14,6 +14,8 @@ import {
   deleteWishlistEntry,
   useMyProfile,
   type PatchProfilePayload,
+  searchGeocode,
+  type GeocodeSuggestion,
 } from '../../api/profiles'
 import { useStartImport, useImportJob, type ImportKind } from '../../api/bgg'
 import { useMyRatings } from '../../api/ratings'
@@ -110,6 +112,8 @@ function ProfileEdit() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -122,6 +126,33 @@ function ProfileEdit() {
       avatar_url: '',
     },
   })
+
+  const locationValue = watch('location')
+  const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const skipNextSearch = useRef(false)
+
+  useEffect(() => {
+    if (skipNextSearch.current) {
+      skipNextSearch.current = false
+      return
+    }
+    const q = (locationValue ?? '').trim()
+    if (q.length < 3) {
+      setSuggestions([])
+      return
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const res = await searchGeocode(q)
+        setSuggestions(res)
+        setShowSuggestions(true)
+      } catch {
+        setSuggestions([])
+      }
+    }, 350)
+    return () => clearTimeout(handle)
+  }, [locationValue])
 
   useEffect(() => {
     if (profile) {
@@ -180,35 +211,80 @@ function ProfileEdit() {
           </div>
         )}
 
-        {textFields.map(({ name, label, multiline }) => (
-          <div key={name}>
-            <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
-              {label}
-            </label>
-            {multiline ? (
-              <textarea
-                id={name}
-                rows={3}
-                {...register(name)}
-                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  errors[name] ? 'border-red-400' : 'border-gray-300'
-                }`}
-              />
-            ) : (
-              <input
-                id={name}
-                type="text"
-                {...register(name)}
-                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  errors[name] ? 'border-red-400' : 'border-gray-300'
-                }`}
-              />
-            )}
-            {errors[name] && (
-              <p className="mt-1 text-xs text-red-600">{errors[name]?.message}</p>
-            )}
-          </div>
-        ))}
+        {textFields.map(({ name, label, multiline }) => {
+          if (name === 'location') {
+            return (
+              <div key={name} className="relative">
+                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                  {label}
+                </label>
+                <input
+                  id="location"
+                  type="text"
+                  autoComplete="off"
+                  {...register('location')}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors.location ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <ul className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                    {suggestions.map((s) => (
+                      <li key={`${s.display_name}-${s.lat}-${s.lon}`}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            skipNextSearch.current = true
+                            setValue('location', s.display_name, { shouldDirty: true })
+                            setShowSuggestions(false)
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50"
+                        >
+                          {s.display_name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {errors.location && (
+                  <p className="mt-1 text-xs text-red-600">{errors.location?.message}</p>
+                )}
+              </div>
+            )
+          }
+          return (
+            <div key={name}>
+              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+                {label}
+              </label>
+              {multiline ? (
+                <textarea
+                  id={name}
+                  rows={3}
+                  {...register(name)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+              ) : (
+                <input
+                  id={name}
+                  type="text"
+                  {...register(name)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+              )}
+              {errors[name] && (
+                <p className="mt-1 text-xs text-red-600">{errors[name]?.message}</p>
+              )}
+            </div>
+          )
+        })}
 
         {/* Geocoded coordinates (read-only feedback) */}
         <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-500">
