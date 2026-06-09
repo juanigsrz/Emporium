@@ -653,7 +653,7 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
   const [error, setError] = useState<string | null>(null)
 
   const availableCopies = (copiesData?.results ?? []).filter(
-    (c: Copy) => c.status === 'ACTIVE' && !existingCopyIds.has(c.id)
+    (c: Copy) => c.status === 'ACTIVE' && !c.is_pending && !existingCopyIds.has(c.id)
   )
 
   async function handleAdd() {
