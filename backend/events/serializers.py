@@ -160,6 +160,7 @@ class EventListingSerializer(serializers.ModelSerializer):
     # (e.g. a different language or condition). Full detail is on /copies/{id}/.
     copy_condition   = serializers.CharField(source="copy.condition", read_only=True)
     copy_language    = serializers.CharField(source="copy.language", read_only=True)
+    owner_too_far    = serializers.SerializerMethodField()
 
     # Writable: accept copy pk on create
     copy = serializers.PrimaryKeyRelatedField(
@@ -181,6 +182,7 @@ class EventListingSerializer(serializers.ModelSerializer):
             "copy_owner_username",
             "copy_condition",
             "copy_language",
+            "owner_too_far",
             "active",
             "created",
         ]
@@ -195,6 +197,7 @@ class EventListingSerializer(serializers.ModelSerializer):
             "copy_owner_username",
             "copy_condition",
             "copy_language",
+            "owner_too_far",
             "created",
         ]
 
@@ -203,6 +206,17 @@ class EventListingSerializer(serializers.ModelSerializer):
 
     def get_copy_owner_username(self, obj):
         return obj.copy.owner.username
+
+    def get_owner_too_far(self, obj):
+        req = self.context.get("request")
+        me = getattr(getattr(req, "user", None), "profile", None)
+        if not me or me.max_trade_distance_km is None or me.latitude is None or me.longitude is None:
+            return False
+        from accounts.geo import haversine_km
+        op = getattr(obj.copy.owner, "profile", None)
+        if not op or op.latitude is None or op.longitude is None:
+            return False
+        return haversine_km(me.latitude, me.longitude, op.latitude, op.longitude) > me.max_trade_distance_km
 
 
 class EventGameSerializer(serializers.Serializer):
