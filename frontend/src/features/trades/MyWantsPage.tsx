@@ -1,13 +1,11 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import { useEvent, useEventListings, useEventGames, EVENTS_KEYS } from '../../api/events'
+import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing } from '../../api/events'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
-import { useMyProfile } from '../../api/profiles'
-import { useStartImport, useImportJob } from '../../api/bgg'
-import { useMyRatings, ratingMap } from '../../api/ratings'
+import { useMyRatings, ratingMap, useSetRating, useDeleteRating } from '../../api/ratings'
 
 import {
   useOfferGroups,
@@ -114,6 +112,8 @@ interface PageModel {
   baseMatrix: Map<number, Set<string>>
   /** All want targets referenced by any of my lists, keyed for dedupe. */
   baseTargets: Map<string, Target>
+  /** Canonical gameId -> existing buy-price (money_amount as string), server truth. */
+  baseMoneyByGame: Map<number, string>
 }
 
 function buildModel(
@@ -137,6 +137,7 @@ function buildModel(
   const wantGroupByListing = new Map<number, WantGroup>()
   const baseMatrix = new Map<number, Set<string>>()
   const baseTargets = new Map<string, Target>()
+  const baseMoneyByGame = new Map<number, string>()
 
   for (const listing of myListings) {
     const og = offerGroupByListing.get(listing.id)
@@ -150,6 +151,9 @@ function buildModel(
           if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
             const key = gameTargetKey(item.board_game)
             set.add(key)
+            if (item.money_amount != null && !baseMoneyByGame.has(item.board_game)) {
+              baseMoneyByGame.set(item.board_game, item.money_amount)
+            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -163,6 +167,10 @@ function buildModel(
           } else if (item.target_type === 'LISTING' && item.event_listing != null) {
             const key = listingTargetKey(item.event_listing)
             set.add(key)
+            const lgid = item.board_game_id ?? -item.event_listing
+            if (item.money_amount != null && !baseMoneyByGame.has(lgid)) {
+              baseMoneyByGame.set(lgid, item.money_amount)
+            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -182,7 +190,7 @@ function buildModel(
     baseMatrix.set(listing.id, set)
   }
 
-  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets }
+  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
 }
 
 // ============================================================
@@ -201,9 +209,216 @@ interface GameBrowseProps {
   editor: Editor
   myListings: EventListing[]
   username?: string
+  customWantGroups: WantGroup[]
+  moneyEnabled: boolean
 }
 
-function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
+interface GameCardControlsProps {
+  slug: string
+  bggId: number
+  wanted: boolean
+  moneyEnabled: boolean
+  priceValue: string
+  onPriceChange: (value: string) => void
+  customWantGroups: WantGroup[]
+}
+
+function GameCardControls({
+  slug,
+  bggId,
+  wanted,
+  moneyEnabled,
+  priceValue,
+  onPriceChange,
+  customWantGroups,
+}: GameCardControlsProps) {
+  const qc = useQueryClient()
+  const { data: ratings = [] } = useMyRatings()
+  const setRating = useSetRating()
+  const delRating = useDeleteRating()
+  const rating = ratings.find((r) => r.board_game === bggId)
+
+  const [ratingInput, setRatingInput] = useState<string>(rating ? String(Number(rating.value)) : '')
+  const [groupSel, setGroupSel] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [groupMsg, setGroupMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRatingInput(rating ? String(Number(rating.value)) : '')
+  }, [rating])
+
+  function commitRating() {
+    const raw = ratingInput.trim()
+    if (raw === '') {
+      if (rating) delRating.mutate(rating.id)
+      return
+    }
+    const v = Number(raw)
+    if (!Number.isNaN(v) && v >= 1 && v <= 10) {
+      setRating.mutate({ board_game: bggId, value: v })
+    } else {
+      // Out-of-range / invalid input — revert to the persisted value so the
+      // field never displays a value that wasn't saved.
+      setRatingInput(rating ? String(Number(rating.value)) : '')
+    }
+  }
+
+  async function addToExisting(groupId: number) {
+    setGroupMsg(null)
+    const group = customWantGroups.find((g) => g.id === groupId)
+    if (!group) return
+    if (group.items.some((i) => i.target_type === 'BOARD_GAME' && i.board_game === bggId)) {
+      setGroupMsg('Already in that group.')
+      return
+    }
+    const items: WantGroupItemPayload[] = [
+      ...group.items.map((i) => ({
+        target_type: i.target_type,
+        ...(i.target_type === 'BOARD_GAME'
+          ? { board_game: i.board_game! }
+          : { event_listing: i.event_listing! }),
+        money_amount: i.money_amount != null ? Number(i.money_amount) : null,
+      })),
+      { target_type: 'BOARD_GAME', board_game: bggId, money_amount: null },
+    ]
+    try {
+      await patchWantGroupRaw(slug, group.id, { items })
+      invalidateTrades(qc, slug)
+      setGroupMsg('Added.')
+    } catch {
+      setGroupMsg('Could not add.')
+    }
+  }
+
+  async function createAndAdd() {
+    const name = newName.trim()
+    if (!name) return
+    setGroupMsg(null)
+    try {
+      await createWantGroupRaw(slug, {
+        name,
+        min_receive: 1,
+        items: [{ target_type: 'BOARD_GAME', board_game: bggId, money_amount: null }],
+      })
+      invalidateTrades(qc, slug)
+      setShowNew(false)
+      setNewName('')
+      setGroupMsg('Group created.')
+    } catch {
+      setGroupMsg('Could not create group.')
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-b border-gray-100 px-3 py-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500">My rating</span>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          step={0.5}
+          value={ratingInput}
+          onChange={(e) => setRatingInput(e.target.value)}
+          onBlur={commitRating}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          placeholder="—"
+          className="w-16 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+        />
+        {rating && (
+          <button
+            type="button"
+            onClick={() => {
+              setRatingInput('')
+              delRating.mutate(rating.id)
+            }}
+            className="text-gray-300 hover:text-red-500"
+            aria-label="Clear rating"
+          >
+            ×
+          </button>
+        )}
+        {(setRating.isSuccess || delRating.isSuccess) && <span className="text-green-600">✓</span>}
+      </div>
+
+      {moneyEnabled && (
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">Pay up to $</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={priceValue}
+            disabled={!wanted}
+            onChange={(e) => onPriceChange(e.target.value)}
+            placeholder={wanted ? '0' : 'want it first'}
+            title={wanted ? "Most money you'll pay to receive this game" : 'Select a copy / want this game to set a price'}
+            className="w-24 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-gray-500">Add to group</span>
+        <select
+          value={groupSel}
+          onChange={(e) => {
+            const val = e.target.value
+            setGroupSel('')
+            if (val === '__new__') {
+              setShowNew(true)
+            } else if (val) {
+              addToExisting(Number(val))
+            }
+          }}
+          className="rounded border border-gray-300 px-1.5 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-400"
+        >
+          <option value="">Choose…</option>
+          {customWantGroups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+          <option value="__new__">+ New group…</option>
+        </select>
+        {groupMsg && <span className="text-gray-400">{groupMsg}</span>}
+      </div>
+
+      {showNew && (
+        <div className="flex items-center gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="New group name"
+            className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+          />
+          <button
+            type="button"
+            onClick={createAndAdd}
+            className="rounded bg-purple-600 px-2 py-0.5 font-medium text-white hover:bg-purple-500"
+          >
+            Create
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowNew(false)
+              setNewName('')
+            }}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled }: GameBrowseProps) {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
@@ -214,37 +429,6 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
   const [wishlisted, setWishlisted] = useState(false)
   const [minRating, setMinRating] = useState<number | ''>('')
   const [isExpansion, setIsExpansion] = useState<boolean | undefined>(undefined)
-
-  // BGG sync state
-  const [jobId, setJobId] = useState<number | null>(null)
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
-  const start = useStartImport()
-  const job = useImportJob(jobId)
-  const { data: profile } = useMyProfile()
-  const qc = useQueryClient()
-
-  const syncing = ['PENDING', 'RUNNING'].includes(job.data?.status ?? '')
-
-  // When the import job reaches DONE, invalidate games + profile query keys
-  useEffect(() => {
-    if (job.data?.status === 'DONE') {
-      const matched = job.data.summary?.matched ?? 0
-      const skipped = job.data.summary?.skipped ?? 0
-      setSyncMessage(`Synced! ${matched} matched, ${skipped} skipped.`)
-      setJobId(null)
-      qc.invalidateQueries({ queryKey: EVENTS_KEYS.games(slug) })
-      qc.invalidateQueries({ queryKey: ['profile', 'me'] })
-    } else if (job.data?.status === 'FAILED') {
-      setSyncMessage('Sync failed. Check your BGG username and try again.')
-      setJobId(null)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.data?.status])
-
-  function handleSync() {
-    setSyncMessage(null)
-    start.mutateAsync({ kind: 'WISHLIST' }).then((j) => setJobId(j.id))
-  }
 
   // Game groups keyed by canonical id — drives the per-card "which of my items
   // offer for this want" panel (same model the grid uses, surfaced inline here).
@@ -345,35 +529,6 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
           <option value="true">Expansions only</option>
         </select>
 
-        <div className="ml-auto flex items-center gap-2">
-          {syncing && (
-            <span className="flex items-center gap-1 text-xs text-indigo-500">
-              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              Syncing…
-            </span>
-          )}
-          {syncMessage && !syncing && (
-            <span className="text-xs text-green-600">{syncMessage}</span>
-          )}
-          {profile?.bgg_username ? (
-            <button
-              type="button"
-              onClick={handleSync}
-              disabled={syncing || start.isPending}
-              className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
-            >
-              Sync BGG wishlist
-            </button>
-          ) : (
-            <span className="text-xs text-gray-400">
-              <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
-              {' '}to sync wishlist
-            </span>
-          )}
-        </div>
       </div>
 
       {games.length === 0 ? (
@@ -417,6 +572,23 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
                 </div>
                 {open && (
                   <div className="border-t border-gray-100 bg-gray-50/60">
+                    {(() => {
+                      const group = groupByGame.get(g.bgg_id)
+                      const wantedForControls = group
+                        ? myListings.some((l) => groupIsOn(editor, l.id, group))
+                        : false
+                      return (
+                        <GameCardControls
+                          slug={slug}
+                          bggId={g.bgg_id}
+                          wanted={wantedForControls}
+                          moneyEnabled={moneyEnabled}
+                          priceValue={editor.priceForGame(g.bgg_id)}
+                          onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
+                          customWantGroups={customWantGroups}
+                        />
+                      )
+                    })()}
                     <GameCopies
                       slug={slug}
                       bggId={g.bgg_id}
@@ -741,6 +913,10 @@ interface Editor {
   isOn: (listingId: number, targetKey: string) => boolean
   toggle: (listingId: number, targetKey: string, next?: boolean) => void
   addTarget: (t: Target) => void
+  /** Current buy-price (string; '' = none) for a canonical game. */
+  priceForGame: (gameId: number) => string
+  /** Stage a buy-price change for a canonical game. */
+  setMoney: (gameId: number, value: string) => void
   dirtyCount: number
   changedListingIds: Set<number>
   reset: () => void
@@ -753,6 +929,7 @@ function useEditor(model: PageModel): {
 } {
   const [changes, setChanges] = useState<Map<string, boolean>>(new Map())
   const [sessionTargets, setSessionTargets] = useState<Map<string, Target>>(new Map())
+  const [moneyByGame, setMoneyByGame] = useState<Map<number, string>>(new Map())
 
   const targets = useMemo(() => {
     const merged = new Map<string, Target>(model.baseTargets)
@@ -793,16 +970,52 @@ function useEditor(model: PageModel): {
     })
   }, [])
 
+  const priceForGame = useCallback(
+    (gameId: number): string => {
+      if (moneyByGame.has(gameId)) return moneyByGame.get(gameId)!
+      return model.baseMoneyByGame.get(gameId) ?? ''
+    },
+    [moneyByGame, model.baseMoneyByGame]
+  )
+
+  const setMoney = useCallback(
+    (gameId: number, value: string) => {
+      setMoneyByGame((prev) => {
+        const m = new Map(prev)
+        const base = model.baseMoneyByGame.get(gameId) ?? ''
+        if (value === base) m.delete(gameId)
+        else m.set(gameId, value)
+        return m
+      })
+    },
+    [model.baseMoneyByGame]
+  )
+
   const reset = useCallback(() => {
     setChanges(new Map())
     setSessionTargets(new Map())
+    setMoneyByGame(new Map())
   }, [])
 
   const changedListingIds = useMemo(() => {
     const s = new Set<number>()
     for (const ck of changes.keys()) s.add(Number(ck.split('::')[0]))
+    if (moneyByGame.size > 0) {
+      const affectedKeys = new Set<string>()
+      for (const t of targets) {
+        if (moneyByGame.has(t.gameId)) affectedKeys.add(t.key)
+      }
+      for (const [listingId] of model.baseMatrix) {
+        for (const k of affectedKeys) {
+          if (isOn(listingId, k)) {
+            s.add(listingId)
+            break
+          }
+        }
+      }
+    }
     return s
-  }, [changes])
+  }, [changes, moneyByGame, targets, model.baseMatrix, isOn])
 
   return {
     editor: {
@@ -810,7 +1023,9 @@ function useEditor(model: PageModel): {
       isOn,
       toggle,
       addTarget,
-      dirtyCount: changes.size,
+      priceForGame,
+      setMoney,
+      dirtyCount: changes.size + moneyByGame.size,
       changedListingIds,
       reset,
     },
@@ -1101,7 +1316,8 @@ async function persistChanges(
   slug: string,
   model: PageModel,
   editor: Editor,
-  myListings: EventListing[]
+  myListings: EventListing[],
+  moneyEnabled: boolean
 ): Promise<void> {
   const listingById = new Map(myListings.map((l) => [l.id, l]))
 
@@ -1111,12 +1327,19 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => ({
-      target_type: t.type,
-      ...(t.type === 'BOARD_GAME'
-        ? { board_game: t.boardGameId! }
-        : { event_listing: t.listingId! }),
-    }))
+    const items: WantGroupItemPayload[] = desired.map((t) => {
+      const item: WantGroupItemPayload = {
+        target_type: t.type,
+        ...(t.type === 'BOARD_GAME'
+          ? { board_game: t.boardGameId! }
+          : { event_listing: t.listingId! }),
+      }
+      if (moneyEnabled) {
+        const raw = editor.priceForGame(t.gameId).trim()
+        item.money_amount = raw === '' ? null : Number(raw)
+      }
+      return item
+    })
 
     let wg = model.wantGroupByListing.get(listingId)
 
@@ -1149,7 +1372,7 @@ async function persistChanges(
 // MAIN PAGE
 // ============================================================
 
-type ViewMode = 'visual' | 'grid'
+type ViewMode = 'almanac' | 'visual' | 'grid'
 
 export default function MyWantsPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -1169,6 +1392,11 @@ export default function MyWantsPage() {
     [myListings, offerGroups, wantGroups, wishes]
   )
 
+  const customWantGroups = useMemo(() => {
+    const autoIds = new Set([...model.wantGroupByListing.values()].map((wg) => wg.id))
+    return wantGroups.filter((wg) => !autoIds.has(wg.id))
+  }, [wantGroups, model.wantGroupByListing])
+
   const { editor } = useEditor(model)
   const wantGameCount = useMemo(
     () => new Set(editor.targets.map((t) => t.gameId)).size,
@@ -1178,37 +1406,16 @@ export default function MyWantsPage() {
   const { data: ratingsData = [] } = useMyRatings()
   const rmap = useMemo(() => ratingMap(ratingsData), [ratingsData])
 
-  const [view, setView] = useState<ViewMode>('visual')
+  const [view, setView] = useState<ViewMode>('almanac')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  // Ratings import
-  const { data: profile } = useMyProfile()
-  const startImport = useStartImport()
-  const [ratingsJobId, setRatingsJobId] = useState<number | null>(null)
-  const [ratingsMsg, setRatingsMsg] = useState<string | null>(null)
-  const ratingsJob = useImportJob(ratingsJobId)
-  const ratingsImporting = ['PENDING', 'RUNNING'].includes(ratingsJob.data?.status ?? '')
-  useEffect(() => {
-    if (ratingsJob.data?.status === 'DONE') {
-      const matched = ratingsJob.data.summary?.matched ?? 0
-      const skipped = ratingsJob.data.summary?.skipped ?? 0
-      setRatingsMsg(`Ratings imported! ${matched} matched, ${skipped} skipped.`)
-      setRatingsJobId(null)
-      qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })
-    } else if (ratingsJob.data?.status === 'FAILED') {
-      setRatingsMsg('Import failed. Check your BGG username.')
-      setRatingsJobId(null)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ratingsJob.data?.status])
 
   const handleSave = useCallback(async () => {
     if (!slug) return
     setSaving(true)
     setSaveError(null)
     try {
-      await persistChanges(slug, model, editor, myListings)
+      await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
       invalidateTrades(qc, slug)
       editor.reset()
     } catch (err) {
@@ -1218,7 +1425,7 @@ export default function MyWantsPage() {
     } finally {
       setSaving(false)
     }
-  }, [slug, model, editor, myListings, qc])
+  }, [slug, model, editor, myListings, qc, event?.money_enabled])
 
   if (eventLoading) {
     return (
@@ -1301,7 +1508,7 @@ export default function MyWantsPage() {
           {/* Mode tabs */}
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
-              {(['visual', 'grid'] as ViewMode[]).map((m) => (
+              {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setView(m)}
@@ -1319,41 +1526,18 @@ export default function MyWantsPage() {
             </p>
           </div>
 
-          {/* Import ratings from BGG */}
-          <div className="flex flex-wrap items-center gap-2">
-            {profile?.bgg_username ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setRatingsMsg(null)
-                  startImport.mutateAsync({ kind: 'RATINGS' }).then((j) => setRatingsJobId(j.id))
-                }}
-                disabled={ratingsImporting || startImport.isPending}
-                className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50"
-              >
-                {ratingsImporting ? 'Importing ratings…' : 'Import ratings from BGG'}
-              </button>
-            ) : (
-              <span className="text-xs text-gray-400">
-                <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
-                {' '}to import ratings
-              </span>
-            )}
-            {ratingsMsg && !ratingsImporting && (
-              <span className="text-xs text-green-600">{ratingsMsg}</span>
-            )}
-          </div>
-
-          <GameBrowse
-            slug={slug!}
-            editor={editor}
-            myListings={myListings}
-            username={user?.username}
-          />
-
-          {view === 'visual' ? (
-            <VisualMode myListings={myListings} editor={editor} />
-          ) : (
+          {view === 'almanac' && (
+            <GameBrowse
+              slug={slug!}
+              editor={editor}
+              myListings={myListings}
+              username={user?.username}
+              customWantGroups={customWantGroups}
+              moneyEnabled={event.money_enabled}
+            />
+          )}
+          {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
+          {view === 'grid' && (
             <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} />
           )}
         </>
