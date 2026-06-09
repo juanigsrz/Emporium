@@ -231,6 +231,7 @@ class EventGameSerializer(serializers.Serializer):
     name           = serializers.CharField()
     year_published = serializers.IntegerField(allow_null=True)
     rank           = serializers.IntegerField(allow_null=True)
+    average        = serializers.FloatField(allow_null=True)
     image_url      = serializers.CharField(allow_blank=True)
     copies_count   = serializers.IntegerField()
 
