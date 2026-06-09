@@ -60,7 +60,7 @@ Game list item:
 | POST | `/api/copies/` | create with `board_game=<bgg_id>` (owner = request.user). Returns full copy + `listing_code`. |
 | GET/PATCH/DELETE | `/api/copies/{id}/` | owner-only write. |
 
-Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`. `is_pending` (bool, read-only): `true` when the copy is missing `language` and/or `condition` (set automatically on PATCH when pending; cleared once both fields are present). `import_source` (str, read-only): tag identifying the import origin (e.g. `"bgg"`; empty for manually created copies). A pending copy cannot be added to an event — `POST /listings/` returns **400** with `{"copy": "..."}` if `is_pending` is true.
+Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`. `is_pending` (bool, read-only): `true` when the copy is missing `language` and/or `condition` (set automatically on PATCH when pending; cleared once both fields are present). `import_source` (str, read-only): tag identifying the import origin (`"BGG_OWNED"` or `"BGG_GEEKLIST"`; empty for manually created copies). A pending copy cannot be added to an event — `POST /listings/` returns **400** with `{"copy": "..."}` if `is_pending` is true.
 
 ## Events
 | method | path | notes |
@@ -74,7 +74,7 @@ Copy object shape (key display fields): `owner` = user **id** (int), `owner_user
 | DELETE | `/api/events/{slug}/leave/` | leave |
 | GET/POST | `/api/events/{slug}/listings/` | EventListings; POST `{copy}` adds own copy. `?user=&board_game=` |
 | DELETE | `/api/events/{slug}/listings/{id}/` | remove own listing |
-| GET | `/api/events/{slug}/games/` | **event-scoped catalog**: distinct games with active copies in this event. `?search=` (name), `?ordering=name\|rank\|-copies_count` (default `-copies_count`), `?wishlisted=true` (only games in the requesting user's wishlist), `?min_rating=<float>` (games with `average >= value`), `?is_expansion=true\|false`. Paginated. Powers the want-list builder (global catalog browsing was removed — only games tradeable here matter). |
+| GET | `/api/events/{slug}/games/` | **event-scoped catalog**: distinct games with active copies in this event. `?search=` (name), `?ordering=name\|rank\|-average\|-copies_count` (default `-copies_count`), `?wishlisted=true` (only games in the requesting user's wishlist), `?min_rating=<float>` (games with `average >= value`), `?is_expansion=true\|false`. Paginated. Powers the want-list builder (global catalog browsing was removed — only games tradeable here matter). |
 | GET | `/api/events/{slug}/wants-export/` | organizer-only; `text/plain` wants file for the external solver. Format follows `matching_mode`: `ONETOONE` → OLWLG (`(user) CODE : wishlist`); `XTOY` → `(NforM) give -> take`. Item token = `listing_code`. |
 
 EventGame item: `{bgg_id, name, year_published, rank, average, image_url, copies_count}` where `copies_count` = active EventListings of that game **in this event**; `average` is the BGG user average (float, nullable).
