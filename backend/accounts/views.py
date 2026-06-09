@@ -16,7 +16,9 @@ from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .geo import geocode_search
 from .models import GameRating, Profile, TradeRating, UserBlock, Wishlist
 from .serializers import (
     GameRatingSerializer,
@@ -179,3 +181,17 @@ class RatingListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(rater=self.request.user)
+
+
+# ---------------------------------------------------------------------------
+# Geocoding endpoints
+# ---------------------------------------------------------------------------
+
+class GeocodeSearchView(APIView):
+    """GET /api/geocode/search/?q= — Nominatim place suggestions (auth required)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        q = request.query_params.get("q", "")
+        return Response(geocode_search(q))

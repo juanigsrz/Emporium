@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   fetchMyProfile,
   patchMyProfile,
@@ -12,8 +12,73 @@ import {
   fetchWishlists,
   createWishlistEntry,
   deleteWishlistEntry,
+  useMyProfile,
   type PatchProfilePayload,
+  searchGeocode,
+  type GeocodeSuggestion,
 } from '../../api/profiles'
+import { useStartImport, useImportJob, type ImportKind } from '../../api/bgg'
+import { useMyRatings } from '../../api/ratings'
+
+// ---- Shared BGG import button (used by Wishlist + Ratings tabs) ----
+function BggImportButton({
+  kind,
+  label,
+  onDone,
+}: {
+  kind: ImportKind
+  label: string
+  onDone: () => void
+}) {
+  const { data: profile } = useMyProfile()
+  const start = useStartImport()
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  const job = useImportJob(jobId)
+  const running = ['PENDING', 'RUNNING'].includes(job.data?.status ?? '')
+
+  useEffect(() => {
+    if (job.data?.status === 'DONE') {
+      const matched = job.data.summary?.matched ?? 0
+      const skipped = job.data.summary?.skipped ?? 0
+      setMsg(`Done — ${matched} matched, ${skipped} skipped.`)
+      setJobId(null)
+      onDone()
+    } else if (job.data?.status === 'FAILED') {
+      setMsg('Failed. Check your BGG username and try again.')
+      setJobId(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.data?.status])
+
+  if (!profile?.bgg_username) {
+    return (
+      <span className="text-xs text-gray-400">
+        Set your BoardGameGeek username in the Profile tab to enable.
+      </span>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          setMsg(null)
+          start
+            .mutateAsync({ kind })
+            .then((j) => setJobId(j.id))
+            .catch(() => setMsg('Could not start the import. Try again.'))
+        }}
+        disabled={running || start.isPending}
+        className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+      >
+        {running ? 'Working…' : label}
+      </button>
+      {msg && <span className="text-xs text-green-600">{msg}</span>}
+    </div>
+  )
+}
 
 const profileSchema = z.object({
   display_name: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
@@ -50,6 +115,8 @@ function ProfileEdit() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isDirty },
   } = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -62,6 +129,33 @@ function ProfileEdit() {
       avatar_url: '',
     },
   })
+
+  const locationValue = watch('location')
+  const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const skipNextSearch = useRef(false)
+
+  useEffect(() => {
+    if (skipNextSearch.current) {
+      skipNextSearch.current = false
+      return
+    }
+    const q = (locationValue ?? '').trim()
+    if (q.length < 3) {
+      setSuggestions([])
+      return
+    }
+    const handle = setTimeout(async () => {
+      try {
+        const res = await searchGeocode(q)
+        setSuggestions(res)
+        setShowSuggestions(true)
+      } catch {
+        setSuggestions([])
+      }
+    }, 350)
+    return () => clearTimeout(handle)
+  }, [locationValue])
 
   useEffect(() => {
     if (profile) {
@@ -120,35 +214,88 @@ function ProfileEdit() {
           </div>
         )}
 
-        {textFields.map(({ name, label, multiline }) => (
-          <div key={name}>
-            <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
-              {label}
-            </label>
-            {multiline ? (
-              <textarea
-                id={name}
-                rows={3}
-                {...register(name)}
-                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  errors[name] ? 'border-red-400' : 'border-gray-300'
-                }`}
-              />
-            ) : (
-              <input
-                id={name}
-                type="text"
-                {...register(name)}
-                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  errors[name] ? 'border-red-400' : 'border-gray-300'
-                }`}
-              />
-            )}
-            {errors[name] && (
-              <p className="mt-1 text-xs text-red-600">{errors[name]?.message}</p>
-            )}
-          </div>
-        ))}
+        {textFields.map(({ name, label, multiline }) => {
+          if (name === 'location') {
+            return (
+              <div key={name} className="relative">
+                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                  {label}
+                </label>
+                <input
+                  id="location"
+                  type="text"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="location-suggestions"
+                  aria-expanded={showSuggestions && suggestions.length > 0}
+                  {...register('location')}
+                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors.location ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <ul
+                    id="location-suggestions"
+                    role="listbox"
+                    className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+                  >
+                    {suggestions.map((s) => (
+                      <li key={`${s.display_name}-${s.lat}-${s.lon}`} role="option" aria-selected={false}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            skipNextSearch.current = true
+                            setValue('location', s.display_name, { shouldDirty: true })
+                            setShowSuggestions(false)
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50"
+                        >
+                          {s.display_name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {errors.location && (
+                  <p className="mt-1 text-xs text-red-600">{errors.location?.message}</p>
+                )}
+              </div>
+            )
+          }
+          return (
+            <div key={name}>
+              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+                {label}
+              </label>
+              {multiline ? (
+                <textarea
+                  id={name}
+                  rows={3}
+                  {...register(name)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+              ) : (
+                <input
+                  id={name}
+                  type="text"
+                  {...register(name)}
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  }`}
+                />
+              )}
+              {errors[name] && (
+                <p className="mt-1 text-xs text-red-600">{errors[name]?.message}</p>
+              )}
+            </div>
+          )
+        })}
 
         {/* Geocoded coordinates (read-only feedback) */}
         <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-500">
@@ -315,6 +462,14 @@ function WishlistSection() {
     <section>
       <h2 className="text-lg font-semibold text-gray-800 mb-3">Wishlist</h2>
 
+      <div className="mb-4">
+        <BggImportButton
+          kind="WISHLIST"
+          label="Sync BGG wishlist"
+          onDone={() => qc.invalidateQueries({ queryKey: ['wishlists'] })}
+        />
+      </div>
+
       <div className="flex flex-wrap gap-2 mb-4 max-w-lg">
         <input
           type="number"
@@ -369,14 +524,67 @@ function WishlistSection() {
   )
 }
 
+// ---- Ratings Section (review-only) ----
+function RatingsSection() {
+  const qc = useQueryClient()
+  const { data: ratings = [], isLoading } = useMyRatings()
+  const [filter, setFilter] = useState('')
+
+  const shown = ratings
+    .filter((r) => r.board_game_name.toLowerCase().includes(filter.trim().toLowerCase()))
+    .sort((a, b) => a.board_game_name.localeCompare(b.board_game_name))
+
+  return (
+    <section>
+      <h2 className="text-lg font-semibold text-gray-800 mb-3">Game Ratings</h2>
+
+      <div className="mb-4">
+        <BggImportButton
+          kind="RATINGS"
+          label="Import ratings from BGG"
+          onDone={() => qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })}
+        />
+      </div>
+
+      <input
+        type="text"
+        placeholder="Filter your rated games…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="w-full max-w-sm mb-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          {ratings.length === 0
+            ? 'No ratings yet. Import from BGG or rate games in the want builder.'
+            : 'No matches.'}
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md max-w-sm">
+          {shown.map((r) => (
+            <li key={r.id} className="flex items-center justify-between px-3 py-2 gap-2">
+              <span className="text-sm text-gray-800 truncate">{r.board_game_name}</span>
+              <span className="text-sm font-semibold text-indigo-600">{Number(r.value)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 // ---- Page ----
 export default function ProfilePage() {
-  const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist'>('profile')
+  const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist' | 'ratings'>('profile')
 
   const tabs: { key: typeof tab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
     { key: 'blocks', label: 'Blocked Users' },
     { key: 'wishlist', label: 'Wishlist' },
+    { key: 'ratings', label: 'Ratings' },
   ]
 
   return (
@@ -403,6 +611,7 @@ export default function ProfilePage() {
       {tab === 'profile' && <ProfileEdit />}
       {tab === 'blocks' && <BlocksSection />}
       {tab === 'wishlist' && <WishlistSection />}
+      {tab === 'ratings' && <RatingsSection />}
     </div>
   )
 }
