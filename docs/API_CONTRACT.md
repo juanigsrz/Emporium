@@ -105,6 +105,12 @@ swaps the whole set in one call. Wants are binary (no priority/tier/rank).
 | GET | `/api/events/{slug}/matches/{id}/result/` | full result JSON (see DATA_MODEL) |
 | GET | `/api/events/{slug}/matches/{id}/mine/` | current user's assignments only (**paginated**, like all list endpoints). Includes both give-side (`giver_username`==me) and receive-side (`receiver_username`==me) rows. |
 
+## BGG imports
+| method | path | notes |
+|---|---|---|
+| POST | `/api/bgg/imports/` | `{kind: WISHLIST\|RATINGS\|OWNED\|GEEKLIST, source_ref?, options?}`. Needs `profile.bgg_username` (except GEEKLIST → `source_ref`=geeklist id). Returns `{id,status,...}`; runs async (eager in dev). |
+| GET | `/api/bgg/imports/{id}/` | poll (mine only): `{id,kind,status,summary,result,log}`. |
+
 ## WebSocket (optional v1; FE polls if WS absent)
 - `ws://localhost:8000/ws/events/{slug}/`
 - Server → client messages:
