@@ -36,9 +36,9 @@ unique_together = (blocker, blocked). A blocked pair is never matched together.
 | field | type | notes |
 |---|---|---|
 | user | FK(User) | |
-| board_game | FK(BoardGame) | |
+| board_game_bgg_id | PositiveInteger | BGG id (still an int, not a FK — the F2 FK conversion was deferred; the wishlist sync writes this directly) |
 | note | char(200) blank | |
-unique_together = (user, board_game).
+unique_together = (user, board_game_bgg_id).
 
 ### GameRating (F2)
 | field | type | notes |
@@ -115,7 +115,7 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | photo_urls | JSON default list | v1: list of URLs, no binary upload |
 | status | choice | ACTIVE, RESERVED, TRADED, WITHDRAWN |
 | is_pending | bool default False | True when language or condition is blank; recomputed on PATCH |
-| import_source | char(40) blank | tag for import origin, e.g. `"bgg"`; empty for manual copies |
+| import_source | char(40) blank | tag for import origin: `"BGG_OWNED"` or `"BGG_GEEKLIST"`; empty for manual copies |
 
 `listing_code` generated server-side on create. A copy with `is_pending=True` cannot be entered into an event.
 

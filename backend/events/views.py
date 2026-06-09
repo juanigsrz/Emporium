@@ -380,6 +380,7 @@ class TradeEventViewSet(
         order_map = {
             "name": ["name"],
             "rank": ["rank", "name"],
+            "-average": ["-average", "name"],
             "-copies_count": ["-copies_count", "name"],
             "copies_count": ["copies_count", "name"],
         }

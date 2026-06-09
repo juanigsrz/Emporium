@@ -28,3 +28,11 @@ class ProfileGeocodeTest(APITestCase):
             r = self.client.patch("/api/profiles/me/", {"location": "Nowhere"}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(r.data["latitude"])
+
+    def test_clearing_location_clears_coords(self):
+        with patch("accounts.serializers.geocode", return_value=(-34.6, -58.4)):
+            self.client.patch("/api/profiles/me/", {"location": "Buenos Aires"}, format="json")
+        r = self.client.patch("/api/profiles/me/", {"location": ""}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.data["latitude"])
+        self.assertIsNone(r.data["longitude"])
