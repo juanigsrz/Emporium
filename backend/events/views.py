@@ -357,6 +357,19 @@ class TradeEventViewSet(
         if search:
             qs = qs.filter(name__icontains=search)
 
+        if request.query_params.get("wishlisted") in ("true", "1"):
+            from accounts.models import Wishlist
+            ids = Wishlist.objects.filter(user=request.user).values_list("board_game_bgg_id", flat=True)
+            qs = qs.filter(bgg_id__in=list(ids))
+
+        min_rating = request.query_params.get("min_rating")
+        if min_rating:
+            qs = qs.filter(average__gte=float(min_rating))
+
+        is_expansion = request.query_params.get("is_expansion")
+        if is_expansion in ("true", "false"):
+            qs = qs.filter(is_expansion=(is_expansion == "true"))
+
         ordering = request.query_params.get("ordering", "-copies_count")
         order_map = {
             "name": ["name"],
