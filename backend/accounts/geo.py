@@ -31,3 +31,24 @@ def geocode(address: str):
     if not data:
         return None
     return float(data[0]["lat"]), float(data[0]["lon"])
+
+
+def geocode_search(query: str, limit: int = 5):
+    """Return up to `limit` [{display_name, lat, lon}] suggestions, or []. Best-effort."""
+    if len(query.strip()) < 3:
+        return []
+    try:
+        resp = requests.get(
+            f"{settings.NOMINATIM_BASE_URL}/search",
+            params={"q": query, "format": "json", "limit": limit},
+            headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:  # noqa: BLE001 — geocoding is best-effort
+        return []
+    return [
+        {"display_name": d["display_name"], "lat": float(d["lat"]), "lon": float(d["lon"])}
+        for d in data
+    ]
