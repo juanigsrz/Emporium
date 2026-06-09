@@ -1,12 +1,10 @@
-import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
+import { Fragment, useMemo, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import { useEvent, useEventListings, useEventGames, EVENTS_KEYS } from '../../api/events'
+import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing } from '../../api/events'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
-import { useMyProfile } from '../../api/profiles'
-import { useStartImport, useImportJob } from '../../api/bgg'
 import { useMyRatings, ratingMap } from '../../api/ratings'
 
 import {
@@ -211,6 +209,8 @@ interface GameBrowseProps {
   editor: Editor
   myListings: EventListing[]
   username?: string
+  customWantGroups: WantGroup[]
+  moneyEnabled: boolean
 }
 
 function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
@@ -224,37 +224,6 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
   const [wishlisted, setWishlisted] = useState(false)
   const [minRating, setMinRating] = useState<number | ''>('')
   const [isExpansion, setIsExpansion] = useState<boolean | undefined>(undefined)
-
-  // BGG sync state
-  const [jobId, setJobId] = useState<number | null>(null)
-  const [syncMessage, setSyncMessage] = useState<string | null>(null)
-  const start = useStartImport()
-  const job = useImportJob(jobId)
-  const { data: profile } = useMyProfile()
-  const qc = useQueryClient()
-
-  const syncing = ['PENDING', 'RUNNING'].includes(job.data?.status ?? '')
-
-  // When the import job reaches DONE, invalidate games + profile query keys
-  useEffect(() => {
-    if (job.data?.status === 'DONE') {
-      const matched = job.data.summary?.matched ?? 0
-      const skipped = job.data.summary?.skipped ?? 0
-      setSyncMessage(`Synced! ${matched} matched, ${skipped} skipped.`)
-      setJobId(null)
-      qc.invalidateQueries({ queryKey: EVENTS_KEYS.games(slug) })
-      qc.invalidateQueries({ queryKey: ['profile', 'me'] })
-    } else if (job.data?.status === 'FAILED') {
-      setSyncMessage('Sync failed. Check your BGG username and try again.')
-      setJobId(null)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job.data?.status])
-
-  function handleSync() {
-    setSyncMessage(null)
-    start.mutateAsync({ kind: 'WISHLIST' }).then((j) => setJobId(j.id))
-  }
 
   // Game groups keyed by canonical id — drives the per-card "which of my items
   // offer for this want" panel (same model the grid uses, surfaced inline here).
@@ -355,35 +324,6 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
           <option value="true">Expansions only</option>
         </select>
 
-        <div className="ml-auto flex items-center gap-2">
-          {syncing && (
-            <span className="flex items-center gap-1 text-xs text-indigo-500">
-              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              Syncing…
-            </span>
-          )}
-          {syncMessage && !syncing && (
-            <span className="text-xs text-green-600">{syncMessage}</span>
-          )}
-          {profile?.bgg_username ? (
-            <button
-              type="button"
-              onClick={handleSync}
-              disabled={syncing || start.isPending}
-              className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
-            >
-              Sync BGG wishlist
-            </button>
-          ) : (
-            <span className="text-xs text-gray-400">
-              <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
-              {' '}to sync wishlist
-            </span>
-          )}
-        </div>
       </div>
 
       {games.length === 0 ? (
@@ -1210,7 +1150,7 @@ async function persistChanges(
 // MAIN PAGE
 // ============================================================
 
-type ViewMode = 'visual' | 'grid'
+type ViewMode = 'almanac' | 'visual' | 'grid'
 
 export default function MyWantsPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -1230,6 +1170,11 @@ export default function MyWantsPage() {
     [myListings, offerGroups, wantGroups, wishes]
   )
 
+  const customWantGroups = useMemo(() => {
+    const autoIds = new Set([...model.wantGroupByListing.values()].map((wg) => wg.id))
+    return wantGroups.filter((wg) => !autoIds.has(wg.id))
+  }, [wantGroups, model.wantGroupByListing])
+
   const { editor } = useEditor(model)
   const wantGameCount = useMemo(
     () => new Set(editor.targets.map((t) => t.gameId)).size,
@@ -1239,30 +1184,9 @@ export default function MyWantsPage() {
   const { data: ratingsData = [] } = useMyRatings()
   const rmap = useMemo(() => ratingMap(ratingsData), [ratingsData])
 
-  const [view, setView] = useState<ViewMode>('visual')
+  const [view, setView] = useState<ViewMode>('almanac')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  // Ratings import
-  const { data: profile } = useMyProfile()
-  const startImport = useStartImport()
-  const [ratingsJobId, setRatingsJobId] = useState<number | null>(null)
-  const [ratingsMsg, setRatingsMsg] = useState<string | null>(null)
-  const ratingsJob = useImportJob(ratingsJobId)
-  const ratingsImporting = ['PENDING', 'RUNNING'].includes(ratingsJob.data?.status ?? '')
-  useEffect(() => {
-    if (ratingsJob.data?.status === 'DONE') {
-      const matched = ratingsJob.data.summary?.matched ?? 0
-      const skipped = ratingsJob.data.summary?.skipped ?? 0
-      setRatingsMsg(`Ratings imported! ${matched} matched, ${skipped} skipped.`)
-      setRatingsJobId(null)
-      qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })
-    } else if (ratingsJob.data?.status === 'FAILED') {
-      setRatingsMsg('Import failed. Check your BGG username.')
-      setRatingsJobId(null)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ratingsJob.data?.status])
 
   const handleSave = useCallback(async () => {
     if (!slug) return
@@ -1362,7 +1286,7 @@ export default function MyWantsPage() {
           {/* Mode tabs */}
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
-              {(['visual', 'grid'] as ViewMode[]).map((m) => (
+              {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setView(m)}
@@ -1380,41 +1304,18 @@ export default function MyWantsPage() {
             </p>
           </div>
 
-          {/* Import ratings from BGG */}
-          <div className="flex flex-wrap items-center gap-2">
-            {profile?.bgg_username ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setRatingsMsg(null)
-                  startImport.mutateAsync({ kind: 'RATINGS' }).then((j) => setRatingsJobId(j.id))
-                }}
-                disabled={ratingsImporting || startImport.isPending}
-                className="rounded-md border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50"
-              >
-                {ratingsImporting ? 'Importing ratings…' : 'Import ratings from BGG'}
-              </button>
-            ) : (
-              <span className="text-xs text-gray-400">
-                <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
-                {' '}to import ratings
-              </span>
-            )}
-            {ratingsMsg && !ratingsImporting && (
-              <span className="text-xs text-green-600">{ratingsMsg}</span>
-            )}
-          </div>
-
-          <GameBrowse
-            slug={slug!}
-            editor={editor}
-            myListings={myListings}
-            username={user?.username}
-          />
-
-          {view === 'visual' ? (
-            <VisualMode myListings={myListings} editor={editor} />
-          ) : (
+          {view === 'almanac' && (
+            <GameBrowse
+              slug={slug!}
+              editor={editor}
+              myListings={myListings}
+              username={user?.username}
+              customWantGroups={customWantGroups}
+              moneyEnabled={event.money_enabled}
+            />
+          )}
+          {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
+          {view === 'grid' && (
             <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} />
           )}
         </>
