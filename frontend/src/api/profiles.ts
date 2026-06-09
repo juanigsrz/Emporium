@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { apiClient } from './client'
 
 export interface Profile {
@@ -28,6 +29,14 @@ export interface PatchProfilePayload {
 export async function fetchMyProfile(): Promise<Profile> {
   const { data } = await apiClient.get<Profile>('/profiles/me/')
   return data
+}
+
+export function useMyProfile() {
+  return useQuery({
+    queryKey: ['profile', 'me'],
+    queryFn: fetchMyProfile,
+    staleTime: 60_000,
+  })
 }
 
 export async function patchMyProfile(payload: PatchProfilePayload): Promise<Profile> {

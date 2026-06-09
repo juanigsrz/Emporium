@@ -1,10 +1,12 @@
-import { Fragment, useMemo, useState, useCallback } from 'react'
+import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import { useEvent, useEventListings, useEventGames } from '../../api/events'
+import { useEvent, useEventListings, useEventGames, EVENTS_KEYS } from '../../api/events'
 import type { EventListing } from '../../api/events'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
+import { useMyProfile } from '../../api/profiles'
+import { useStartImport, useImportJob } from '../../api/bgg'
 
 import {
   useOfferGroups,
@@ -207,6 +209,42 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [offerOpen, setOfferOpen] = useState<number | null>(null)
 
+  // Filter bar state
+  const [wishlisted, setWishlisted] = useState(false)
+  const [minRating, setMinRating] = useState<number | ''>('')
+  const [isExpansion, setIsExpansion] = useState<boolean | undefined>(undefined)
+
+  // BGG sync state
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const start = useStartImport()
+  const job = useImportJob(jobId)
+  const { data: profile } = useMyProfile()
+  const qc = useQueryClient()
+
+  const syncing = ['PENDING', 'RUNNING'].includes(job.data?.status ?? '')
+
+  // When the import job reaches DONE, invalidate games + profile query keys
+  useEffect(() => {
+    if (job.data?.status === 'DONE') {
+      const matched = job.data.summary?.matched ?? 0
+      const skipped = job.data.summary?.skipped ?? 0
+      setSyncMessage(`Synced! ${matched} matched, ${skipped} skipped.`)
+      setJobId(null)
+      qc.invalidateQueries({ queryKey: EVENTS_KEYS.games(slug) })
+      qc.invalidateQueries({ queryKey: ['profile', 'me'] })
+    } else if (job.data?.status === 'FAILED') {
+      setSyncMessage('Sync failed. Check your BGG username and try again.')
+      setJobId(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.data?.status])
+
+  function handleSync() {
+    setSyncMessage(null)
+    start.mutateAsync({ kind: 'WISHLIST' }).then((j) => setJobId(j.id))
+  }
+
   // Game groups keyed by canonical id — drives the per-card "which of my items
   // offer for this want" panel (same model the grid uses, surfaced inline here).
   const groupByGame = useMemo(() => {
@@ -220,6 +258,9 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
     ordering,
     page,
     page_size: BROWSE_PAGE_SIZE,
+    wishlisted: wishlisted || undefined,
+    min_rating: minRating !== '' ? minRating : undefined,
+    is_expansion: isExpansion,
   })
   const games = data?.results ?? []
   const count = data?.count ?? 0
@@ -245,7 +286,7 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setPage(1) }}
@@ -261,6 +302,77 @@ function GameBrowse({ slug, editor, myListings, username }: GameBrowseProps) {
           <option value="-copies_count">Most available</option>
           <option value="name">A–Z</option>
         </select>
+      </div>
+
+      {/* Filter bar */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-indigo-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700">
+          <input
+            type="checkbox"
+            checked={wishlisted}
+            onChange={(e) => { setWishlisted(e.target.checked); setPage(1) }}
+            className="h-3 w-3 rounded border-gray-300 text-indigo-600"
+          />
+          In my BGG wishlist
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-gray-500">
+          <span>Min rating</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            step={0.5}
+            value={minRating}
+            onChange={(e) => { setMinRating(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder="—"
+            className="w-14 rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+        </label>
+
+        <select
+          value={isExpansion == null ? '' : String(isExpansion)}
+          onChange={(e) => {
+            setIsExpansion(e.target.value === '' ? undefined : e.target.value === 'true')
+            setPage(1)
+          }}
+          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600"
+          aria-label="Expansion filter"
+        >
+          <option value="">Base games + expansions</option>
+          <option value="false">Base games only</option>
+          <option value="true">Expansions only</option>
+        </select>
+
+        <div className="ml-auto flex items-center gap-2">
+          {syncing && (
+            <span className="flex items-center gap-1 text-xs text-indigo-500">
+              <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Syncing…
+            </span>
+          )}
+          {syncMessage && !syncing && (
+            <span className="text-xs text-green-600">{syncMessage}</span>
+          )}
+          {profile?.bgg_username ? (
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing || start.isPending}
+              className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              Sync BGG wishlist
+            </button>
+          ) : (
+            <span className="text-xs text-gray-400">
+              <Link to="/profile" className="text-indigo-500 hover:underline">Set BGG username</Link>
+              {' '}to sync wishlist
+            </span>
+          )}
+        </div>
       </div>
 
       {games.length === 0 ? (

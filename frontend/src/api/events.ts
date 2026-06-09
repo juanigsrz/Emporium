@@ -164,6 +164,7 @@ export interface EventGame {
   name: string
   year_published: number | null
   rank: number | null
+  average: number | null
   image_url: string
   copies_count: number
 }
@@ -173,6 +174,9 @@ export interface EventGamesParams {
   ordering?: 'name' | 'rank' | '-copies_count' | 'copies_count'
   page?: number
   page_size?: number
+  wishlisted?: boolean
+  min_rating?: number
+  is_expansion?: boolean
 }
 
 export interface EventsListParams {
@@ -285,6 +289,9 @@ export async function fetchEventGames(
   if (params.ordering) p.ordering = params.ordering
   if (params.page && params.page > 1) p.page = String(params.page)
   if (params.page_size) p.page_size = String(params.page_size)
+  if (params.wishlisted != null) p.wishlisted = String(params.wishlisted)
+  if (params.min_rating != null) p.min_rating = String(params.min_rating)
+  if (params.is_expansion != null) p.is_expansion = String(params.is_expansion)
   const { data } = await apiClient.get<PaginatedResponse<EventGame>>(
     `/events/${slug}/games/`,
     { params: p }
