@@ -36,7 +36,6 @@ class GeocodeSearchFnTest(APITestCase):
         fake_resp = [{"display_name": "Paris, France", "lat": "48.85", "lon": "2.35"}]
         with patch("accounts.geo.requests.get") as mock_get:
             mock_get.return_value.json.return_value = fake_resp
-            mock_get.return_value.raise_for_status.return_value = None
             out = geocode_search("Paris")
         self.assertEqual(out, [{"display_name": "Paris, France", "lat": 48.85, "lon": 2.35}])
 
@@ -46,3 +45,9 @@ class GeocodeSearchFnTest(APITestCase):
             out = geocode_search("Pa")
         self.assertEqual(out, [])
         mock_get.assert_not_called()
+
+    def test_network_error_returns_empty(self):
+        from accounts.geo import geocode_search
+        with patch("accounts.geo.requests.get", side_effect=Exception("nominatim down")):
+            out = geocode_search("Paris")
+        self.assertEqual(out, [])
