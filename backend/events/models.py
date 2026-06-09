@@ -98,6 +98,10 @@ class TradeEvent(models.Model):
     # Textual configuration
     shipping_rules        = models.TextField(blank=True)
     regional_restrictions = models.TextField(blank=True)
+    require_location      = models.BooleanField(default=False)
+    center_latitude       = models.FloatField(null=True, blank=True)
+    center_longitude      = models.FloatField(null=True, blank=True)
+    max_distance_km       = models.PositiveIntegerField(null=True, blank=True)
     trade_policies        = models.TextField(blank=True)
 
     # Solver configuration
