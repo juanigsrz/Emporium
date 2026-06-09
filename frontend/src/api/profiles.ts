@@ -104,3 +104,17 @@ export async function createWishlistEntry(payload: CreateWishlistPayload): Promi
 export async function deleteWishlistEntry(id: number): Promise<void> {
   await apiClient.delete(`/wishlists/${id}/`)
 }
+
+// Geocode autocomplete
+export interface GeocodeSuggestion {
+  display_name: string
+  lat: number
+  lon: number
+}
+
+export async function searchGeocode(q: string): Promise<GeocodeSuggestion[]> {
+  const { data } = await apiClient.get<GeocodeSuggestion[]>('/geocode/search/', {
+    params: { q },
+  })
+  return data
+}
