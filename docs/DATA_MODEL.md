@@ -20,6 +20,9 @@ unless noted. PKs are auto `BigAutoField` unless stated. Enums use
 | bio | text blank | |
 | location | char(120) blank | free text |
 | region | char(64) blank | for regional restrictions |
+| latitude | float null | geocoded latitude |
+| longitude | float null | geocoded longitude |
+| max_trade_distance_km | posint null | self-imposed distance limit (km) |
 | avatar_url | url blank | v1: URL only |
 
 ### UserBlock
@@ -33,9 +36,17 @@ unique_together = (blocker, blocked). A blocked pair is never matched together.
 | field | type | notes |
 |---|---|---|
 | user | FK(User) | |
-| board_game | FK(BoardGame) | |
+| board_game_bgg_id | PositiveInteger | BGG id (still an int, not a FK — the F2 FK conversion was deferred; the wishlist sync writes this directly) |
 | note | char(200) blank | |
-unique_together = (user, board_game).
+unique_together = (user, board_game_bgg_id).
+
+### GameRating (F2)
+| field | type | notes |
+|---|---|---|
+| user | FK(User, related=game_ratings) | |
+| board_game | FK(BoardGame, related=ratings) | |
+| value | decimal(3,1) (1–10) | personal rating |
+unique_together = (user, board_game). POST is an upsert — re-posting updates `value`.
 
 ### TradeRating
 | field | type | notes |
@@ -103,8 +114,10 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | pickup_available | bool default False | |
 | photo_urls | JSON default list | v1: list of URLs, no binary upload |
 | status | choice | ACTIVE, RESERVED, TRADED, WITHDRAWN |
+| is_pending | bool default False | True when language or condition is blank; recomputed on PATCH |
+| import_source | char(40) blank | tag for import origin: `"BGG_OWNED"` or `"BGG_GEEKLIST"`; empty for manual copies |
 
-`listing_code` generated server-side on create.
+`listing_code` generated server-side on create. A copy with `is_pending=True` cannot be entered into an event.
 
 ---
 
@@ -125,6 +138,10 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | wantlist_close_at | datetime null | |
 | shipping_rules | text blank | |
 | regional_restrictions | text blank | |
+| require_location | bool default False | gate: participants must have lat/lng |
+| center_latitude | float null | event location center latitude |
+| center_longitude | float null | event location center longitude |
+| max_distance_km | posint null | max haversine distance from center (null = no gate) |
 | trade_policies | text blank | |
 | algorithm_settings | JSON default dict | solver knobs |
 | money_enabled | bool default False | organizer allows money in trades |

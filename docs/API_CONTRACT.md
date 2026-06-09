@@ -31,11 +31,13 @@ path/shape without updating this file.
 ## Profiles / social (accounts)
 | method | path | notes |
 |---|---|---|
-| GET/PATCH | `/api/profiles/me/` | current user's Profile |
+| GET/PATCH | `/api/profiles/me/` | current user's Profile. Read-only: `latitude`, `longitude` (floats or null, geocoded from `location` on save). Writable: `max_trade_distance_km` (int or null). |
 | GET | `/api/profiles/{username}/` | public profile + ratings summary |
 | GET/POST/DELETE | `/api/blocks/` | list/create/delete `UserBlock` (mine). POST body `{"blocked": "<username>"}`; item shape `{id, blocker, blocked, created}` |
 | GET/POST/DELETE | `/api/wishlists/` | general wishlist (mine), body/filter `board_game_bgg_id` (int; becomes FK `board_game` in F2), `note` |
 | GET/POST | `/api/ratings/` | trade ratings; body/filter `event_id` (int; becomes FK `event` in F4), `ratee` (username), `score`, `comment` |
+| GET/POST | `/api/game-ratings/` | personal game ratings (mine only). POST = upsert on (user, board_game). Body: `{board_game: <bgg_id>, value: "8.5"}` (1–10, one decimal). Returns `{id, board_game, board_game_name, value, created, updated}`. |
+| DELETE | `/api/game-ratings/{id}/` | delete own game rating |
 
 ## Catalog (games)
 | method | path | notes |
@@ -58,7 +60,7 @@ Game list item:
 | POST | `/api/copies/` | create with `board_game=<bgg_id>` (owner = request.user). Returns full copy + `listing_code`. |
 | GET/PATCH/DELETE | `/api/copies/{id}/` | owner-only write. |
 
-Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`.
+Copy object shape (key display fields): `owner` = user **id** (int), `owner_username` = username **string** (use this for display/links); `board_game` = **bgg_id** (int), `board_game_name` = name string; `listing_code` = `C-XXXXXX`. `is_pending` (bool, read-only): `true` when the copy is missing `language` and/or `condition` (set automatically on PATCH when pending; cleared once both fields are present). `import_source` (str, read-only): tag identifying the import origin (`"BGG_OWNED"` or `"BGG_GEEKLIST"`; empty for manually created copies). A pending copy cannot be added to an event — `POST /listings/` returns **400** with `{"copy": "..."}` if `is_pending` is true.
 
 ## Events
 | method | path | notes |
@@ -68,18 +70,18 @@ Copy object shape (key display fields): `owner` = user **id** (int), `owner_user
 | GET/PATCH/DELETE | `/api/events/{slug}/` | organizer-only write; serializer includes `allowed_transitions` |
 | POST | `/api/events/{slug}/transition/` | `{to: "WANTLIST_OPEN"}` organizer-only, validated |
 | GET | `/api/events/{slug}/participants/` | list participations |
-| POST | `/api/events/{slug}/join/` | join (creates EventParticipation) |
+| POST | `/api/events/{slug}/join/` | join (creates EventParticipation). **400** if `require_location` is set and user has no location on their profile, or if they are outside `max_distance_km` from the event centre. |
 | DELETE | `/api/events/{slug}/leave/` | leave |
 | GET/POST | `/api/events/{slug}/listings/` | EventListings; POST `{copy}` adds own copy. `?user=&board_game=` |
 | DELETE | `/api/events/{slug}/listings/{id}/` | remove own listing |
-| GET | `/api/events/{slug}/games/` | **event-scoped catalog**: distinct games with active copies in this event. `?search=` (name), `?ordering=name\|rank\|-copies_count` (default `-copies_count`). Paginated. Powers the want-list builder (global catalog browsing was removed — only games tradeable here matter). |
+| GET | `/api/events/{slug}/games/` | **event-scoped catalog**: distinct games with active copies in this event. `?search=` (name), `?ordering=name\|rank\|-average\|-copies_count` (default `-copies_count`), `?wishlisted=true` (only games in the requesting user's wishlist), `?min_rating=<float>` (games with `average >= value`), `?is_expansion=true\|false`. Paginated. Powers the want-list builder (global catalog browsing was removed — only games tradeable here matter). |
 | GET | `/api/events/{slug}/wants-export/` | organizer-only; `text/plain` wants file for the external solver. Format follows `matching_mode`: `ONETOONE` → OLWLG (`(user) CODE : wishlist`); `XTOY` → `(NforM) give -> take`. Item token = `listing_code`. |
 
-EventGame item: `{bgg_id, name, year_published, rank, image_url, copies_count}` where `copies_count` = active EventListings of that game **in this event**.
+EventGame item: `{bgg_id, name, year_published, rank, average, image_url, copies_count}` where `copies_count` = active EventListings of that game **in this event**; `average` is the BGG user average (float, nullable).
 
 Shapes (pinned from BE):
-- **TradeEvent**: `organizer` = user **id** (int), `organizer_username` = string (use for display/links). Date fields are only `submissions_open_at`, `submissions_close_at`, `wantlist_close_at` (no `wantlist_open_at`/`matching_at`/`results_at`). Plus `allowed_transitions: string[]`, `participants_count`, `is_organizer`, `is_participant`. `matching_mode`: `"ONETOONE"` (default, online ftm solver) | `"XTOY"` (local solver, upload) — organizer-writable, frozen once status reaches `MATCHING`. `money_enabled: bool` + `max_money_per_user` (decimal string or `null` = no cap) — organizer-writable money config.
-- **EventListing**: `{id, listing_code, board_game_name, board_game_id, copy_id, copy_owner_id, copy_owner_username, copy_condition, copy_language, active, created}`. (Write: POST `{copy: <copy_id>}`.) `copy_condition`/`copy_language` are lightweight distinguishers; full copy detail is on `GET /copies/{id}/`.
+- **TradeEvent**: `organizer` = user **id** (int), `organizer_username` = string (use for display/links). Date fields are only `submissions_open_at`, `submissions_close_at`, `wantlist_close_at` (no `wantlist_open_at`/`matching_at`/`results_at`). Plus `allowed_transitions: string[]`, `participants_count`, `is_organizer`, `is_participant`. `matching_mode`: `"ONETOONE"` (default, online ftm solver) | `"XTOY"` (local solver, upload) — organizer-writable, frozen once status reaches `MATCHING`. `money_enabled: bool` + `max_money_per_user` (decimal string or `null` = no cap) — organizer-writable money config. Location gate fields (organizer-writable): `require_location: bool` (default `false`), `center_latitude: float|null`, `center_longitude: float|null`, `max_distance_km: float|null`. When `require_location` is `true`, joining users must have a profile location set; if `center_latitude/longitude` and `max_distance_km` are also set, the user must be within that radius of the event centre.
+- **EventListing**: `{id, listing_code, board_game_name, board_game_id, copy_id, copy_owner_id, copy_owner_username, copy_condition, copy_language, owner_too_far, active, created}`. (Write: POST `{copy: <copy_id>}`.) `copy_condition`/`copy_language` are lightweight distinguishers; full copy detail is on `GET /copies/{id}/`. `owner_too_far` (bool, always present): `true` when the requesting user has a `max_trade_distance_km` set on their profile and the copy owner's location exceeds that radius from the requester; `false` otherwise (including when the requester has no distance limit or either party has no coordinates).
 - **EventParticipant**: `{user: <id>, username, region, shipping_pref, max_spend, created}`. `max_spend` (decimal string) is the user's money budget; set it by POSTing `{max_spend}` to `/join/` (ignored unless `money_enabled`; rejected if it exceeds `max_money_per_user`).
 
 ## Trades (offer/want groups + wishes) — all event-scoped, mine by default
@@ -104,6 +106,12 @@ swaps the whole set in one call. Wants are binary (no priority/tier/rank).
 | GET | `/api/events/{slug}/matches/{id}/` | run detail incl. `summary`, `log`, `status` |
 | GET | `/api/events/{slug}/matches/{id}/result/` | full result JSON (see DATA_MODEL) |
 | GET | `/api/events/{slug}/matches/{id}/mine/` | current user's assignments only (**paginated**, like all list endpoints). Includes both give-side (`giver_username`==me) and receive-side (`receiver_username`==me) rows. |
+
+## BGG imports
+| method | path | notes |
+|---|---|---|
+| POST | `/api/bgg/imports/` | `{kind: WISHLIST\|RATINGS\|OWNED\|GEEKLIST, source_ref?, options?}`. Needs `profile.bgg_username` (except GEEKLIST → `source_ref`=geeklist id). Returns `{id,status,...}`; runs async (eager in dev). |
+| GET | `/api/bgg/imports/{id}/` | poll (mine only): `{id,kind,status,summary,result,log}`. |
 
 ## WebSocket (optional v1; FE polls if WS absent)
 - `ws://localhost:8000/ws/events/{slug}/`

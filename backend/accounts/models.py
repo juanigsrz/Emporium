@@ -35,6 +35,9 @@ class Profile(models.Model):
     bio = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
     region = models.CharField(max_length=64, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    max_trade_distance_km = models.PositiveIntegerField(null=True, blank=True)
     avatar_url = models.URLField(blank=True)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -97,6 +100,35 @@ class Wishlist(models.Model):
 
     def __str__(self):
         return f"Wishlist({self.user}, bgg_id={self.board_game_bgg_id})"
+
+
+class GameRating(models.Model):
+    """A user's personal rating (1–10) for a canonical game."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="game_ratings",
+    )
+    board_game = models.ForeignKey(
+        "catalog.BoardGame",
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    value = models.DecimalField(
+        max_digits=3,
+        decimal_places=1,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+    )
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("user", "board_game")]
+        ordering = ["-updated"]
+
+    def __str__(self):
+        return f"GameRating({self.user}, bgg_id={self.board_game_id}, value={self.value})"
 
 
 class TradeRating(models.Model):

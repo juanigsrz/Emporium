@@ -428,6 +428,7 @@ function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
 function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProps) {
   const { data: groups = [], isLoading } = useWantGroups(slug)
   const createGroup = useCreateWantGroup()
+  const patchGroup = usePatchWantGroup()
   const deleteGroup = useDeleteWantGroup()
 
   const [showForm, setShowForm] = useState(false)
@@ -480,6 +481,14 @@ function WantGroupsPanel({ slug, myListings, moneyEnabled }: WantGroupsPanelProp
               }
             }}
             isDeleting={deleteGroup.isPending}
+            onToggleDuplicateProtection={async (value) => {
+              setError(null)
+              try {
+                await patchGroup.mutateAsync({ slug, id: group.id, payload: { duplicate_protection: value } })
+              } catch (e) {
+                setError(extractErrorMsg(e))
+              }
+            }}
           />
         )
       )}
@@ -521,9 +530,10 @@ interface WantGroupCardProps {
   onEdit: () => void
   onDelete: () => void
   isDeleting: boolean
+  onToggleDuplicateProtection: (value: boolean) => void
 }
 
-function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardProps) {
+function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateProtection }: WantGroupCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -568,6 +578,16 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting }: WantGroupCardPro
           )}
         </div>
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+        <input
+          type="checkbox"
+          checked={group.duplicate_protection}
+          onChange={(e) => onToggleDuplicateProtection(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+        />
+        Duplication-protected (never award more than one copy of the same game)
+      </label>
 
       {group.items.length === 0 ? (
         <p className="text-xs text-gray-400 italic">No targets yet.</p>

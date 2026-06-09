@@ -22,6 +22,7 @@ const profileSchema = z.object({
   location: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
   region: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
   avatar_url: z.string().url('Enter a valid URL').optional().or(z.literal('')),
+  max_trade_distance_km: z.string().optional(),
 })
 
 type ProfileFormValues = z.infer<typeof profileSchema>
@@ -71,6 +72,9 @@ function ProfileEdit() {
         location: profile.location ?? '',
         region: profile.region ?? '',
         avatar_url: profile.avatar_url ?? '',
+        max_trade_distance_km: profile.max_trade_distance_km != null
+          ? String(profile.max_trade_distance_km)
+          : '',
       })
     }
   }, [profile, reset])
@@ -79,10 +83,20 @@ function ProfileEdit() {
   if (error) return <p className="text-sm text-red-600">Failed to load profile.</p>
 
   const onSubmit = (values: ProfileFormValues) => {
-    mutation.mutate(values as PatchProfilePayload)
+    const distRaw = values.max_trade_distance_km
+    const dist = distRaw && distRaw.trim() !== '' ? parseInt(distRaw, 10) : null
+    mutation.mutate({
+      display_name: values.display_name,
+      bgg_username: values.bgg_username,
+      bio: values.bio,
+      location: values.location,
+      region: values.region,
+      avatar_url: values.avatar_url,
+      max_trade_distance_km: dist,
+    })
   }
 
-  const fields: { name: keyof ProfileFormValues; label: string; multiline?: boolean }[] = [
+  const textFields: { name: keyof ProfileFormValues; label: string; multiline?: boolean }[] = [
     { name: 'display_name', label: 'Display name' },
     { name: 'bgg_username', label: 'BoardGameGeek username' },
     { name: 'bio', label: 'Bio', multiline: true },
@@ -106,7 +120,7 @@ function ProfileEdit() {
           </div>
         )}
 
-        {fields.map(({ name, label, multiline }) => (
+        {textFields.map(({ name, label, multiline }) => (
           <div key={name}>
             <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
               {label}
@@ -135,6 +149,33 @@ function ProfileEdit() {
             )}
           </div>
         ))}
+
+        {/* Geocoded coordinates (read-only feedback) */}
+        <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-500">
+          {profile?.latitude != null && profile?.longitude != null ? (
+            <span>
+              Geocoded: {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
+            </span>
+          ) : (
+            <span>Location not geocoded yet — save a location to resolve coordinates.</span>
+          )}
+        </div>
+
+        {/* Trade distance limit */}
+        <div>
+          <label htmlFor="max_trade_distance_km" className="block text-sm font-medium text-gray-700 mb-1">
+            Forbid trades farther than (km)
+          </label>
+          <input
+            id="max_trade_distance_km"
+            type="number"
+            min={1}
+            step={1}
+            placeholder="Leave blank for no limit"
+            {...register('max_trade_distance_km')}
+            className="w-full sm:max-w-[12rem] rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
 
         <button
           type="submit"

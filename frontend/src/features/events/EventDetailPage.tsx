@@ -305,6 +305,10 @@ const editEventSchema = z.object({
   wantlist_close_at: z.string().optional(),
   money_enabled: z.boolean().optional(),
   max_money_per_user: z.string().optional(),
+  require_location: z.boolean().optional(),
+  center_latitude: z.string().optional(),
+  center_longitude: z.string().optional(),
+  max_distance_km: z.string().optional(),
 })
 
 type EditEventFormValues = z.infer<typeof editEventSchema>
@@ -342,9 +346,14 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       wantlist_close_at: toLocalDatetimeValue(event.wantlist_close_at),
       money_enabled: event.money_enabled,
       max_money_per_user: event.max_money_per_user ?? '',
+      require_location: event.require_location,
+      center_latitude: event.center_latitude != null ? String(event.center_latitude) : '',
+      center_longitude: event.center_longitude != null ? String(event.center_longitude) : '',
+      max_distance_km: event.max_distance_km != null ? String(event.max_distance_km) : '',
     },
   })
   const moneyEnabled = watch('money_enabled')
+  const requireLocation = watch('require_location')
 
   async function onSubmit(values: EditEventFormValues) {
     setServerError(null)
@@ -370,6 +379,10 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           max_money_per_user: values.money_enabled
             ? (values.max_money_per_user?.trim() || null)
             : null,
+          require_location: !!values.require_location,
+          center_latitude: values.center_latitude ? parseFloat(values.center_latitude) : null,
+          center_longitude: values.center_longitude ? parseFloat(values.center_longitude) : null,
+          max_distance_km: values.max_distance_km ? parseFloat(values.max_distance_km) : null,
         },
       })
       onClose()
@@ -480,6 +493,63 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                     {...register('max_money_per_user')}
                     className={`${inputCls(false)} sm:max-w-[12rem]`}
                   />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location gate</p>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  {...register('require_location')}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Require participants to have a geocoded location
+              </label>
+              {requireLocation && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400">
+                    Optionally restrict to a geographic radius (leave lat/lng blank to only require location, without radius filtering).
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Center latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g. -34.6"
+                        {...register('center_latitude')}
+                        className={inputCls(false)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Center longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g. -58.4"
+                        {...register('center_longitude')}
+                        className={inputCls(false)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Max distance (km, leave blank for no radius limit)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="e.g. 500"
+                      {...register('max_distance_km')}
+                      className={`${inputCls(!!errors.max_distance_km)} sm:max-w-[12rem]`}
+                    />
+                    {errors.max_distance_km && (
+                      <p className="mt-1 text-xs text-red-600">{errors.max_distance_km.message as string}</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
