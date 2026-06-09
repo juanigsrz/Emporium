@@ -35,6 +35,9 @@ class Profile(models.Model):
     bio = models.TextField(blank=True)
     location = models.CharField(max_length=120, blank=True)
     region = models.CharField(max_length=64, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    max_trade_distance_km = models.PositiveIntegerField(null=True, blank=True)
     avatar_url = models.URLField(blank=True)
 
     created = models.DateTimeField(auto_now_add=True)

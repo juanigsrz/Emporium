@@ -20,6 +20,9 @@ unless noted. PKs are auto `BigAutoField` unless stated. Enums use
 | bio | text blank | |
 | location | char(120) blank | free text |
 | region | char(64) blank | for regional restrictions |
+| latitude | float null | geocoded latitude |
+| longitude | float null | geocoded longitude |
+| max_trade_distance_km | posint null | self-imposed distance limit (km) |
 | avatar_url | url blank | v1: URL only |
 
 ### UserBlock
@@ -125,6 +128,10 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | wantlist_close_at | datetime null | |
 | shipping_rules | text blank | |
 | regional_restrictions | text blank | |
+| require_location | bool default False | gate: participants must have lat/lng |
+| center_latitude | float null | event location center latitude |
+| center_longitude | float null | event location center longitude |
+| max_distance_km | posint null | max haversine distance from center (null = no gate) |
 | trade_policies | text blank | |
 | algorithm_settings | JSON default dict | solver knobs |
 | money_enabled | bool default False | organizer allows money in trades |
