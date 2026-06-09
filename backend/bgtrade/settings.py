@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "events.apps.EventsConfig",
     "trades.apps.TradesConfig",
     "matching.apps.MatchingConfig",
+    "bgg.apps.BggConfig",
 ]
 
 MIDDLEWARE = [
@@ -237,3 +238,15 @@ SOLVER_URL = os.environ.get(
 )
 SOLVER_TIMEOUT = int(os.environ.get("SOLVER_TIMEOUT", "250"))
 MATCHING_USE_ONLINE_SOLVER = os.environ.get("MATCHING_USE_ONLINE_SOLVER", "") == "1"
+
+# ---------------------------------------------------------------------------
+# BGG scraping + geocoding
+# ---------------------------------------------------------------------------
+BGG_BASE_URL = os.environ.get("BGG_BASE_URL", "https://boardgamegeek.com")
+BGG_USER_AGENT = os.environ.get(
+    "BGG_USER_AGENT", "mathtrade-app/1.0 (+https://example.org; contact ops@example.org)"
+)
+BGG_REQUEST_DELAY = float(os.environ.get("BGG_REQUEST_DELAY", "1.0"))  # seconds between page fetches
+BGG_MAX_PAGES = int(os.environ.get("BGG_MAX_PAGES", "30"))
+NOMINATIM_BASE_URL = os.environ.get("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org")
+NOMINATIM_USER_AGENT = BGG_USER_AGENT
