@@ -2,11 +2,99 @@ import { useRef, useState, useEffect } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { logoutApi } from '../api/auth'
+import { useNotifications, useUnreadCount, useMarkAllRead } from '../api/notifications'
 
 const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/events', label: 'Events' },
 ]
+
+function relativeTime(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+// In-app notification bell: polls unread count, shows a dropdown of recent
+// notifications, and marks all read when opened. Rendered only for logged-in
+// users. Multiple instances (desktop + mobile) share the same React Query keys.
+function NotificationBell() {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
+  const { data: unread } = useUnreadCount(true)
+  const { data: list } = useNotifications(true)
+  const markAll = useMarkAllRead()
+
+  const unreadCount = unread ?? 0
+  const items = list?.results ?? []
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function toggle() {
+    const next = !open
+    setOpen(next)
+    if (next && unreadCount > 0) markAll.mutate()
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={toggle}
+        aria-label="Notifications"
+        aria-expanded={open}
+        className="relative flex h-9 w-9 items-center justify-center rounded-md text-indigo-100 transition-colors hover:bg-indigo-600"
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-[1.05rem] min-w-[1.05rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-50 mt-1 max-h-96 w-80 overflow-y-auto rounded-md bg-white py-1 shadow-lg ring-1 ring-black/10">
+          <div className="border-b border-gray-100 px-4 py-2 text-xs font-semibold text-gray-500">
+            Notifications
+          </div>
+          {items.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-gray-400">No notifications yet.</p>
+          ) : (
+            items.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  if (n.event_slug) navigate(`/events/${n.event_slug}`)
+                }}
+                className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${
+                  n.read ? 'text-gray-600' : 'bg-indigo-50/40 font-medium text-gray-900'
+                }`}
+              >
+                <span className="block">{n.message}</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400">{relativeTime(n.created)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function NavBar() {
   const [open, setOpen] = useState(false)
@@ -82,6 +170,8 @@ export default function NavBar() {
             ))}
 
             {user ? (
+              <>
+              <NotificationBell />
               <div className="relative ml-2" ref={menuRef}>
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
@@ -123,6 +213,7 @@ export default function NavBar() {
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <div className="flex items-center gap-1 ml-2">
                 <NavLink
@@ -153,9 +244,11 @@ export default function NavBar() {
             )}
           </nav>
 
-          {/* Hamburger (mobile) */}
+          {/* Bell + hamburger (mobile) */}
+          <div className="flex items-center gap-1 sm:hidden">
+          {user && <NotificationBell />}
           <button
-            className="sm:hidden p-2 rounded-md text-indigo-100 hover:bg-indigo-600 transition-colors"
+            className="p-2 rounded-md text-indigo-100 hover:bg-indigo-600 transition-colors"
             aria-label={open ? 'Close menu' : 'Open menu'}
             onClick={() => setOpen((v) => !v)}
           >
@@ -169,6 +262,7 @@ export default function NavBar() {
               </svg>
             )}
           </button>
+          </div>
         </div>
       </div>
 
