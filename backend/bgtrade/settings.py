@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "trades.apps.TradesConfig",
     "matching.apps.MatchingConfig",
     "bgg.apps.BggConfig",
+    "notifications.apps.NotificationsConfig",
 ]
 
 MIDDLEWARE = [
