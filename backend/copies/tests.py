@@ -31,7 +31,7 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from catalog.models import BoardGame
+from catalog.models import BoardGame, BoardGameVersion
 from catalog.tasks import import_boardgames_csv
 from copies.models import Copy
 
@@ -411,3 +411,19 @@ class CopyRetrieveTests(CopyTestBase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("count", resp.data)
         self.assertIn("results", resp.data)
+
+
+# ---------------------------------------------------------------------------
+# Copy.version FK tests
+# ---------------------------------------------------------------------------
+
+class CopyVersionFieldTest(CopyTestBase):
+    def test_copy_links_to_version(self):
+        version = BoardGameVersion.objects.create(
+            board_game=self.game1, bgg_version_id=416798, name="German", language="German"
+        )
+        copy = Copy.objects.create(
+            owner=self.user1, board_game=self.game1, version=version
+        )
+        self.assertEqual(copy.version, version)
+        self.assertEqual(version.copies.count(), 1)

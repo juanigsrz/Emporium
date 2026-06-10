@@ -77,6 +77,13 @@ class Copy(models.Model):
         on_delete=models.CASCADE,
         related_name="copies",  # MUST match Count("copies") in catalog/views.py
     )
+    version = models.ForeignKey(
+        "catalog.BoardGameVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copies",
+    )
 
     # Physical condition
     condition = models.CharField(
