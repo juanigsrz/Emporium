@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useEvent } from '../../api/events'
+import type { EventStatus } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
 import {
   useMatchRuns,
@@ -12,6 +13,8 @@ import {
   fetchWantsExport,
 } from '../../api/matching'
 import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
+import { useShipments, useUpdateShipment } from '../../api/shipping'
+import type { Shipment } from '../../api/shipping'
 
 // ---- helpers ----
 
@@ -732,25 +735,223 @@ function UnmatchedSection({ unmatched }: { unmatched: import('../../api/matching
   )
 }
 
+// ---- Shipping tab ----
+
+const SHIPMENT_STATUS_PILL: Record<Shipment['status'], string> = {
+  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
+  SENT: 'bg-violet-50 text-violet-700 border-violet-200',
+  RECEIVED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+
+function ShipmentStatusBadge({ status }: { status: Shipment['status'] }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${SHIPMENT_STATUS_PILL[status]}`}
+    >
+      {status}
+    </span>
+  )
+}
+
+function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
+  const { data: shipments = [], isLoading } = useShipments(slug)
+  const update = useUpdateShipment(slug)
+
+  const sending = shipments.filter((s) => s.my_role === 'sender')
+  const receiving = shipments.filter((s) => s.my_role === 'receiver')
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (shipments.length === 0) {
+    return <p className="text-sm text-gray-400">No shipments found for this event.</p>
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Sending */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
+          Sending ({sending.length})
+        </p>
+        {sending.length === 0 ? (
+          <p className="text-sm text-gray-400">Nothing to send.</p>
+        ) : (
+          sending.map((s) => (
+            <ShipmentSenderCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
+          ))
+        )}
+      </div>
+
+      {/* Receiving */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+          Receiving ({receiving.length})
+        </p>
+        {receiving.length === 0 ? (
+          <p className="text-sm text-gray-400">Nothing to receive.</p>
+        ) : (
+          receiving.map((s) => (
+            <ShipmentReceiverCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ShipmentSenderCard({
+  shipment: s,
+  readOnly,
+  onUpdate,
+}: {
+  shipment: Shipment
+  readOnly: boolean
+  onUpdate: ReturnType<typeof useUpdateShipment>
+}) {
+  const [shippingInfo, setShippingInfo] = useState(s.shipping_info)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleMarkSent() {
+    setError(null)
+    try {
+      await onUpdate.mutateAsync({ id: s.id, body: { status: 'SENT', shipping_info: shippingInfo } })
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
+          <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            to{' '}
+            <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
+              {s.receiver_username}
+            </Link>
+          </p>
+        </div>
+        <ShipmentStatusBadge status={s.status} />
+      </div>
+
+      {!readOnly && s.status === 'PENDING' && (
+        <div className="space-y-2 pt-1">
+          <input
+            type="text"
+            value={shippingInfo}
+            onChange={(e) => setShippingInfo(e.target.value)}
+            placeholder="Tracking number or shipping notes…"
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button
+            onClick={handleMarkSent}
+            disabled={onUpdate.isPending}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          >
+            {onUpdate.isPending ? 'Saving…' : 'Mark sent'}
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+
+      {s.status !== 'PENDING' && s.shipping_info && (
+        <p className="text-xs text-gray-500">
+          <span className="font-medium">Shipping info:</span> {s.shipping_info}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ShipmentReceiverCard({
+  shipment: s,
+  readOnly,
+  onUpdate,
+}: {
+  shipment: Shipment
+  readOnly: boolean
+  onUpdate: ReturnType<typeof useUpdateShipment>
+}) {
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleMarkReceived() {
+    setError(null)
+    try {
+      await onUpdate.mutateAsync({ id: s.id, body: { status: 'RECEIVED' } })
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
+          <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            from{' '}
+            <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">
+              {s.giver_username}
+            </Link>
+          </p>
+        </div>
+        <ShipmentStatusBadge status={s.status} />
+      </div>
+
+      {s.shipping_info && (
+        <p className="text-xs text-gray-500">
+          <span className="font-medium">Shipping info:</span> {s.shipping_info}
+        </p>
+      )}
+
+      {!readOnly && s.status === 'SENT' && (
+        <div className="pt-1">
+          <button
+            onClick={handleMarkReceived}
+            disabled={onUpdate.isPending}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+          >
+            {onUpdate.isPending ? 'Saving…' : 'Mark received'}
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ---- Run result view ----
 
-function RunResultView({ slug, run }: { slug: string; run: MatchRunDetail }) {
+function RunResultView({ slug, run, eventStatus }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus }) {
   const isDone = run.status === 'DONE'
   const { data: result, isLoading: resultLoading, isError: resultError } = useMatchResult(slug, run.id, isDone)
   const { data: mineData, isLoading: mineLoading } = useMyAssignments(slug, run.id, isDone)
   const { user } = useAuthStore()
   const currentUsername = user?.username ?? ''
 
-  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats'>('my-trades')
+  const showShipping = eventStatus === 'SHIPPING' || eventStatus === 'ARCHIVED'
+  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping'>('my-trades')
 
   if (!isDone) {
     return <LiveRunView slug={slug} runId={run.id} />
   }
 
-  const tabs = [
-    { id: 'my-trades' as const, label: 'My Trades' },
-    { id: 'cycles' as const, label: 'All Cycles' },
-    { id: 'stats' as const, label: 'Stats & Unmatched' },
+  const tabs: { id: typeof activeTab; label: string }[] = [
+    { id: 'my-trades', label: 'My Trades' },
+    { id: 'cycles', label: 'All Cycles' },
+    { id: 'stats', label: 'Stats & Unmatched' },
+    ...(showShipping ? [{ id: 'shipping' as const, label: 'Shipping' }] : []),
   ]
 
   return (
@@ -823,6 +1024,10 @@ function RunResultView({ slug, run }: { slug: string; run: MatchRunDetail }) {
               </>
             )}
           </div>
+        )}
+
+        {activeTab === 'shipping' && (
+          <ShippingTab slug={slug} readOnly={eventStatus === 'ARCHIVED'} />
         )}
       </div>
     </div>
@@ -979,7 +1184,7 @@ export default function MatchRunPage() {
               <p className="text-sm text-gray-400">Select a run to view details.</p>
             </div>
           ) : activeRun ? (
-            <RunResultView slug={slug!} run={activeRun} />
+            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} />
           ) : (
             <div className="space-y-3 animate-pulse">
               <div className="h-8 w-1/3 bg-gray-100 rounded" />
