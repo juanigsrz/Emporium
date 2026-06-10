@@ -134,12 +134,14 @@ function ProfileEdit() {
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const skipNextSearch = useRef(false)
+  const pickedCoords = useRef<{ lat: number; lon: number } | null>(null)
 
   useEffect(() => {
     if (skipNextSearch.current) {
       skipNextSearch.current = false
       return
     }
+    pickedCoords.current = null
     const q = (locationValue ?? '').trim()
     if (q.length < 3) {
       setSuggestions([])
@@ -187,6 +189,7 @@ function ProfileEdit() {
       region: values.region,
       avatar_url: values.avatar_url,
       max_trade_distance_km: dist,
+      ...(pickedCoords.current ? { latitude: pickedCoords.current.lat, longitude: pickedCoords.current.lon } : {}),
     })
   }
 
@@ -199,13 +202,19 @@ function ProfileEdit() {
     { name: 'avatar_url', label: 'Avatar URL' },
   ]
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const locationErr = (mutation.error as any)?.response?.data?.location
+  const saveErrorMsg = mutation.isError
+    ? (locationErr ? (Array.isArray(locationErr) ? locationErr[0] : locationErr) : 'Failed to save profile. Please try again.')
+    : null
+
   return (
     <section>
       <h2 className="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
-        {mutation.isError && (
+        {saveErrorMsg && (
           <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-            Failed to save profile. Please try again.
+            {saveErrorMsg}
           </div>
         )}
         {saveMsg && (
@@ -249,6 +258,7 @@ function ProfileEdit() {
                           onMouseDown={(e) => {
                             e.preventDefault()
                             skipNextSearch.current = true
+                            pickedCoords.current = { lat: s.lat, lon: s.lon }
                             setValue('location', s.display_name, { shouldDirty: true })
                             setShowSuggestions(false)
                           }}
