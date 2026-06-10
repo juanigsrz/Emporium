@@ -67,4 +67,7 @@ urlpatterns = [
 
     # BGG: import jobs (wishlist/ratings/owned/geeklist)
     path("api/", include("bgg.urls")),
+
+    # Notifications: list, mark-read, mark-all-read
+    path("api/", include("notifications.urls")),
 ]

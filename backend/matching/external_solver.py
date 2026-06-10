@@ -433,15 +433,16 @@ def parse_gurobi(output: str):
     return edges
 
 
-_CASH_LINE = re.compile(r"^(\S+):\s+\S+\s+->\s+(\S+)\s+\(")
+_CASH_LINE = re.compile(r"^(\S+):\s+\S+\s+->\s+(\S+)\s+\(\S+ pays \S+ \$(\d+)")
 
 
 def parse_gurobi_cash(output: str):
-    """gurobi `Cash Purchases:` section -> [(moved_code, buyer_username), ...].
+    """gurobi `Cash Purchases:` section -> [(moved_code, buyer_username, amount_cents), ...].
 
     Line form: `CODE: seller -> buyer  (buyer pays seller $N)`. The seller is the
     owner of CODE (resolved downstream); the buyer is named only here, so it must
     be carried out as a username (no listing code identifies the receiver).
+    Amount is in integer cents as emitted by the solver.
     """
     moves = []
     in_cash = False
@@ -456,7 +457,7 @@ def parse_gurobi_cash(output: str):
             continue
         m = _CASH_LINE.match(line)
         if m:
-            moves.append((m.group(1), m.group(2)))
+            moves.append((m.group(1), m.group(2), int(m.group(3))))
     return moves
 
 
@@ -522,23 +523,25 @@ def load_solution(match_run, raw_output: str):
     # Cash purchases (XTOY money mode): the buyer (receiver) is named only by
     # username in the `Cash Purchases:` section, so it can't be resolved via a
     # listing-code anchor like a swap. Resolve the buyer directly.
+    cash_by_listing = {}  # event_listing.id -> Decimal dollars
     if event.matching_mode == TradeEvent.MatchingMode.XTOY:
         cash_moves = parse_gurobi_cash(raw_output)
         if cash_moves:
             from django.contrib.auth import get_user_model
 
-            names = {bn for _, bn in cash_moves}
+            names = {bn for _, bn, _ in cash_moves}
             users_by_name = {
                 u.username: u
                 for u in get_user_model().objects.filter(username__in=names)
             }
-            for moved_code, buyer_username in cash_moves:
+            for moved_code, buyer_username, amount_cents in cash_moves:
                 moved_el = by_code.get(moved_code)
                 if moved_el is None:
                     raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
                 buyer = users_by_name.get(buyer_username)
                 if buyer is None:
                     raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
+                cash_by_listing[moved_el.id] = Decimal(amount_cents) / 100
                 resolved.append([moved_el, moved_el.copy.owner, buyer, None])
 
     # XTOY came back without groups -> recover connected components.
@@ -548,19 +551,21 @@ def load_solution(match_run, raw_output: str):
     # Best-effort: which of the receiver's active wishes this move satisfies.
     wish_index = _build_wish_index(event, by_game, by_id)
 
-    rows = []  # (moved_el, giver, receiver, cycle_id, wish_id)
+    rows = []  # (moved_el, giver, receiver, cycle_id, wish_id, cash_amount)
     for moved_el, giver, receiver, group in resolved:
         wid = _match_wish(wish_index, receiver.id, moved_el.copy.listing_code)
-        rows.append((moved_el, giver, receiver, (group or 0) + 1, wid))
+        amt = cash_by_listing.get(moved_el.id)
+        rows.append((moved_el, giver, receiver, (group or 0) + 1, wid, amt))
 
     cycles = defaultdict(list)
-    for moved_el, giver, receiver, cid, wid in rows:
+    for moved_el, giver, receiver, cid, wid, amt in rows:
         cycles[cid].append({
             "listing_code": moved_el.copy.listing_code,
             "board_game": moved_el.copy.board_game.name,
             "from_user": giver.username,
             "to_user": receiver.username,
             "wish_id": wid,
+            "cash_amount": str(amt) if amt is not None else None,
         })
     cycle_list = [
         {"id": cid, "length": len(steps), "steps": steps}
@@ -601,8 +606,9 @@ def load_solution(match_run, raw_output: str):
             receiver=receiver,
             wish_id=wid,
             cycle_id=cid,
+            cash_amount=amt,
         )
-        for moved_el, giver, receiver, cid, wid in rows
+        for moved_el, giver, receiver, cid, wid, amt in rows
     ])
 
     log = (
