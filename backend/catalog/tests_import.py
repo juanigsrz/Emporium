@@ -56,3 +56,53 @@ class ImportVersionsTest(TestCase):
     def test_missing_file_is_noop(self):
         result = import_versions("/nonexistent/versions.csv")
         self.assertEqual(result["imported"], 0)
+
+
+from catalog.tasks import import_enriched_metadata
+
+ENRICHED_HEADER = [
+    "id", "name", "yearpublished", "rank", "bayesaverage", "average",
+    "usersrated", "is_expansion", "abstracts_rank", "cgs_rank",
+    "childrensgames_rank", "familygames_rank", "partygames_rank",
+    "strategygames_rank", "thematic_rank", "wargames_rank",
+    "thumbnail", "minplayers", "maxplayers", "averageweight",
+    "languagedependence", "languagedependence_label",
+]
+
+
+def _write_enriched_csv(rows):
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    with os.fdopen(fd, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=ENRICHED_HEADER)
+        w.writeheader()
+        for r in rows:
+            full = {k: "" for k in ENRICHED_HEADER}
+            full.update(r)
+            w.writerow(full)
+    return path
+
+
+class ImportEnrichedTest(TestCase):
+    def test_updates_metadata_and_skips_missing(self):
+        game = BoardGame.objects.create(bgg_id=13, name="Catan", metadata={"designers": ["x"]})
+        path = _write_enriched_csv([
+            {"id": "13", "name": "Catan", "thumbnail": "https://x/t.png",
+             "minplayers": "3", "maxplayers": "4", "averageweight": "2.28",
+             "languagedependence": "2", "languagedependence_label": "Some text"},
+            {"id": "999", "name": "Orphan"},
+        ])
+        result = import_enriched_metadata(path)
+        os.unlink(path)
+        game.refresh_from_db()
+        self.assertEqual(game.metadata["thumbnail"], "https://x/t.png")
+        self.assertEqual(game.metadata["min_players"], 3)
+        self.assertEqual(game.metadata["max_players"], 4)
+        self.assertEqual(game.metadata["average_weight"], 2.28)
+        self.assertEqual(game.metadata["language_dependence"], 2)
+        self.assertEqual(game.metadata["language_dependence_label"], "Some text")
+        self.assertEqual(game.metadata["designers"], ["x"])  # preserved
+        self.assertEqual(result["skipped_missing_game"], 1)
+
+    def test_missing_file_is_noop(self):
+        result = import_enriched_metadata("/nonexistent/enriched.csv")
+        self.assertEqual(result["updated"], 0)
