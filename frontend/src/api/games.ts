@@ -15,6 +15,7 @@ export interface GameListItem {
   users_rated: number | null
   is_expansion: boolean
   image_url: string
+  thumbnail: string
   copies_count: number
 }
 

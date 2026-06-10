@@ -31,7 +31,7 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from catalog.models import BoardGame
+from catalog.models import BoardGame, BoardGameVersion
 from catalog.tasks import import_boardgames_csv
 from copies.models import Copy
 
@@ -411,3 +411,76 @@ class CopyRetrieveTests(CopyTestBase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("count", resp.data)
         self.assertIn("results", resp.data)
+
+
+# ---------------------------------------------------------------------------
+# Copy.version FK tests
+# ---------------------------------------------------------------------------
+
+class CopyVersionFieldTest(CopyTestBase):
+    def test_copy_links_to_version(self):
+        version = BoardGameVersion.objects.create(
+            board_game=self.game1, bgg_version_id=416798, name="German", language="German"
+        )
+        copy = Copy.objects.create(
+            owner=self.user1, board_game=self.game1, version=version
+        )
+        self.assertEqual(copy.version, version)
+        self.assertEqual(version.copies.count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Version input + derived language via API
+# ---------------------------------------------------------------------------
+
+class CopyVersionApiTest(CopyTestBase):
+    def setUp(self):
+        super().setUp()
+        self.version = BoardGameVersion.objects.create(
+            board_game=self.game1, bgg_version_id=416798, name="German", language="German"
+        )
+        self.blank_lang_version = BoardGameVersion.objects.create(
+            board_game=self.game1, bgg_version_id=500, name="Promo", language=""
+        )
+
+    def test_create_with_version_derives_language(self):
+        resp = self.client.post(
+            COPIES_URL,
+            {"board_game": 224517, "version": self.version.pk, "condition": "GOOD",
+             "language": "Klingon"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["language"], "German")
+        self.assertEqual(resp.data["version"], self.version.pk)
+
+    def test_create_with_blank_language_version_sets_unknown(self):
+        resp = self.client.post(
+            COPIES_URL,
+            {"board_game": 224517, "version": self.blank_lang_version.pk, "condition": "GOOD"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["language"], "Unknown")
+        self.assertEqual(resp.data["version"], self.blank_lang_version.pk)
+
+    def test_create_without_version_uses_unknown(self):
+        resp = self.client.post(
+            COPIES_URL, {"board_game": 224517, "condition": "GOOD"}, format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["language"], "Unknown")
+        unknown = BoardGameVersion.objects.get(board_game=self.game1, name="Unknown")
+        self.assertEqual(resp.data["version"], unknown.pk)
+
+    def test_create_rejects_version_from_other_game(self):
+        other_version = BoardGameVersion.objects.create(
+            board_game=self.game2, bgg_version_id=700, name="X", language="English"
+        )
+        resp = self.client.post(
+            COPIES_URL,
+            {"board_game": 224517, "version": other_version.pk, "condition": "GOOD"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("version", resp.data)

@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import { useEvent, useEventListings, useEventGames } from '../../api/events'
+import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
 import type { EventListing } from '../../api/events'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
@@ -459,19 +459,32 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
     [editor, myListings, groupByGame]
   )
 
-  function toggleWant(g: { bgg_id: number; name: string }) {
+  async function toggleWant(g: { bgg_id: number; name: string }) {
     const group = groupByGame.get(g.bgg_id)
     if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
-      // Already wanted (any-copy or specific copies) — clear every target for this game.
+      // Already wanted (any/specific) — clear every target for this game.
       myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
       return
     }
-    const key = gameTargetKey(g.bgg_id)
-    editor.addTarget({
-      key, type: 'BOARD_GAME', boardGameId: g.bgg_id, label: g.name,
-      gameId: g.bgg_id, gameName: g.name,
-    })
-    myListings.forEach((l) => editor.toggle(l.id, key, true))
+    // "Want any copy" = select every current copy explicitly (no BOARD_GAME target),
+    // so the per-copy checkboxes all light up and it persists as concrete copies.
+    let copies: EventListing[]
+    try {
+      const res = await fetchEventListings(slug, { board_game: g.bgg_id, page_size: 200 })
+      copies = res.results
+    } catch {
+      return
+    }
+    copies
+      .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
+      .forEach((c) => {
+        const key = listingTargetKey(c.id)
+        editor.addTarget({
+          key, type: 'LISTING', listingId: c.id, label: c.listing_code,
+          gameId: c.board_game_id, gameName: c.board_game_name,
+        })
+        myListings.forEach((l) => editor.toggle(l.id, key, true))
+      })
   }
 
   return (
@@ -554,8 +567,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
               >
                 <div className="flex gap-2 p-2">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100">
-                    {g.image_url ? (
-                      <img src={g.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    {(g.thumbnail || g.image_url) ? (
+                      <img src={g.thumbnail || g.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : null}
                   </div>
                   <div className="min-w-0">
@@ -717,25 +730,55 @@ interface GameCopiesProps {
 }
 
 function GameCopies({ slug, bggId, username, editor, myListings, selectable }: GameCopiesProps) {
-  const { data, isLoading } = useEventListings(slug, { board_game: bggId })
+  const { data, isLoading } = useEventListings(slug, { board_game: bggId, page_size: 200 })
   const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
   const others = all.filter((l) => l.copy_owner_username !== username)
   const ownCount = all.length - others.length
 
   const canSelect = !!(selectable && editor && myListings && myListings.length > 0)
+  // A copy counts as wanted if its specific LISTING target is on, OR a legacy
+  // "any copy" (BOARD_GAME) target is still on for this game — so seeded/any
+  // wishes light up every per-copy box (any = all copies selected).
+  const anyKey = gameTargetKey(bggId)
   const isCopyWanted = (listingId: number) =>
-    !!editor && !!myListings && myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
+    !!editor && !!myListings &&
+    myListings.some(
+      (ml) => editor.isOn(ml.id, listingTargetKey(listingId)) || editor.isOn(ml.id, anyKey)
+    )
 
   function toggleCopy(l: EventListing) {
     if (!editor || !myListings || l.owner_too_far) return
-    const key = listingTargetKey(l.id)
     const next = !isCopyWanted(l.id)
+    const otherSelectable = others.filter((o) => !o.owner_too_far)
+    // Act on the items already offering this game (preserve per-item refinement);
+    // if none offer it yet, this is a fresh want → apply to all my items.
+    const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
+    const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
+    const acting = offering.length ? offering : myListings
+
+    acting.forEach((ml) => {
+      // Materialize a legacy "any copy" want into explicit copies before editing,
+      // so toggling one box doesn't silently leave the any-target on.
+      if (editor!.isOn(ml.id, anyKey)) {
+        editor!.toggle(ml.id, anyKey, false)
+        otherSelectable.forEach((o) => {
+          const k = listingTargetKey(o.id)
+          editor!.addTarget({
+            key: k, type: 'LISTING', listingId: o.id, label: o.listing_code,
+            gameId: o.board_game_id, gameName: o.board_game_name,
+          })
+          editor!.toggle(ml.id, k, true)
+        })
+      }
+    })
+
+    const key = listingTargetKey(l.id)
     editor.addTarget({
       key, type: 'LISTING', listingId: l.id, label: l.listing_code,
       gameId: l.board_game_id, gameName: l.board_game_name,
     })
-    myListings.forEach((ml) => editor.toggle(ml.id, key, next))
+    acting.forEach((ml) => editor!.toggle(ml.id, key, next))
   }
 
   if (isLoading) return <p className="px-3 py-2 text-xs text-gray-400">Loading copies…</p>
@@ -1062,11 +1105,18 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
         return (
           <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900">
-                  {listing.board_game_name}
-                </p>
-                <p className="font-mono text-xs text-gray-400">{listing.listing_code}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
+                  {listing.board_game_thumbnail ? (
+                    <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  ) : null}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-gray-900">
+                    {listing.board_game_name}
+                  </p>
+                  <p className="font-mono text-xs text-gray-400">{listing.listing_code}</p>
+                </div>
               </div>
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
                 wants {myWants.length}

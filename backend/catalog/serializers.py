@@ -22,6 +22,7 @@ class BoardGameListSerializer(serializers.ModelSerializer):
     """Compact serializer for list / search results."""
 
     copies_count = serializers.IntegerField(read_only=True, default=0)
+    thumbnail = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardGame
@@ -34,8 +35,12 @@ class BoardGameListSerializer(serializers.ModelSerializer):
             "users_rated",
             "is_expansion",
             "image_url",
+            "thumbnail",
             "copies_count",
         ]
+
+    def get_thumbnail(self, obj):
+        return (obj.metadata or {}).get("thumbnail", "")
 
 
 class BoardGameDetailSerializer(serializers.ModelSerializer):
@@ -59,6 +64,10 @@ class BoardGameDetailSerializer(serializers.ModelSerializer):
     max_players = serializers.SerializerMethodField()
     min_playtime = serializers.SerializerMethodField()
     max_playtime = serializers.SerializerMethodField()
+    thumbnail = serializers.SerializerMethodField()
+    average_weight = serializers.SerializerMethodField()
+    language_dependence = serializers.SerializerMethodField()
+    language_dependence_label = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardGame
@@ -73,6 +82,10 @@ class BoardGameDetailSerializer(serializers.ModelSerializer):
             "is_expansion",
             "category_ranks",
             "image_url",
+            "thumbnail",
+            "average_weight",
+            "language_dependence",
+            "language_dependence_label",
             "copies_count",
             # Deferred placeholders
             "designers",
@@ -117,3 +130,15 @@ class BoardGameDetailSerializer(serializers.ModelSerializer):
 
     def get_max_playtime(self, obj):
         return self._meta(obj, "max_playtime", None)
+
+    def get_thumbnail(self, obj):
+        return self._meta(obj, "thumbnail", "")
+
+    def get_average_weight(self, obj):
+        return self._meta(obj, "average_weight", None)
+
+    def get_language_dependence(self, obj):
+        return self._meta(obj, "language_dependence", None)
+
+    def get_language_dependence_label(self, obj):
+        return self._meta(obj, "language_dependence_label", "")
