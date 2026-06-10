@@ -257,22 +257,19 @@ class UploadXToYTests(MatchingTestBase):
         return f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
 
     def test_upload_with_cash_purchase_creates_assignment(self):
-        # carol's brass (el_c1) is bought by bob for cash; bob already wants brass.
+        from decimal import Decimal
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
         c1 = self.copy_c1.listing_code
-        out = (
-            f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
-            f"\nCash Purchases:\n{c1}: carol -> bob  (bob pays carol $10)\n"
-            f"\nCash Summary:\n  bob: spent $10, earned $0, net $10 (cap $inf)\n"
-        )
+        out = (f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+               f"\nCash Purchases:\n{c1}: carol -> bob  (bob pays carol $1000)\n"
+               f"\nCash Summary:\n  bob: spent $1000, earned $0, net $1000 (cap $inf)\n")
         resp = self.client.post(upload_url(self.slug), data=out, content_type="text/plain")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         run = MatchRun.objects.get(pk=resp.data["id"])
-        # the cash move is loaded: carol gives her brass, bob receives it
         cash_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_c1)
         self.assertEqual(cash_row.giver, self.user_c)
         self.assertEqual(cash_row.receiver, self.user_b)
-        # the two swaps still load too -> 3 moves total
+        self.assertEqual(cash_row.cash_amount, Decimal("10.00"))
         self.assertEqual(TradeAssignment.objects.filter(match_run=run).count(), 3)
 
     def test_upload_creates_done_run_with_assignments(self):
