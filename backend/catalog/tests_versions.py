@@ -1,6 +1,7 @@
 from django.test import TestCase
 
 from catalog.models import BoardGame, BoardGameVersion
+from catalog.serializers import BoardGameDetailSerializer
 
 
 class BoardGameVersionModelTest(TestCase):
@@ -22,3 +23,21 @@ class BoardGameVersionModelTest(TestCase):
         self.assertEqual(u1.language, "Unknown")
         self.assertIsNone(u1.bgg_version_id)
         self.assertEqual(game.versions.count(), 1)
+
+
+class DetailEnrichmentFieldsTest(TestCase):
+    def test_serializer_exposes_metadata_enrichment(self):
+        game = BoardGame.objects.create(
+            bgg_id=13, name="Catan",
+            metadata={
+                "thumbnail": "https://x/thumb.png",
+                "min_players": 3, "max_players": 4, "average_weight": 2.28,
+                "language_dependence": 2, "language_dependence_label": "Some text",
+            },
+        )
+        data = BoardGameDetailSerializer(game).data
+        self.assertEqual(data["thumbnail"], "https://x/thumb.png")
+        self.assertEqual(data["average_weight"], 2.28)
+        self.assertEqual(data["language_dependence"], 2)
+        self.assertEqual(data["language_dependence_label"], "Some text")
+        self.assertEqual(data["min_players"], 3)
