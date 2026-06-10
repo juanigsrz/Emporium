@@ -14,6 +14,9 @@ Date: 2026-06-10
 ## Non-goals
 
 - No bulk CSV → DB importer (lazy per-game only).
+- This feature writes **only to the DB**. It does not touch the CSV scraper
+  (`enrich_bgg.py`) or its output files — that bulk script is a separate future
+  concern and is left untouched (no shared/extracted parser).
 - No new first-class columns on `BoardGame` (enrichment lives in `metadata`).
 - No backfill of `version` on legacy copies (we cannot know which edition).
 - Not populating designers/publishers/mechanics/categories on the game (those
@@ -96,28 +99,47 @@ def ensure_game_enriched(bgg_id: int) -> BoardGame:
 Behavior:
 1. `get_or_create` the `BoardGame` (minimal row with name from API if absent).
 2. If `metadata.get("synced_at")` → return as-is.
-3. Fetch `thing?id=<id>&stats=1&versions=1` with
+3. **Single-flight lock**: `cache.add("bgg:enrich:lock:{id}", 1, timeout=30)`.
+   If not acquired, another request is already fetching this game → return the
+   game un-enriched immediately (do not pile on a second BGG call). This is the
+   thundering-herd guard for the common case (many users opening the same
+   popular un-synced game at once).
+4. **Self-throttle** to `BGG_LAZY_FETCH_DELAY` (1.5s) minimum spacing between
+   BGG calls process-wide: read `cache.get("bgg:last_call")`, sleep the
+   remaining time (bounded ≤ delay), then set it. Keeps us from bursting BGG
+   when distinct games are fetched concurrently.
+5. Fetch `thing?id=<id>&stats=1&versions=1` with
    `Authorization: Bearer {settings.BGG_API_KEY}` (one request, short timeout,
    single retry on HTTP 429/503).
-4. Parse via shared `bgg/thing_parse.parse_things`.
-5. In a `transaction.atomic()`: write the metadata keys above, upsert
+6. Parse via `bgg/thing_parse.parse_things`.
+7. In a `transaction.atomic()`: write the metadata keys above, upsert
    `BoardGameVersion` rows for this game, set `metadata["synced_at"]`, save.
-6. On any API/parse error: log a warning, leave the game un-enriched, return it.
+8. On any API/parse error: log a warning, leave the game un-enriched, return it.
+9. Release the lock (in `finally`).
 
-### Parser sharing
+Note: `cache` is per-process LocMemCache in dev, so the lock/throttle are
+per-process. Adequate for dev/single-worker; a shared cache (Redis) makes them
+cluster-wide in prod. Enrichment is best-effort and one-time per game, so the
+worst case under multiple workers is a few duplicate first-fetches — harmless
+(upsert is idempotent).
 
-Extract the pure-stdlib parser out of `enrich_bgg.py` into
-`backend/bgg/thing_parse.py` (no Django imports): `parse_things`, `_langdep`,
-`_parse_version`, `_val`. Both consumers import it:
-- `bgg/enrich.py` imports `from bgg.thing_parse import parse_things`.
-- `enrich_bgg.py` inserts `backend/` on `sys.path` and imports the same module,
-  so it still runs with plain `python3` from the repo root (zero new deps).
+### Parser
+
+`backend/bgg/thing_parse.py` (new, pure-stdlib, no Django imports):
+`parse_things`, `_langdep`, `_parse_version`, `_val`. This is the Django app's
+own parser. `enrich_bgg.py` is **not** modified and keeps its own copy — the
+two paths are intentionally independent.
 
 ### HTTP client
 
 `bgg/thing_api.py::fetch_thing_xml(bgg_id) -> str` using `requests` (matches
 `bgg/client.py`), bearer auth from settings, short timeout, one retry on
 429/503. Raises on failure; `ensure_game_enriched` catches.
+
+### Settings
+
+`BGG_LAZY_FETCH_DELAY = float(os.environ.get("BGG_LAZY_FETCH_DELAY", "1.5"))`
+— min seconds between lazy BGG calls (self-throttle).
 
 ## API surface
 
@@ -168,7 +190,9 @@ Copy-create form:
 - `ensure_game_enriched`: mocked `fetch_thing_xml` →
   - happy path: metadata keys + version rows written, `synced_at` set, second
     call is a no-op (fetch not re-called);
-  - API-down: returns un-enriched game, no exception, `synced_at` absent.
+  - API-down: returns un-enriched game, no exception, `synced_at` absent;
+  - lock held (pre-set `bgg:enrich:lock:{id}` in cache): returns un-enriched,
+    `fetch_thing_xml` not called.
 - `GET /games/{id}/versions/`: triggers enrichment, returns versions.
 - `CopySerializer`: create without `version` → 400; create with mismatched
   `version` (wrong game) → 400; valid create derives `language` from version;
@@ -177,5 +201,3 @@ Copy-create form:
 ## Verification
 
 - Backend test suite green (existing 182 + new).
-- `enrich_bgg.py` still runs standalone after parser extraction (smoke: parse
-  fixture).
