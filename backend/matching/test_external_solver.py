@@ -224,12 +224,18 @@ class ParserTests(MatchingTestBase):
     def test_parse_gurobi_cash_extracts_moves(self):
         out = (
             "Cash Purchases:\n"
-            "C-C: carol -> bob  (bob pays carol $5)\n"
-            "C-D: dave -> eve  (eve pays dave $7)\n"
-            "\nCash Summary:\n  bob: spent $5, earned $0, net $5 (cap $inf)\n"
+            "C-C: carol -> bob  (bob pays carol $500)\n"
+            "C-D: dave -> eve  (eve pays dave $700)\n"
+            "\nCash Summary:\n  bob: spent $500, earned $0, net $500 (cap $inf)\n"
         )
         moves = external_solver.parse_gurobi_cash(out)
-        self.assertEqual(moves, [("C-C", "bob"), ("C-D", "eve")])
+        self.assertEqual(moves, [("C-C", "bob", 500), ("C-D", "eve", 700)])
+
+    def test_trade_assignment_has_cash_amount_field(self):
+        from matching.models import TradeAssignment
+        f = TradeAssignment._meta.get_field("cash_amount")
+        self.assertTrue(f.null)
+        self.assertEqual(f.decimal_places, 2)
 
 
 # ---------------------------------------------------------------------------
