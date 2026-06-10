@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 
-import { useEvent, useEventListings } from '../../api/events'
-import type { EventListing } from '../../api/events'
-import { useGamesList } from '../../api/games'
-import type { GameListItem } from '../../api/games'
+import { useEvent, useEventListings, useEventGames } from '../../api/events'
+import type { EventListing, EventGame } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
 
 import {
@@ -409,7 +407,7 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
 
 interface WantGroupsPanelProps {
   slug: string
-  myListings: EventListing[]
+  username: string
   moneyEnabled: boolean
   locked?: boolean
 }
@@ -431,7 +429,7 @@ function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
   return `listing-${item.event_listing}`
 }
 
-function WantGroupsPanel({ slug, myListings, moneyEnabled, locked }: WantGroupsPanelProps) {
+function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPanelProps) {
   const { data: groups = [], isLoading } = useWantGroups(slug)
   const createGroup = useCreateWantGroup()
   const patchGroup = usePatchWantGroup()
@@ -469,7 +467,7 @@ function WantGroupsPanel({ slug, myListings, moneyEnabled, locked }: WantGroupsP
             key={group.id}
             slug={slug}
             group={group}
-            myListings={myListings}
+            username={username}
             moneyEnabled={moneyEnabled}
             onClose={() => setEditingId(null)}
           />
@@ -503,7 +501,7 @@ function WantGroupsPanel({ slug, myListings, moneyEnabled, locked }: WantGroupsP
       {showForm && (
         <WantGroupEditor
           slug={slug}
-          myListings={myListings}
+          username={username}
           moneyEnabled={moneyEnabled}
           onClose={async (created) => {
             if (created) {
@@ -638,19 +636,137 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
 interface WantGroupEditorProps {
   slug: string
   group?: WantGroup
-  myListings: EventListing[]
+  username: string
   moneyEnabled: boolean
   onClose: (
-    created?: { name: string; min_receive: number; items: WantGroupItemPayload[] }
+    created?: { name: string; min_receive: number; duplicate_protection: boolean; items: WantGroupItemPayload[] }
   ) => void
   isCreating?: boolean
 }
 
-function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCreating }: WantGroupEditorProps) {
+// Sub-component: per-game copy picker (extracted so useEventListings is called unconditionally within it)
+interface GameCopyPickerProps {
+  slug: string
+  game: EventGame
+  username: string
+  existingItemIds: Set<string>
+  onCommit: (selections: { anycopy: boolean; listings: EventListing[] }) => void
+  onCancel: () => void
+}
+
+function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCancel }: GameCopyPickerProps) {
+  const { data: listingsData } = useEventListings(slug, { board_game: game.bgg_id })
+  const otherCopies = (listingsData?.results ?? []).filter(
+    (l) => l.copy_owner_username !== username
+  )
+
+  const [anyCopy, setAnyCopy] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
+
+  function toggleListing(id: number) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const bgKey = `bg-${game.bgg_id}`
+  const anyCopyAlreadyAdded = existingItemIds.has(bgKey)
+
+  const hasSelection = (anyCopy && !anyCopyAlreadyAdded) || checkedIds.size > 0
+
+  return (
+    <div className="rounded-md border border-purple-200 bg-purple-50 p-3 space-y-2">
+      <p className="text-xs font-semibold text-purple-700">
+        {game.name}
+        {game.year_published && <span className="ml-1 font-normal text-gray-500">({game.year_published})</span>}
+        {' '}— choose what to add:
+      </p>
+      <label className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
+        anyCopyAlreadyAdded
+          ? 'border-gray-200 bg-white text-gray-300 cursor-not-allowed'
+          : anyCopy
+          ? 'border-purple-400 bg-white text-purple-800'
+          : 'border-gray-200 bg-white text-gray-700 hover:border-purple-200'
+      }`}>
+        <input
+          type="checkbox"
+          checked={anyCopy}
+          disabled={anyCopyAlreadyAdded}
+          onChange={(e) => setAnyCopy(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
+        />
+        <span className="font-medium">Any copy</span>
+        <span className="text-xs text-purple-500 ml-1">(accept any trader's copy)</span>
+        {anyCopyAlreadyAdded && <span className="ml-auto text-xs text-gray-400">already added</span>}
+      </label>
+      {otherCopies.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500">Or specific copies from other traders:</p>
+          {otherCopies.map((listing) => {
+            const key = `listing-${listing.id}`
+            const alreadyAdded = existingItemIds.has(key)
+            return (
+              <label
+                key={listing.id}
+                className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
+                  alreadyAdded
+                    ? 'border-gray-200 bg-white text-gray-300 cursor-not-allowed'
+                    : checkedIds.has(listing.id)
+                    ? 'border-blue-400 bg-white text-blue-800'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checkedIds.has(listing.id)}
+                  disabled={alreadyAdded}
+                  onChange={() => toggleListing(listing.id)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                />
+                <span className="font-medium">{listing.board_game_name}</span>
+                <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
+                {listing.copy_condition && (
+                  <span className="text-xs text-gray-400">{listing.copy_condition}</span>
+                )}
+                {alreadyAdded && <span className="ml-auto text-xs text-gray-400">already added</span>}
+              </label>
+            )
+          })}
+        </div>
+      )}
+      {otherCopies.length === 0 && listingsData && (
+        <p className="text-xs text-gray-400 italic">No copies from other traders in this event.</p>
+      )}
+      <div className="flex gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onCommit({ anycopy: anyCopy && !anyCopyAlreadyAdded, listings: otherCopies.filter((l) => checkedIds.has(l.id)) })}
+          disabled={!hasSelection}
+          className="flex-1 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60 transition-colors"
+        >
+          Add to want group
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreating }: WantGroupEditorProps) {
   const patchGroup = usePatchWantGroup()
 
   const [name, setName] = useState(group?.name ?? '')
   const [minReceive, setMinReceive] = useState(String(group?.min_receive ?? 1))
+  const [dupProtect, setDupProtect] = useState(group?.duplicate_protection ?? false)
   const [items, setItems] = useState<DraftWantItem[]>(() =>
     (group?.items ?? []).map((i) => ({
       localId: makeDraftKey(i),
@@ -663,17 +779,20 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
     }))
   )
   const [gameSearch, setGameSearch] = useState('')
+  const [activeGame, setActiveGame] = useState<EventGame | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [duplicateWarn, setDuplicateWarn] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
 
-  // Search games for adding BOARD_GAME targets
-  const { data: gameResults } = useGamesList({
-    search: gameSearch,
-    page: 1,
+  // Search event-scoped games (only games with copies in this event)
+  const { data: gameResults } = useEventGames(slug, {
+    search: gameSearch.length >= 2 ? gameSearch : undefined,
+    page_size: 8,
   })
 
-  function addBoardGame(game: GameListItem) {
+  const existingItemIds = new Set(items.map((i) => i.localId))
+
+  function addBoardGame(game: EventGame) {
     const key = `bg-${game.bgg_id}`
     if (items.some((i) => i.localId === key)) {
       setDuplicateWarn(`"${game.name}" is already in this want group.`)
@@ -692,7 +811,6 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
         money_amount: '',
       },
     ])
-    setGameSearch('')
   }
 
   function addListing(listing: EventListing) {
@@ -714,6 +832,13 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
         money_amount: '',
       },
     ])
+  }
+
+  function handlePickerCommit(game: EventGame, sel: { anycopy: boolean; listings: EventListing[] }) {
+    if (sel.anycopy) addBoardGame(game)
+    for (const listing of sel.listings) addListing(listing)
+    setActiveGame(null)
+    setGameSearch('')
   }
 
   function removeItem(localId: string) {
@@ -751,12 +876,12 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
       const payloadItems = buildPayloadItems()
       if (isCreating) {
         // Signal to parent to create
-        onClose({ name: name.trim(), min_receive: mr, items: payloadItems })
+        onClose({ name: name.trim(), min_receive: mr, duplicate_protection: dupProtect, items: payloadItems })
       } else if (group) {
         await patchGroup.mutateAsync({
           slug,
           id: group.id,
-          payload: { name: name.trim(), min_receive: mr, items: payloadItems },
+          payload: { name: name.trim(), min_receive: mr, duplicate_protection: dupProtect, items: payloadItems },
         })
         onClose()
       }
@@ -792,6 +917,17 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
           />
         </div>
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-gray-600">
+        <input
+          type="checkbox"
+          checked={dupProtect}
+          onChange={(e) => setDupProtect(e.target.checked)}
+          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+        />
+        Protect against duplicates
+        <span className="text-gray-400">(don't receive more than one copy of the same game)</span>
+      </label>
 
       {(formError || duplicateWarn) && (
         <div className={`rounded-md px-3 py-2 text-xs ${formError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
@@ -854,75 +990,48 @@ function WantGroupEditor({ slug, group, myListings, moneyEnabled, onClose, isCre
         </div>
       </div>
 
-      {/* Add game target via search */}
+      {/* Add game target via event-scoped search */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-gray-700">Search game (any copy):</p>
+        <p className="text-xs font-medium text-gray-700">Search game in this event:</p>
         <input
           value={gameSearch}
-          onChange={(e) => setGameSearch(e.target.value)}
+          onChange={(e) => { setGameSearch(e.target.value); setActiveGame(null) }}
           placeholder="Type a game name…"
           className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
-        {gameSearch.length >= 2 && gameResults && gameResults.results.length > 0 && (
+        {!activeGame && gameSearch.length >= 2 && gameResults && gameResults.results.length > 0 && (
           <div className="rounded-md border border-gray-200 bg-white divide-y divide-gray-50 max-h-40 overflow-y-auto shadow-sm">
-            {gameResults.results.slice(0, 8).map((game) => {
-              const alreadyAdded = items.some((i) => i.localId === `bg-${game.bgg_id}`)
-              return (
-                <button
-                  key={game.bgg_id}
-                  type="button"
-                  onClick={() => addBoardGame(game)}
-                  disabled={alreadyAdded}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                    alreadyAdded
-                      ? 'text-gray-300 cursor-not-allowed'
-                      : 'hover:bg-purple-50 text-gray-700'
-                  }`}
-                >
-                  <span className="font-medium">{game.name}</span>
-                  {game.year_published && (
-                    <span className="ml-1 text-xs text-gray-400">({game.year_published})</span>
-                  )}
-                  {alreadyAdded && <span className="ml-2 text-xs text-gray-400">already added</span>}
-                </button>
-              )
-            })}
+            {gameResults.results.map((game) => (
+              <button
+                key={game.bgg_id}
+                type="button"
+                onClick={() => setActiveGame(game)}
+                className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-purple-50 text-gray-700"
+              >
+                <span className="font-medium">{game.name}</span>
+                {game.year_published && (
+                  <span className="ml-1 text-xs text-gray-400">({game.year_published})</span>
+                )}
+                <span className="ml-2 text-xs text-gray-400">{game.copies_count} {game.copies_count === 1 ? 'copy' : 'copies'}</span>
+              </button>
+            ))}
           </div>
         )}
-        {gameSearch.length >= 2 && gameResults?.results.length === 0 && (
-          <p className="text-xs text-gray-400">No games found.</p>
+        {!activeGame && gameSearch.length >= 2 && gameResults?.results.length === 0 && (
+          <p className="text-xs text-gray-400">No games found in this event.</p>
+        )}
+        {activeGame && (
+          <GameCopyPicker
+            key={activeGame.bgg_id}
+            slug={slug}
+            game={activeGame}
+            username={username}
+            existingItemIds={existingItemIds}
+            onCommit={(sel) => handlePickerCommit(activeGame, sel)}
+            onCancel={() => { setActiveGame(null); setGameSearch('') }}
+          />
         )}
       </div>
-
-      {/* Add specific listing target */}
-      {myListings.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-gray-700">
-            Or add a specific listing from this event:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {myListings.map((listing) => {
-              const alreadyAdded = items.some((i) => i.localId === `listing-${listing.id}`)
-              return (
-                <button
-                  key={listing.id}
-                  type="button"
-                  onClick={() => addListing(listing)}
-                  disabled={alreadyAdded}
-                  className={`rounded border px-2 py-1 text-xs font-medium transition-colors ${
-                    alreadyAdded
-                      ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                      : 'border-blue-200 text-blue-600 hover:bg-blue-50'
-                  }`}
-                >
-                  {listing.board_game_name}
-                  <span className="ml-1 font-mono text-gray-400">{listing.listing_code}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="flex gap-2 pt-1">
         <button
@@ -1397,7 +1506,7 @@ export default function WantListBuilderPage() {
                 Games you'd like to receive
               </p>
             </div>
-            <WantGroupsPanel slug={slug!} myListings={myListings} moneyEnabled={event.money_enabled} locked={locked} />
+            <WantGroupsPanel slug={slug!} username={user?.username ?? ''} moneyEnabled={event.money_enabled} locked={locked} />
           </div>
         )}
 
