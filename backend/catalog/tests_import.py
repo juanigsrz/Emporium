@@ -106,3 +106,52 @@ class ImportEnrichedTest(TestCase):
     def test_missing_file_is_noop(self):
         result = import_enriched_metadata("/nonexistent/enriched.csv")
         self.assertEqual(result["updated"], 0)
+
+
+from io import StringIO
+from django.core.management import call_command
+
+RANKS_HEADER = ENRICHED_HEADER[:16]  # the 16 base columns, no enrichment cols
+
+
+def _write_ranks_csv(rows):
+    fd, path = tempfile.mkstemp(suffix=".csv")
+    with os.fdopen(fd, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=RANKS_HEADER)
+        w.writeheader()
+        for r in rows:
+            full = {k: "" for k in RANKS_HEADER}
+            full.update(r)
+            w.writerow(full)
+    return path
+
+
+class ImportGamesCommandTest(TestCase):
+    def test_command_runs_all_three_imports(self):
+        ranks = _write_ranks_csv([{"id": "13", "name": "Catan", "rank": "5"}])
+        enriched = _write_enriched_csv([
+            {"id": "13", "name": "Catan", "minplayers": "3", "maxplayers": "4"},
+        ])
+        versions = _write_versions_csv([
+            {"boardgame_id": "13", "id": "416798", "name": "German", "language": "German"},
+        ])
+        out = StringIO()
+        call_command(
+            "import_games", path=ranks, enriched_path=enriched,
+            versions_path=versions, stdout=out,
+        )
+        for p in (ranks, enriched, versions):
+            os.unlink(p)
+        game = BoardGame.objects.get(bgg_id=13)
+        self.assertEqual(game.metadata["min_players"], 3)
+        self.assertEqual(BoardGameVersion.objects.filter(bgg_version_id=416798).count(), 1)
+
+    def test_command_skips_enrichment_when_flagged(self):
+        ranks = _write_ranks_csv([{"id": "13", "name": "Catan"}])
+        out = StringIO()
+        call_command(
+            "import_games", path=ranks, skip_enriched=True, skip_versions=True, stdout=out,
+        )
+        os.unlink(ranks)
+        game = BoardGame.objects.get(bgg_id=13)
+        self.assertNotIn("min_players", game.metadata)

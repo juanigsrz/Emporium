@@ -1,61 +1,63 @@
 """
 catalog/management/commands/import_games.py
 
-Management command wrapper around the catalog.tasks.import_boardgames_csv
-Celery task.  Runs synchronously (no broker needed) via ALWAYS_EAGER or
-direct call.
+Imports BoardGame rows from the BGG ranks CSV, then (optionally) overlays the
+enriched-CSV metadata and upserts BoardGameVersion rows from the versions CSV.
+All three steps are idempotent and run synchronously.
 
 Usage:
     python manage.py import_games
     python manage.py import_games --limit 1000
-    python manage.py import_games --path /custom/path/to/file.csv
-    python manage.py import_games --path /custom/path/to/file.csv --limit 500
+    python manage.py import_games --path ranks.csv --enriched-path enriched.csv --versions-path versions.csv
+    python manage.py import_games --skip-enriched --skip-versions
 """
 
 from django.core.management.base import BaseCommand, CommandError
 
-from catalog.tasks import import_boardgames_csv
+from catalog.tasks import (
+    import_boardgames_csv,
+    import_enriched_metadata,
+    import_versions,
+)
 
 
 class Command(BaseCommand):
-    help = "Import (or update) BoardGame rows from a BGG CSV export."
+    help = "Import BoardGame rows + enriched metadata + versions from BGG CSVs."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--path",
-            type=str,
-            default=None,
-            help=(
-                "Absolute path to the CSV file. "
-                "Defaults to <repo_root>/boardgames_ranks.csv."
-            ),
-        )
-        parser.add_argument(
-            "--limit",
-            type=int,
-            default=None,
-            help="Import only the first N data rows (useful for testing).",
-        )
+        parser.add_argument("--path", type=str, default=None,
+                            help="Ranks CSV path. Defaults to <repo_root>/boardgames_ranks.csv.")
+        parser.add_argument("--limit", type=int, default=None,
+                            help="Import only the first N ranks rows (testing).")
+        parser.add_argument("--enriched-path", type=str, default=None,
+                            help="Enriched CSV path. Defaults to <repo_root>/boardgames_enriched.csv.")
+        parser.add_argument("--versions-path", type=str, default=None,
+                            help="Versions CSV path. Defaults to <repo_root>/boardgame_versions.csv.")
+        parser.add_argument("--skip-enriched", action="store_true",
+                            help="Skip the enriched-metadata overlay step.")
+        parser.add_argument("--skip-versions", action="store_true",
+                            help="Skip the versions import step.")
 
     def handle(self, *args, **options):
-        path = options["path"]
-        limit = options["limit"]
-
-        self.stdout.write(
-            self.style.NOTICE(
-                f"Starting import: path={path or 'default'}, limit={limit or 'all'}"
-            )
-        )
-
+        self.stdout.write(self.style.NOTICE(
+            f"Importing ranks: path={options['path'] or 'default'}, limit={options['limit'] or 'all'}"
+        ))
         try:
-            # Call directly (bypasses Celery serialization for management command use)
-            result = import_boardgames_csv(path=path, limit=limit)
+            base = import_boardgames_csv(path=options["path"], limit=options["limit"])
         except FileNotFoundError as exc:
             raise CommandError(str(exc)) from exc
+        self.stdout.write(self.style.SUCCESS(
+            f"Ranks: {base['imported']} processed, {base['total_in_db']} total in DB."
+        ))
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Import complete: {result['imported']} rows processed, "
-                f"{result['total_in_db']} total in DB."
-            )
-        )
+        if not options["skip_enriched"]:
+            enr = import_enriched_metadata(path=options["enriched_path"])
+            self.stdout.write(self.style.SUCCESS(
+                f"Enriched: {enr['updated']} updated, {enr['skipped_missing_game']} skipped."
+            ))
+
+        if not options["skip_versions"]:
+            ver = import_versions(path=options["versions_path"])
+            self.stdout.write(self.style.SUCCESS(
+                f"Versions: {ver['imported']} upserted, {ver['skipped_missing_game']} skipped."
+            ))
