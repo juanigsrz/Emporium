@@ -38,6 +38,7 @@ export interface CycleStep {
   from_user: string
   to_user: string
   wish_id: number
+  cash_amount: string | null
 }
 
 export interface Cycle {
@@ -79,6 +80,7 @@ export interface TradeAssignment {
   receiver: number
   receiver_username: string
   wish: number | null
+  cash_amount: string | null
   created: string
 }
 
