@@ -32,3 +32,33 @@ class TransitionNotifyTests(APITestCase):
         self.assertEqual(Notification.objects.filter(user=self.p1, event=self.event).count(), 1)
         self.assertEqual(Notification.objects.filter(user=self.p2, event=self.event).count(), 1)
         self.assertIn("Want-list Open", Notification.objects.get(user=self.p1).message)
+
+
+class NotificationApiTests(APITestCase):
+    def setUp(self):
+        U = get_user_model()
+        self.me = U.objects.create_user("me", password="x")
+        self.other = U.objects.create_user("other", password="x")
+        Notification.objects.create(user=self.me, message="a")
+        Notification.objects.create(user=self.me, message="b", read=True)
+        Notification.objects.create(user=self.other, message="c")
+        self.client.force_authenticate(self.me)
+
+    def test_list_only_mine(self):
+        self.assertEqual(self.client.get("/api/notifications/").data["count"], 2)
+
+    def test_unread_filter(self):
+        self.assertEqual(self.client.get("/api/notifications/?unread=1").data["count"], 1)
+
+    def test_mark_one_read(self):
+        nid = Notification.objects.filter(user=self.me, read=False).first().id
+        self.assertEqual(self.client.post(f"/api/notifications/{nid}/read/").status_code, 200)
+        self.assertTrue(Notification.objects.get(id=nid).read)
+
+    def test_cannot_read_others(self):
+        nid = Notification.objects.get(user=self.other).id
+        self.assertEqual(self.client.post(f"/api/notifications/{nid}/read/").status_code, 404)
+
+    def test_read_all(self):
+        self.assertEqual(self.client.post("/api/notifications/read-all/").status_code, 200)
+        self.assertEqual(Notification.objects.filter(user=self.me, read=False).count(), 0)
