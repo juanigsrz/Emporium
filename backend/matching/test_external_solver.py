@@ -115,10 +115,10 @@ class ExportXToYTests(MatchingTestBase):
 
     def test_nforM_lines(self):
         text = external_solver.build_wants(self.event)
-        lines = [l for l in text.splitlines() if l]
-        self.assertEqual(len(lines), 2)  # one per wish (no header)
+        lines = [l for l in text.splitlines() if l and not l.startswith("#")]
+        self.assertEqual(len(lines), 2)  # one per wish
         for line in lines:
-            self.assertTrue(line.startswith("(1for1) "))
+            self.assertRegex(line, r"^\S+ : \(1for1\) ")
             self.assertIn(" -> ", line)
 
     def test_give_and_take_codes(self):
@@ -128,6 +128,47 @@ class ExportXToYTests(MatchingTestBase):
         self.assertIn(self.copy_a1.listing_code, give)
         self.assertIn(self.copy_b1.listing_code, take)  # bob terra
         self.assertIn(self.copy_c2.listing_code, take)  # carol terra
+
+    def test_xtoy_money_directives(self):
+        """XTOY with money_enabled emits real user/item/bid lines, not #! MONEY-* comments."""
+        from events.models import EventParticipation
+        self.event.money_enabled = True
+        self.event.max_money_per_user = 100
+        self.event.save(update_fields=["money_enabled", "max_money_per_user"])
+        # alice has a per-participant budget
+        EventParticipation.objects.get_or_create(
+            event=self.event, user=self.user_a, defaults={"max_spend": 50}
+        )
+        # Set a sell ask on alice's offered listing
+        ogi = self.wish_a.offer_group.items.first()
+        ogi.money_amount = 20   # $20.00 -> 2000 cents
+        ogi.save(update_fields=["money_amount"])
+        # Set a buy bid on alice's want item
+        item = self.wish_a.want_group.items.first()
+        item.money_amount = 30  # $30.00 -> 3000 cents
+        item.save(update_fields=["money_amount"])
+
+        text = external_solver.build_wants(self.event)
+
+        # Real directives must appear
+        self.assertIn(f"user {self.user_a.username} budget 5000", text)
+        self.assertIn(f"item {self.copy_a1.listing_code} owner {self.user_a.username} ask 2000", text)
+        # bid line: alice bids on bob's terra and carol's terra (expanded from game_terra)
+        self.assertIn(f"bid {self.user_a.username} {self.copy_b1.listing_code} 3000", text)
+        self.assertIn(f"bid {self.user_a.username} {self.copy_c2.listing_code} 3000", text)
+        # No old-style comment money lines
+        self.assertNotIn("#! MONEY-WANT", text)
+        self.assertNotIn("#! MONEY-OFFER", text)
+        self.assertNotIn("#! MONEY-ENABLED", text)
+        self.assertNotIn("#! BUDGET", text)
+
+        # Clean up (avoid polluting other tests)
+        self.event.money_enabled = False
+        self.event.save(update_fields=["money_enabled"])
+        ogi.money_amount = None
+        ogi.save(update_fields=["money_amount"])
+        item.money_amount = None
+        item.save(update_fields=["money_amount"])
 
 
 # ---------------------------------------------------------------------------
