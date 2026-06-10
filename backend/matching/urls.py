@@ -17,6 +17,8 @@ from .views import (
     MatchRunMineView,
     MatchRunResultView,
     MatchRunUploadView,
+    ShipmentDetailView,
+    ShippingView,
 )
 
 urlpatterns = [
@@ -44,5 +46,15 @@ urlpatterns = [
         "events/<slug:slug>/matches/<int:run_id>/mine/",
         MatchRunMineView.as_view(),
         name="match-mine",
+    ),
+    path(
+        "events/<slug:slug>/shipping/",
+        ShippingView.as_view(),
+        name="shipping-list",
+    ),
+    path(
+        "events/<slug:slug>/shipping/<int:pk>/",
+        ShipmentDetailView.as_view(),
+        name="shipping-detail",
     ),
 ]
