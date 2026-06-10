@@ -150,6 +150,13 @@ class TradeEventViewSet(
         event.status = target
         event.save(update_fields=["status", "updated"])
 
+        from notifications.models import Notification
+        Notification.objects.bulk_create([
+            Notification(user_id=p.user_id, event=event, kind="EVENT_STATUS",
+                         message=f"{event.name} moved to {event.get_status_display()}.")
+            for p in event.participations.all()
+        ])
+
         out = TradeEventSerializer(event, context={"request": request})
         return Response(out.data)
 
