@@ -237,6 +237,10 @@ class ParserTests(MatchingTestBase):
         self.assertTrue(f.null)
         self.assertEqual(f.decimal_places, 2)
 
+    def test_mine_includes_cash_amount(self):
+        from matching.serializers import TradeAssignmentSerializer
+        self.assertIn("cash_amount", TradeAssignmentSerializer().fields)
+
 
 # ---------------------------------------------------------------------------
 # Upload — XTOY

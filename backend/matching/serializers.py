@@ -112,6 +112,7 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
             "receiver",
             "receiver_username",
             "wish",
+            "cash_amount",
             "created",
         ]
         read_only_fields = fields
