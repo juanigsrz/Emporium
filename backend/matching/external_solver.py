@@ -416,6 +416,11 @@ def parse_gurobi(output: str):
         if line.startswith("Trade Results"):
             in_results = True
             continue
+        # Cash lines also contain '->' — end the swap section so they aren't
+        # mis-parsed as barter edges (see parse_gurobi_cash).
+        if line.startswith("Cash Purchases") or line.startswith("Cash Summary"):
+            in_results = False
+            continue
         if not in_results or "->" not in line:
             continue
         lhs, _, rhs = line.partition("->")
@@ -426,6 +431,33 @@ def parse_gurobi(output: str):
         for t in takes:
             edges.append((t, anchor, None))
     return edges
+
+
+_CASH_LINE = re.compile(r"^(\S+):\s+\S+\s+->\s+(\S+)\s+\(")
+
+
+def parse_gurobi_cash(output: str):
+    """gurobi `Cash Purchases:` section -> [(moved_code, buyer_username), ...].
+
+    Line form: `CODE: seller -> buyer  (buyer pays seller $N)`. The seller is the
+    owner of CODE (resolved downstream); the buyer is named only here, so it must
+    be carried out as a username (no listing code identifies the receiver).
+    """
+    moves = []
+    in_cash = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Cash Purchases"):
+            in_cash = True
+            continue
+        if line.startswith("Cash Summary"):
+            break
+        if not in_cash or not line:
+            continue
+        m = _CASH_LINE.match(line)
+        if m:
+            moves.append((m.group(1), m.group(2)))
+    return moves
 
 
 def _assign_components(resolved):
@@ -486,6 +518,28 @@ def load_solution(match_run, raw_output: str):
         if recv_el is None:
             raise ValueError(f"Unknown listing code in solution: {recv_code!r}")
         resolved.append([moved_el, moved_el.copy.owner, recv_el.copy.owner, group])
+
+    # Cash purchases (XTOY money mode): the buyer (receiver) is named only by
+    # username in the `Cash Purchases:` section, so it can't be resolved via a
+    # listing-code anchor like a swap. Resolve the buyer directly.
+    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
+        cash_moves = parse_gurobi_cash(raw_output)
+        if cash_moves:
+            from django.contrib.auth import get_user_model
+
+            names = {bn for _, bn in cash_moves}
+            users_by_name = {
+                u.username: u
+                for u in get_user_model().objects.filter(username__in=names)
+            }
+            for moved_code, buyer_username in cash_moves:
+                moved_el = by_code.get(moved_code)
+                if moved_el is None:
+                    raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
+                buyer = users_by_name.get(buyer_username)
+                if buyer is None:
+                    raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
+                resolved.append([moved_el, moved_el.copy.owner, buyer, None])
 
     # XTOY came back without groups -> recover connected components.
     if resolved and resolved[0][3] is None:
