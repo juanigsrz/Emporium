@@ -453,20 +453,25 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 
   const isWanted = useCallback(
     (bggId: number) => {
-      const key = gameTargetKey(bggId)
-      return myListings.some((l) => editor.isOn(l.id, key))
+      const group = groupByGame.get(bggId)
+      return group ? myListings.some((l) => groupIsOn(editor, l.id, group)) : false
     },
-    [editor, myListings]
+    [editor, myListings, groupByGame]
   )
 
   function toggleWant(g: { bgg_id: number; name: string }) {
+    const group = groupByGame.get(g.bgg_id)
+    if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
+      // Already wanted (any-copy or specific copies) — clear every target for this game.
+      myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
+      return
+    }
     const key = gameTargetKey(g.bgg_id)
-    const next = !isWanted(g.bgg_id)
     editor.addTarget({
       key, type: 'BOARD_GAME', boardGameId: g.bgg_id, label: g.name,
       gameId: g.bgg_id, gameName: g.name,
     })
-    myListings.forEach((l) => editor.toggle(l.id, key, next))
+    myListings.forEach((l) => editor.toggle(l.id, key, true))
   }
 
   return (
@@ -1293,7 +1298,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                             ? 'Specific copies you selected (refine in “Browse games” above):'
                             : "Copies you'd be matched to receive:"}
                         </span>
-                        <GameCopies slug={slug} bggId={g.gameId} username={username} />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable />
                       </div>
                     </td>
                   </tr>
