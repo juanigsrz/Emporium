@@ -391,6 +391,85 @@ function MyTradesSection({
           ))
         )}
       </div>
+
+      {/* Payments group — only rendered when at least one cash trade exists */}
+      {assignments.some((a) => a.cash_amount != null) && (() => {
+        const payList = assignments.filter(
+          (a) => a.cash_amount != null && a.receiver_username === currentUsername
+        )
+        const receivePayList = assignments.filter(
+          (a) => a.cash_amount != null && a.giver_username === currentUsername
+        )
+        const totalPay = payList.reduce((sum, a) => sum + Number(a.cash_amount), 0)
+        const totalReceive = receivePayList.reduce((sum, a) => sum + Number(a.cash_amount), 0)
+        const net = totalReceive - totalPay
+
+        return (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
+              Payments
+            </p>
+
+            {payList.map((a) => (
+              <div
+                key={a.id}
+                className="rounded-lg border border-gray-200 bg-white p-4 flex items-start gap-3"
+              >
+                <div className="shrink-0 w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-0.5">You pay</p>
+                  <p className="text-sm text-gray-900">
+                    Pay{' '}
+                    <Link to={`/u/${a.giver_username}`} className="font-semibold text-indigo-500 hover:underline">
+                      {a.giver_username}
+                    </Link>{' '}
+                    <span className="font-semibold">${a.cash_amount}</span> for {a.board_game_name}
+                  </p>
+                  <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
+                </div>
+              </div>
+            ))}
+
+            {receivePayList.map((a) => (
+              <div
+                key={a.id}
+                className="rounded-lg border border-gray-200 bg-white p-4 flex items-start gap-3"
+              >
+                <div className="shrink-0 w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-0.5">You receive payment</p>
+                  <p className="text-sm text-gray-900">
+                    Receive{' '}
+                    <span className="font-semibold">${a.cash_amount}</span> from{' '}
+                    <Link to={`/u/${a.receiver_username}`} className="font-semibold text-indigo-500 hover:underline">
+                      {a.receiver_username}
+                    </Link>{' '}
+                    for {a.board_game_name}
+                  </p>
+                  <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
+                </div>
+              </div>
+            ))}
+
+            {/* Totals row */}
+            <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-800 flex flex-wrap gap-4">
+              <span>Pay: <strong>${totalPay.toFixed(2)}</strong></span>
+              <span>Receive: <strong>${totalReceive.toFixed(2)}</strong></span>
+              <span className={net >= 0 ? 'text-emerald-700' : 'text-red-700'}>
+                Net: <strong>{net >= 0 ? '+' : ''}${net.toFixed(2)}</strong>
+              </span>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
