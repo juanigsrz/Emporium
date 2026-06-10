@@ -13,10 +13,7 @@ Date: 2026-06-10
 
 ## Non-goals
 
-- No bulk CSV → DB importer (lazy per-game only).
-- This feature writes **only to the DB**. It does not touch the CSV scraper
-  (`enrich_bgg.py`) or its output files — that bulk script is a separate future
-  concern and is left untouched (no shared/extracted parser).
+- Lazy per-game enrichment only; no bulk import path. Writes **only to the DB**.
 - No new first-class columns on `BoardGame` (enrichment lives in `metadata`).
 - No backfill of `version` on legacy copies (we cannot know which edition).
 - Not populating designers/publishers/mechanics/categories on the game (those
@@ -126,9 +123,8 @@ worst case under multiple workers is a few duplicate first-fetches — harmless
 ### Parser
 
 `backend/bgg/thing_parse.py` (new, pure-stdlib, no Django imports):
-`parse_things`, `_langdep`, `_parse_version`, `_val`. This is the Django app's
-own parser. `enrich_bgg.py` is **not** modified and keeps its own copy — the
-two paths are intentionally independent.
+`parse_things`, `_langdep`, `_parse_version`, `_val`. Self-contained — the
+Django app's own parser.
 
 ### HTTP client
 
