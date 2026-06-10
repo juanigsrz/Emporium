@@ -24,6 +24,8 @@ export interface PatchProfilePayload {
   region?: string
   avatar_url?: string
   max_trade_distance_km?: number | null
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export async function fetchMyProfile(): Promise<Profile> {
