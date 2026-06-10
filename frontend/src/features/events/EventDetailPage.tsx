@@ -750,11 +750,18 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
               key={listing.id}
               className="flex items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
             >
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-800 truncate block">
-                  {listing.board_game_name}
-                </span>
-                <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="h-9 w-9 shrink-0 overflow-hidden rounded bg-gray-100">
+                  {listing.board_game_thumbnail ? (
+                    <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
+                  ) : null}
+                </div>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-800 truncate block">
+                    {listing.board_game_name}
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
+                </div>
               </div>
               <button
                 onClick={() => handleRemove(listing.id)}
