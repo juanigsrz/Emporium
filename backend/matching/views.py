@@ -19,18 +19,21 @@ No WebSocket in v1 — the FE should poll GET /matches/{id}/ every 2 s while
 status is PENDING or RUNNING; when DONE it fetches /result/ once.
 """
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import permissions, status
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import MatchRun, TradeAssignment
+from .models import MatchRun, TradeAssignment, Shipment
 from .serializers import (
     MatchRunDetailSerializer,
     MatchRunListSerializer,
+    ShipmentSerializer,
     TradeAssignmentSerializer,
 )
 
@@ -182,8 +185,6 @@ class MatchRunMineView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, slug, run_id):
-        from django.db.models import Q
-
         event = _get_event(slug)
         run = _get_run(event, run_id)
 
@@ -276,3 +277,80 @@ class MatchRunUploadView(APIView):
             {"id": run.pk, "status": run.status, "summary": run.summary},
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# Shipping
+# ---------------------------------------------------------------------------
+
+def _latest_done_run(event):
+    return event.match_runs.filter(status=MatchRun.Status.DONE).order_by("-created").first()
+
+
+class ShippingView(APIView):
+    """
+    GET /api/events/{slug}/shipping/
+
+    Returns the requesting user's Shipments for the latest DONE run.
+    Lazily creates Shipment rows on first access.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        run = _latest_done_run(event)
+        if run is None:
+            return Response([])
+        assignments = (
+            TradeAssignment.objects.filter(match_run=run)
+            .filter(Q(giver=request.user) | Q(receiver=request.user))
+            .select_related("event_listing__copy__board_game", "giver", "receiver")
+        )
+        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
+        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+
+
+class ShipmentDetailView(APIView):
+    """
+    PATCH /api/events/{slug}/shipping/{pk}/
+
+    Sender marks SENT (with optional shipping_info); receiver marks RECEIVED.
+    Only allowed while event.status == SHIPPING.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, slug, pk):
+        event = _get_event(slug)
+        if event.status != "SHIPPING":
+            raise PermissionDenied("Shipping updates are only allowed while the event is shipping.")
+        try:
+            shipment = (
+                Shipment.objects
+                .select_related("assignment__giver", "assignment__receiver", "assignment__match_run")
+                .get(pk=pk, assignment__match_run__event=event)
+            )
+        except Shipment.DoesNotExist:
+            raise NotFound("Shipment not found.")
+
+        a = shipment.assignment
+        target = request.data.get("status")
+
+        if target == "SENT":
+            if request.user != a.giver:
+                raise PermissionDenied("Only the sender can mark a shipment sent.")
+            shipment.status = Shipment.Status.SENT
+            shipment.sent_at = timezone.now()
+            if "shipping_info" in request.data:
+                shipment.shipping_info = request.data["shipping_info"]
+        elif target == "RECEIVED":
+            if request.user != a.receiver:
+                raise PermissionDenied("Only the receiver can mark a shipment received.")
+            shipment.status = Shipment.Status.RECEIVED
+            shipment.received_at = timezone.now()
+        else:
+            raise ValidationError({"status": "Must be 'SENT' (sender) or 'RECEIVED' (receiver)."})
+
+        shipment.save()
+        return Response(ShipmentSerializer(shipment, context={"request": request}).data)
