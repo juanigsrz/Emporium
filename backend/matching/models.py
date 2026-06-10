@@ -84,6 +84,9 @@ class TradeAssignment(models.Model):
     )
     cycle_id = models.IntegerField()  # groups assignments into a trade cycle
 
+    # Cash purchase amount in dollars (null = barter move). Receiver pays giver.
+    cash_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
@@ -95,3 +98,21 @@ class TradeAssignment(models.Model):
             f"TradeAssignment(run={self.match_run_id}, cycle={self.cycle_id}, "
             f"listing={self.event_listing_id}, {self.giver} → {self.receiver})"
         )
+
+
+class Shipment(models.Model):
+    class Status(models.TextChoices):
+        PENDING  = "PENDING",  "Pending"
+        SENT     = "SENT",     "Sent"
+        RECEIVED = "RECEIVED", "Received"
+
+    assignment    = models.OneToOneField(TradeAssignment, on_delete=models.CASCADE, related_name="shipment")
+    status        = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    shipping_info = models.TextField(blank=True)
+    sent_at       = models.DateTimeField(null=True, blank=True)
+    received_at   = models.DateTimeField(null=True, blank=True)
+    created       = models.DateTimeField(auto_now_add=True)
+    updated       = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Shipment(assignment={self.assignment_id}, {self.status})"
