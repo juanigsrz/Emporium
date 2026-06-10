@@ -87,6 +87,7 @@ export interface TradeEvent {
   participants_count: number
   is_organizer: boolean
   is_participant: boolean
+  inputs_locked: boolean
   created: string
   updated: string
 }
@@ -156,6 +157,7 @@ export interface EventListingsParams {
   user?: string
   board_game?: number | string
   page?: number
+  page_size?: number
 }
 
 /** A canonical game with active copies in this event (event-scoped catalog). */
@@ -273,6 +275,7 @@ export async function fetchEventListings(
   if (params.user) p.user = params.user
   if (params.board_game != null) p.board_game = String(params.board_game)
   if (params.page && params.page > 1) p.page = String(params.page)
+  if (params.page_size) p.page_size = String(params.page_size)
   const { data } = await apiClient.get<PaginatedResponse<EventListing>>(
     `/events/${slug}/listings/`,
     { params: p }

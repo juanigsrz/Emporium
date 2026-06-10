@@ -701,7 +701,10 @@ interface MyListingsSectionProps {
 }
 
 function MyListingsSection({ event, username }: MyListingsSectionProps) {
-  const { data: listingsData, isLoading } = useEventListings(event.slug)
+  const { data: listingsData, isLoading } = useEventListings(event.slug, {
+    user: username,
+    page_size: 100,
+  })
   const removeListing = useRemoveEventListing()
   const [removeError, setRemoveError] = useState<string | null>(null)
 
