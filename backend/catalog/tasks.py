@@ -37,6 +37,7 @@ CATEGORY_RANK_FIELDS = [
 
 # Default CSV path: boardgames_ranks.csv at repo root (two levels above backend/)
 _DEFAULT_CSV = Path(__file__).resolve().parent.parent.parent / "boardgames_ranks.csv"
+_DEFAULT_VERSIONS_CSV = Path(__file__).resolve().parent.parent.parent / "boardgame_versions.csv"
 
 CHUNK_SIZE = 2000
 
@@ -183,6 +184,70 @@ def import_boardgames_csv(path=None, limit=None):
     total = BoardGame.objects.count()
     logger.info("Import complete. Rows processed: %d. Total in DB: %d", imported, total)
     return {"imported": imported, "total_in_db": total}
+
+
+def import_versions(path=None):
+    """Upsert BoardGameVersion rows from boardgame_versions.csv (by bgg_version_id).
+
+    Idempotent. Rows whose parent game is absent are skipped. Missing file is a
+    no-op (the scrape may not have produced it yet).
+    """
+    from catalog.models import BoardGame, BoardGameVersion
+
+    csv_path = Path(path) if path else _DEFAULT_VERSIONS_CSV
+    if not csv_path.exists():
+        logger.info("Versions CSV not found, skipping: %s", csv_path)
+        return {"imported": 0, "skipped_missing_game": 0}
+
+    existing_ids = set(BoardGame.objects.values_list("bgg_id", flat=True))
+    update_fields = [
+        "board_game_id", "name", "thumbnail_url", "language", "publisher",
+        "year_published", "width", "length", "depth", "weight", "updated",
+    ]
+    buffer = []
+    imported = 0
+    skipped = 0
+
+    with open(csv_path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            game_id = _safe_int(row.get("boardgame_id"))
+            version_id = _safe_int(row.get("id"))
+            if game_id is None or version_id is None:
+                continue
+            if game_id not in existing_ids:
+                skipped += 1
+                continue
+            buffer.append(BoardGameVersion(
+                bgg_version_id=version_id,
+                board_game_id=game_id,
+                name=(row.get("name") or "").strip(),
+                thumbnail_url=(row.get("thumbnail") or "").strip(),
+                language=(row.get("language") or "").strip(),
+                publisher=(row.get("publisher") or "").strip(),
+                year_published=_safe_int(row.get("yearpublished")),
+                width=_safe_float(row.get("width")),
+                length=_safe_float(row.get("length")),
+                depth=_safe_float(row.get("depth")),
+                weight=_safe_float(row.get("weight")),
+            ))
+            if len(buffer) >= CHUNK_SIZE:
+                BoardGameVersion.objects.bulk_create(
+                    buffer, update_conflicts=True,
+                    update_fields=update_fields, unique_fields=["bgg_version_id"],
+                )
+                imported += len(buffer)
+                buffer = []
+
+    if buffer:
+        BoardGameVersion.objects.bulk_create(
+            buffer, update_conflicts=True,
+            update_fields=update_fields, unique_fields=["bgg_version_id"],
+        )
+        imported += len(buffer)
+
+    logger.info("Versions import: %d upserted, %d skipped (missing game)", imported, skipped)
+    return {"imported": imported, "skipped_missing_game": skipped}
 
 
 def _flush(objects, update_fields):
