@@ -22,6 +22,7 @@ class BoardGameListSerializer(serializers.ModelSerializer):
     """Compact serializer for list / search results."""
 
     copies_count = serializers.IntegerField(read_only=True, default=0)
+    thumbnail = serializers.SerializerMethodField()
 
     class Meta:
         model = BoardGame
@@ -34,8 +35,12 @@ class BoardGameListSerializer(serializers.ModelSerializer):
             "users_rated",
             "is_expansion",
             "image_url",
+            "thumbnail",
             "copies_count",
         ]
+
+    def get_thumbnail(self, obj):
+        return (obj.metadata or {}).get("thumbnail", "")
 
 
 class BoardGameDetailSerializer(serializers.ModelSerializer):

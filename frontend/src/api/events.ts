@@ -142,6 +142,7 @@ export interface EventListing {
   id: number
   listing_code: string
   board_game_name: string
+  board_game_thumbnail: string
   board_game_id: number
   copy_id: number
   copy_owner_id: number
@@ -168,6 +169,7 @@ export interface EventGame {
   rank: number | null
   average: number | null
   image_url: string
+  thumbnail: string
   copies_count: number
 }
 

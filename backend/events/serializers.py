@@ -157,6 +157,7 @@ class EventListingSerializer(serializers.ModelSerializer):
     listing_code     = serializers.CharField(source="copy.listing_code", read_only=True)
     board_game_id    = serializers.IntegerField(source="copy.board_game_id", read_only=True)
     board_game_name  = serializers.SerializerMethodField()
+    board_game_thumbnail = serializers.SerializerMethodField()
     copy_owner_id    = serializers.IntegerField(source="copy.owner_id", read_only=True)
     copy_owner_username = serializers.SerializerMethodField()
     # Lightweight distinguishers so copy chips can be told apart at a glance
@@ -181,6 +182,7 @@ class EventListingSerializer(serializers.ModelSerializer):
             "listing_code",
             "board_game_id",
             "board_game_name",
+            "board_game_thumbnail",
             "copy_owner_id",
             "copy_owner_username",
             "copy_condition",
@@ -196,6 +198,7 @@ class EventListingSerializer(serializers.ModelSerializer):
             "listing_code",
             "board_game_id",
             "board_game_name",
+            "board_game_thumbnail",
             "copy_owner_id",
             "copy_owner_username",
             "copy_condition",
@@ -206,6 +209,9 @@ class EventListingSerializer(serializers.ModelSerializer):
 
     def get_board_game_name(self, obj):
         return obj.copy.board_game.name
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.copy.board_game.metadata or {}).get("thumbnail", "")
 
     def get_copy_owner_username(self, obj):
         return obj.copy.owner.username
@@ -236,7 +242,11 @@ class EventGameSerializer(serializers.Serializer):
     rank           = serializers.IntegerField(allow_null=True)
     average        = serializers.FloatField(allow_null=True)
     image_url      = serializers.CharField(allow_blank=True)
+    thumbnail      = serializers.SerializerMethodField()
     copies_count   = serializers.IntegerField()
+
+    def get_thumbnail(self, obj):
+        return (obj.metadata or {}).get("thumbnail", "")
 
 
 class TransitionSerializer(serializers.Serializer):

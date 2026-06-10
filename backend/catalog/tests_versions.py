@@ -1,7 +1,21 @@
 from django.test import TestCase
 
 from catalog.models import BoardGame, BoardGameVersion
-from catalog.serializers import BoardGameDetailSerializer
+from catalog.serializers import BoardGameDetailSerializer, BoardGameListSerializer
+
+
+class BoardGameListThumbnailTest(TestCase):
+    def test_list_serializer_exposes_thumbnail_from_metadata(self):
+        game = BoardGame.objects.create(
+            bgg_id=13, name="Catan", metadata={"thumbnail": "https://x/t.png"}
+        )
+        data = BoardGameListSerializer(game).data
+        self.assertEqual(data["thumbnail"], "https://x/t.png")
+
+    def test_list_serializer_thumbnail_defaults_blank(self):
+        game = BoardGame.objects.create(bgg_id=99, name="No Meta")
+        data = BoardGameListSerializer(game).data
+        self.assertEqual(data["thumbnail"], "")
 
 
 class BoardGameVersionModelTest(TestCase):
