@@ -1,9 +1,12 @@
 """Distance + geocoding helpers. No GeoDjango — plain floats + haversine."""
 
+import logging
 import math
 
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 _EARTH_KM = 6371.0088
 
@@ -46,7 +49,10 @@ def geocode_search(query: str, limit: int = 5):
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:  # noqa: BLE001 — geocoding is best-effort
+    except Exception as exc:  # noqa: BLE001 — geocoding is best-effort
+        # Log so silent failures (e.g. Nominatim 403 on a blocked User-Agent) are
+        # diagnosable instead of looking like "no results".
+        logger.warning("Nominatim geocode_search(%r) failed: %s", query, exc)
         return []
     return [
         {"display_name": d["display_name"], "lat": float(d["lat"]), "lon": float(d["lon"])}
