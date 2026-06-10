@@ -258,3 +258,8 @@ NOMINATIM_USER_AGENT = os.environ.get(
     "NOMINATIM_USER_AGENT",
     "mathtrade-app/1.0 (+https://github.com/juanigsrz/mathtrade-app)",
 )
+
+BGG_API_KEY = os.environ.get(
+    "BGG_API_KEY",
+    "your-bgg-bearer-token",
+)
