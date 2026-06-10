@@ -29,7 +29,7 @@ TradeAssignment (mine):
 
 from rest_framework import serializers
 
-from .models import MatchRun, TradeAssignment
+from .models import MatchRun, TradeAssignment, Shipment
 
 
 # ---------------------------------------------------------------------------
@@ -116,3 +116,28 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
             "created",
         ]
         read_only_fields = fields
+
+
+# ---------------------------------------------------------------------------
+# Shipment
+# ---------------------------------------------------------------------------
+
+class ShipmentSerializer(serializers.ModelSerializer):
+    listing_code      = serializers.CharField(source="assignment.event_listing.copy.listing_code", read_only=True)
+    board_game_name   = serializers.CharField(source="assignment.event_listing.copy.board_game.name", read_only=True)
+    giver_username    = serializers.CharField(source="assignment.giver.username", read_only=True)
+    receiver_username = serializers.CharField(source="assignment.receiver.username", read_only=True)
+    my_role           = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Shipment
+        fields = ["id", "status", "shipping_info", "listing_code", "board_game_name",
+                  "giver_username", "receiver_username", "my_role", "sent_at", "received_at"]
+        read_only_fields = ["id", "listing_code", "board_game_name", "giver_username",
+                            "receiver_username", "my_role", "sent_at", "received_at"]
+
+    def get_my_role(self, obj):
+        uid = self.context["request"].user.id
+        if obj.assignment.giver_id == uid: return "sender"
+        if obj.assignment.receiver_id == uid: return "receiver"
+        return None
