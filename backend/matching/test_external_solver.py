@@ -211,6 +211,26 @@ class ParserTests(MatchingTestBase):
         self.assertEqual([e[0] for e in edges], ["C-A", "C-C", "C-B"])
         self.assertTrue(all(e[2] is None for e in edges))
 
+    def test_parse_gurobi_ignores_cash_section(self):
+        # Cash lines also contain '->' — they must NOT be parsed as swap edges.
+        out = (
+            "Trade Results:\nC-A -> C-B\n"
+            "\nCash Purchases:\nC-C: carol -> bob  (bob pays carol $5)\n"
+            "\nCash Summary:\n  bob: spent $5, earned $0, net $5 (cap $inf)\n"
+        )
+        edges = external_solver.parse_gurobi(out)
+        self.assertEqual(edges, [("C-B", "C-A", None)])
+
+    def test_parse_gurobi_cash_extracts_moves(self):
+        out = (
+            "Cash Purchases:\n"
+            "C-C: carol -> bob  (bob pays carol $5)\n"
+            "C-D: dave -> eve  (eve pays dave $7)\n"
+            "\nCash Summary:\n  bob: spent $5, earned $0, net $5 (cap $inf)\n"
+        )
+        moves = external_solver.parse_gurobi_cash(out)
+        self.assertEqual(moves, [("C-C", "bob"), ("C-D", "eve")])
+
 
 # ---------------------------------------------------------------------------
 # Upload — XTOY
@@ -229,6 +249,25 @@ class UploadXToYTests(MatchingTestBase):
     def _solution(self):
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
         return f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+
+    def test_upload_with_cash_purchase_creates_assignment(self):
+        # carol's brass (el_c1) is bought by bob for cash; bob already wants brass.
+        a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
+        c1 = self.copy_c1.listing_code
+        out = (
+            f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+            f"\nCash Purchases:\n{c1}: carol -> bob  (bob pays carol $10)\n"
+            f"\nCash Summary:\n  bob: spent $10, earned $0, net $10 (cap $inf)\n"
+        )
+        resp = self.client.post(upload_url(self.slug), data=out, content_type="text/plain")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        # the cash move is loaded: carol gives her brass, bob receives it
+        cash_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_c1)
+        self.assertEqual(cash_row.giver, self.user_c)
+        self.assertEqual(cash_row.receiver, self.user_b)
+        # the two swaps still load too -> 3 moves total
+        self.assertEqual(TradeAssignment.objects.filter(match_run=run).count(), 3)
 
     def test_upload_creates_done_run_with_assignments(self):
         resp = self.client.post(
