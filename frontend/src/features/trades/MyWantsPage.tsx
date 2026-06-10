@@ -453,20 +453,25 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 
   const isWanted = useCallback(
     (bggId: number) => {
-      const key = gameTargetKey(bggId)
-      return myListings.some((l) => editor.isOn(l.id, key))
+      const group = groupByGame.get(bggId)
+      return group ? myListings.some((l) => groupIsOn(editor, l.id, group)) : false
     },
-    [editor, myListings]
+    [editor, myListings, groupByGame]
   )
 
   function toggleWant(g: { bgg_id: number; name: string }) {
+    const group = groupByGame.get(g.bgg_id)
+    if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
+      // Already wanted (any-copy or specific copies) — clear every target for this game.
+      myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
+      return
+    }
     const key = gameTargetKey(g.bgg_id)
-    const next = !isWanted(g.bgg_id)
     editor.addTarget({
       key, type: 'BOARD_GAME', boardGameId: g.bgg_id, label: g.name,
       gameId: g.bgg_id, gameName: g.name,
     })
-    myListings.forEach((l) => editor.toggle(l.id, key, next))
+    myListings.forEach((l) => editor.toggle(l.id, key, true))
   }
 
   return (
@@ -1293,7 +1298,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                             ? 'Specific copies you selected (refine in “Browse games” above):'
                             : "Copies you'd be matched to receive:"}
                         </span>
-                        <GameCopies slug={slug} bggId={g.gameId} username={username} />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable />
                       </div>
                     </td>
                   </tr>
@@ -1495,6 +1500,12 @@ export default function MyWantsPage() {
         </div>
       </div>
 
+      {event.inputs_locked && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This event is locked for matching — want lists can no longer be edited.
+        </div>
+      )}
+
       {myListings.length === 0 ? (
         <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
           You have no items in this event yet.{' '}
@@ -1544,7 +1555,7 @@ export default function MyWantsPage() {
       )}
 
       {/* Sticky save bar */}
-      {editor.dirtyCount > 0 && (
+      {editor.dirtyCount > 0 && !event.inputs_locked && (
         <div className="sticky bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-gray-300 bg-white px-5 py-2.5 shadow-lg">
           <span className="text-sm text-gray-600">
             {editor.dirtyCount} unsaved change{editor.dirtyCount !== 1 ? 's' : ''}

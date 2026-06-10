@@ -1,5 +1,6 @@
-"""Scrapes public BGG HTML (collection browser + geeklists). No xmlapi2 (auth-gated)."""
+"""Scrapes public BGG HTML (collection browser) and fetches geeklists via geekdo JSON API."""
 
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
+
+GEEKDO_API_BASE = "https://api.geekdo.com"
 
 _THING_HREF = re.compile(r"/(?:boardgame|boardgameexpansion)/(\d+)\b")
 
@@ -42,9 +45,32 @@ class BggClient:
         return self._paginated(url)
 
     def fetch_geeklist(self, geeklist_id: str) -> list[CollectionRow]:
-        url = f"{self.base_url}/geeklist/{geeklist_id}"
-        html = self._get(url)
-        return self._parse_rows(html)
+        out: list[CollectionRow] = []
+        seen: set[int] = set()
+        total = None
+        for page in range(1, settings.BGG_MAX_PAGES + 1):
+            url = f"{GEEKDO_API_BASE}/api/listitems?listid={geeklist_id}&pageid={page}"
+            payload = json.loads(self._get(url))
+            data = payload.get("data") or []
+            if not data:
+                break
+            if total is None:
+                total = payload.get("pagination", {}).get("total", 0)
+            for entry in data:
+                item = entry.get("item") or {}
+                if item.get("type") != "things":
+                    continue
+                try:
+                    bgg_id = int(item["id"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if bgg_id in seen:
+                    continue
+                seen.add(bgg_id)
+                out.append(CollectionRow(bgg_id=bgg_id, name=item.get("name") or ""))
+            if total is not None and len(out) >= total:
+                break
+        return out
 
     def _paginated(self, first_url: str) -> list[CollectionRow]:
         rows: list[CollectionRow] = []

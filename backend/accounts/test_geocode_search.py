@@ -51,3 +51,18 @@ class GeocodeSearchFnTest(APITestCase):
         with patch("accounts.geo.requests.get", side_effect=Exception("nominatim down")):
             out = geocode_search("Paris")
         self.assertEqual(out, [])
+
+    def test_failure_is_logged(self):
+        # A swallowed failure (e.g. Nominatim 403 on a blocked UA) must be logged,
+        # not invisible — that silence is what made "always empty" undiagnosable.
+        from accounts.geo import geocode_search
+        with patch("accounts.geo.requests.get", side_effect=Exception("403")):
+            with self.assertLogs("accounts.geo", level="WARNING") as cm:
+                geocode_search("Paris")
+        self.assertTrue(any("geocode_search" in m for m in cm.output))
+
+    def test_user_agent_is_nominatim_compliant(self):
+        # The OSM placeholder UA ("example.org") is blocked with 403; guard against
+        # regressing the Nominatim UA back to the (BGG-shared) placeholder.
+        from django.conf import settings
+        self.assertNotIn("example.org", settings.NOMINATIM_USER_AGENT)

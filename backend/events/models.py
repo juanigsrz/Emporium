@@ -43,6 +43,8 @@ ALLOWED_TRANSITIONS: dict[str, list[str]] = {
     "ARCHIVED":         [],
 }
 
+WANTLIST_LOCKED_STATUSES = {"MATCHING", "MATCH_REVIEW", "FINALIZATION", "SHIPPING", "ARCHIVED"}
+
 
 # ---------------------------------------------------------------------------
 # TradeEvent
@@ -148,6 +150,11 @@ class TradeEvent(models.Model):
     def allowed_transitions_list(self) -> list[str]:
         """Return the list of valid next statuses from the current state."""
         return ALLOWED_TRANSITIONS.get(self.status, [])
+
+    @property
+    def inputs_locked(self) -> bool:
+        """True once matching has begun — wants and listings are read-only."""
+        return self.status in WANTLIST_LOCKED_STATUSES
 
 
 # ---------------------------------------------------------------------------

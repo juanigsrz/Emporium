@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 
@@ -144,24 +145,27 @@ def build_wants(event) -> str:
     wishes = _active_wishes(event)
 
     if event.matching_mode == TradeEvent.MatchingMode.XTOY:
+        money_block = _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs) if event.money_enabled else ""
         body = _build_xtoy(wishes, by_game, by_id, block_pairs)
+        header = _build_placeholder_header(event, wishes, by_id)
+        return money_block + header + body if (money_block or header) else body
     else:
         body = _build_onetoone(listings, wishes, by_game, by_id, block_pairs)
-
-    header = _build_placeholder_header(event, wishes, by_id)
-    return header + body if header else body
+        header = _build_placeholder_header(event, wishes, by_id)
+        return header + body if header else body
 
 
 def _build_placeholder_header(event, wishes, by_id) -> str:
-    """Money budgets / per-want bids / duplicate-protection as comment lines.
+    """Duplicate-protection comments and (for ONETOONE) money comment lines.
 
-    Comment lines (`#! ...`) are ignored by both parse_ftm and parse_gurobi, so
-    they round-trip harmlessly. This is a placeholder the MIP solver will consume
-    later — see docs/SOLVER_INTEGRATION.md.
+    For XTOY events with money_enabled, real solver directives are emitted by
+    _build_xtoy_money_directives instead; only #! DUP-PROTECT lines appear here.
+    Comment lines (`#! ...`) are ignored by both parse_ftm and parse_gurobi.
     """
     lines = []
+    is_xtoy = event.matching_mode == TradeEvent.MatchingMode.XTOY
 
-    if event.money_enabled:
+    if event.money_enabled and not is_xtoy:
         cap = event.max_money_per_user
         lines.append(
             f"#! MONEY-ENABLED max_per_user={f'{cap:.2f}' if cap is not None else 'none'}"
@@ -173,7 +177,7 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
     for w in wishes:
         if w.want_group.duplicate_protection:
             lines.append(f"#! DUP-PROTECT ({w.user.username}) wish={w.id}")
-        if not event.money_enabled:
+        if not event.money_enabled or is_xtoy:
             continue
         # Buy side (P): max the user pays to receive a wanted game.
         for it in w.want_group.items.all():
@@ -193,6 +197,88 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
                 f"#! MONEY-OFFER ({w.user.username}) "
                 f"listing={ogi.event_listing.copy.listing_code} min={ogi.money_amount}"
             )
+
+    return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _to_cents(amount) -> int:
+    """Convert a Decimal money amount to integer cents."""
+    return int((Decimal(str(amount)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs) -> str:
+    """Emit user/item/bid directives for main.py when money is enabled on an XTOY event.
+
+    Returns a string block (ending with newline) or empty string if nothing to emit.
+    Lines emitted (all amounts in integer cents):
+      user <username> budget <cents>   — per participant with budget > 0
+      item <code> owner <username>     — every active listing; + ask <cents> if sell price set
+      bid <username> <code> <cents>    — per buy-side WantGroupItem with money_amount set
+    """
+    from events.models import EventParticipation
+    from trades.models import OfferGroupItem
+
+    lines = []
+
+    # --- user budget lines ---
+    default_cap = event.max_money_per_user
+    participations = list(
+        EventParticipation.objects.filter(event=event).select_related("user")
+    )
+    # Build a map username -> max_spend so we can fall back to event default
+    part_by_user = {p.user.username: p for p in participations}
+
+    # Collect all usernames that appear in wishes
+    wish_usernames = {w.user.username for w in wishes}
+    for username in sorted(wish_usernames):
+        p = part_by_user.get(username)
+        if p and p.max_spend and p.max_spend > 0:
+            # Participation with null/zero max_spend is treated as unconstrained (no budget line).
+            lines.append(f"user {username} budget {_to_cents(p.max_spend)}")
+        elif not p and default_cap and default_cap > 0:
+            lines.append(f"user {username} budget {_to_cents(default_cap)}")
+
+    # --- item lines ---
+    for el in sorted(listings, key=lambda e: e.copy.listing_code):
+        code = el.copy.listing_code
+        owner_username = el.copy.owner.username
+        ask_row = OfferGroupItem.objects.filter(
+            event_listing=el, money_amount__isnull=False
+        ).order_by("money_amount").values_list("money_amount", flat=True).first()
+        if ask_row is not None:
+            lines.append(f"item {code} owner {owner_username} ask {_to_cents(ask_row)}")
+        else:
+            lines.append(f"item {code} owner {owner_username}")
+
+    # --- bid lines ---
+    # De-duplicate: (username, code) -> max bid in cents
+    bid_map = {}
+    blocked_cache = {}
+    coords = _load_coords()
+    for w in wishes:
+        blocked = blocked_cache.setdefault(
+            w.user_id,
+            _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
+        )
+        username = w.user.username
+        give_codes = {
+            ogi.event_listing.copy.listing_code
+            for ogi in w.offer_group.items.all()
+            if ogi.event_listing.active
+        }
+        for it in w.want_group.items.all():
+            if it.money_amount is None:
+                continue
+            bid_cents = _to_cents(it.money_amount)
+            codes = _expand([it], w.user_id, by_game, by_id, blocked)
+            codes = [c for c in codes if c not in give_codes]
+            for code in codes:
+                key = (username, code)
+                if key not in bid_map or bid_cents > bid_map[key]:
+                    bid_map[key] = bid_cents
+
+    for (username, code) in sorted(bid_map):
+        lines.append(f"bid {username} {code} {bid_map[(username, code)]}")
 
     return ("\n".join(lines) + "\n") if lines else ""
 
@@ -244,7 +330,7 @@ def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
             continue
         n = w.offer_group.max_give
         m = w.want_group.min_receive
-        lines.append(f"({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
+        lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 
@@ -330,6 +416,11 @@ def parse_gurobi(output: str):
         if line.startswith("Trade Results"):
             in_results = True
             continue
+        # Cash lines also contain '->' — end the swap section so they aren't
+        # mis-parsed as barter edges (see parse_gurobi_cash).
+        if line.startswith("Cash Purchases") or line.startswith("Cash Summary"):
+            in_results = False
+            continue
         if not in_results or "->" not in line:
             continue
         lhs, _, rhs = line.partition("->")
@@ -340,6 +431,33 @@ def parse_gurobi(output: str):
         for t in takes:
             edges.append((t, anchor, None))
     return edges
+
+
+_CASH_LINE = re.compile(r"^(\S+):\s+\S+\s+->\s+(\S+)\s+\(")
+
+
+def parse_gurobi_cash(output: str):
+    """gurobi `Cash Purchases:` section -> [(moved_code, buyer_username), ...].
+
+    Line form: `CODE: seller -> buyer  (buyer pays seller $N)`. The seller is the
+    owner of CODE (resolved downstream); the buyer is named only here, so it must
+    be carried out as a username (no listing code identifies the receiver).
+    """
+    moves = []
+    in_cash = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Cash Purchases"):
+            in_cash = True
+            continue
+        if line.startswith("Cash Summary"):
+            break
+        if not in_cash or not line:
+            continue
+        m = _CASH_LINE.match(line)
+        if m:
+            moves.append((m.group(1), m.group(2)))
+    return moves
 
 
 def _assign_components(resolved):
@@ -400,6 +518,28 @@ def load_solution(match_run, raw_output: str):
         if recv_el is None:
             raise ValueError(f"Unknown listing code in solution: {recv_code!r}")
         resolved.append([moved_el, moved_el.copy.owner, recv_el.copy.owner, group])
+
+    # Cash purchases (XTOY money mode): the buyer (receiver) is named only by
+    # username in the `Cash Purchases:` section, so it can't be resolved via a
+    # listing-code anchor like a swap. Resolve the buyer directly.
+    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
+        cash_moves = parse_gurobi_cash(raw_output)
+        if cash_moves:
+            from django.contrib.auth import get_user_model
+
+            names = {bn for _, bn in cash_moves}
+            users_by_name = {
+                u.username: u
+                for u in get_user_model().objects.filter(username__in=names)
+            }
+            for moved_code, buyer_username in cash_moves:
+                moved_el = by_code.get(moved_code)
+                if moved_el is None:
+                    raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
+                buyer = users_by_name.get(buyer_username)
+                if buyer is None:
+                    raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
+                resolved.append([moved_el, moved_el.copy.owner, buyer, None])
 
     # XTOY came back without groups -> recover connected components.
     if resolved and resolved[0][3] is None:

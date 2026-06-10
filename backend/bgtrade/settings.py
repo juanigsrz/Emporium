@@ -249,4 +249,11 @@ BGG_USER_AGENT = os.environ.get(
 BGG_REQUEST_DELAY = float(os.environ.get("BGG_REQUEST_DELAY", "1.0"))  # seconds between page fetches
 BGG_MAX_PAGES = int(os.environ.get("BGG_MAX_PAGES", "30"))
 NOMINATIM_BASE_URL = os.environ.get("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org")
-NOMINATIM_USER_AGENT = BGG_USER_AGENT
+# OSM Nominatim enforces a stricter UA policy than BGG: stock/placeholder agents
+# (e.g. the BGG default's "example.org") get a 403. Keep it separate + compliant,
+# overridable so operators can set a real contact. See:
+# https://operations.osmfoundation.org/policies/nominatim/
+NOMINATIM_USER_AGENT = os.environ.get(
+    "NOMINATIM_USER_AGENT",
+    "mathtrade-app/1.0 (+https://github.com/juanigsrz/mathtrade-app)",
+)

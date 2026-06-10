@@ -64,19 +64,29 @@ class ProfileSerializer(serializers.ModelSerializer):
             "created",
             "updated",
         ]
-        read_only_fields = ["username", "email", "latitude", "longitude", "created", "updated"]
+        read_only_fields = ["username", "email", "created", "updated"]
 
     def update(self, instance, validated_data):
+        lat = validated_data.pop("latitude", None)
+        lon = validated_data.pop("longitude", None)
         new_location = validated_data.get("location", instance.location)
         location_changed = "location" in validated_data and new_location != instance.location
         instance = super().update(instance, validated_data)
-        if location_changed:
+        if lat is not None and lon is not None:
+            # Explicit coords provided — use them directly, skip geocode
+            instance.latitude, instance.longitude = lat, lon
+            instance.save(update_fields=["latitude", "longitude", "updated"])
+        elif location_changed:
             if new_location.strip():
                 try:
                     coords = geocode(new_location)
-                except Exception:  # noqa: BLE001 — geocoding is best-effort
+                except Exception:  # noqa: BLE001 — propagate as ValidationError below
                     coords = None
-                instance.latitude, instance.longitude = coords if coords else (None, None)
+                if coords is None:
+                    raise serializers.ValidationError(
+                        {"location": "Couldn't resolve this location to coordinates. Pick a suggestion from the dropdown or refine the text."}
+                    )
+                instance.latitude, instance.longitude = coords
             else:
                 instance.latitude = instance.longitude = None
             instance.save(update_fields=["latitude", "longitude", "updated"])
