@@ -66,7 +66,8 @@ class WantBidSerializer(serializers.ModelSerializer):
         required=False, allow_null=True,
     )
     event_listing = serializers.PrimaryKeyRelatedField(
-        queryset=EventListing.objects.all(), required=False, allow_null=True,
+        queryset=EventListing.objects.all(), pk_field=serializers.IntegerField(),
+        required=False, allow_null=True,
     )
 
     class Meta:

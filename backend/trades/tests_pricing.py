@@ -161,6 +161,7 @@ class WantBidEndpointTests(MatchingTestBase):
         r1 = self.client.put(self.url, body, format="json")
         self.assertEqual(r1.status_code, 200, r1.data)
         r2 = self.client.put(self.url, {**body, "amount": "30"}, format="json")
+        self.assertEqual(r2.status_code, 200, r2.data)
         self.assertEqual(WantBid.objects.count(), 1)
         self.assertEqual(WantBid.objects.get().amount, Decimal("30"))
 
@@ -186,4 +187,8 @@ class WantBidEndpointTests(MatchingTestBase):
 
     def test_delete_without_param_400(self):
         r = self.client.delete(self.url)
+        self.assertEqual(r.status_code, 400)
+
+    def test_delete_non_numeric_param_400(self):
+        r = self.client.delete(f"{self.url}?board_game=abc")
         self.assertEqual(r.status_code, 400)
