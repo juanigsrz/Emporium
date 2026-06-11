@@ -152,6 +152,8 @@ export interface EventListing {
   owner_too_far?: boolean
   active: boolean
   created: string
+  resolved_ask?: string | null
+  ask_is_override?: boolean
 }
 
 export interface EventListingsParams {
@@ -316,6 +318,18 @@ export async function addEventListing(
 
 export async function removeEventListing(slug: string, listingId: number): Promise<void> {
   await apiClient.delete(`/events/${slug}/listings/${listingId}/`)
+}
+
+export async function setListingSellPrice(
+  slug: string,
+  listingId: number,
+  sell_price: string | null
+): Promise<EventListing> {
+  const { data } = await apiClient.patch<EventListing>(
+    `/events/${slug}/listings/${listingId}/`,
+    { sell_price }
+  )
+  return data
 }
 
 // ---- Hooks ----
