@@ -27,7 +27,9 @@ from django.db import transaction
 from catalog.models import BoardGame
 from copies.models import Copy
 from events.models import EventListing, EventParticipation, TradeEvent
-from trades.models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish
+from trades.models import (
+    OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, WantBid,
+)
 
 User = get_user_model()
 
@@ -189,30 +191,32 @@ class Command(BaseCommand):
                 og = OfferGroup.objects.create(
                     event=event, user=u, name=el.copy.listing_code, max_give=1
                 )
-                # Sell side (Q): ~40% of listings accept money, min ask.
-                sell_q = None
+                # Sell side (Q): ~40% of listings get a per-copy ask override.
                 if money_enabled and rng.random() < 0.4:
-                    sell_q = round(rng.uniform(5, min(money_cap, 25)), 2)
+                    el.sell_price = round(rng.uniform(5, min(money_cap, 25)), 2)
+                    el.save(update_fields=["sell_price"])
                     n_money_offers += 1
-                OfferGroupItem.objects.create(
-                    offer_group=og, event_listing=el, money_amount=sell_q
-                )
+                OfferGroupItem.objects.create(offer_group=og, event_listing=el)
 
                 wg = WantGroup.objects.create(
                     event=event, user=u, name=f"Wants for {el.copy.listing_code}",
                     min_receive=1, duplicate_protection=True,
                 )
                 for bgg_id in wanted_games:
-                    money = None
-                    if money_enabled and rng.random() < 0.3:
-                        money = round(rng.uniform(5, min(money_cap, 30)), 2)
-                        n_money_wants += 1
                     WantGroupItem.objects.create(
                         want_group=wg,
                         target_type=WantGroupItem.TargetType.BOARD_GAME,
                         board_game_id=bgg_id,
-                        money_amount=money,
                     )
+                    # Buy side (P): ~30% of wants get a per-target bid override.
+                    if money_enabled and rng.random() < 0.3:
+                        WantBid.objects.create(
+                            user=u, event=event,
+                            target_type=WantBid.TargetType.BOARD_GAME,
+                            board_game_id=bgg_id,
+                            amount=round(rng.uniform(5, min(money_cap, 30)), 2),
+                        )
+                        n_money_wants += 1
                 TradeWish.objects.create(
                     event=event, user=u, offer_group=og, want_group=wg, active=True
                 )

@@ -386,7 +386,7 @@ interface DraftWantItem {
   board_game_name: string | null
   event_listing: number | null
   listing_code: string | null
-  money_amount: string  // '' = none
+  bid: string  // '' = none
 }
 
 function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
@@ -740,7 +740,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
       board_game_name: i.board_game_name,
       event_listing: i.event_listing,
       listing_code: i.listing_code,
-      money_amount: i.bid_is_override ? (i.resolved_bid ?? '') : '',
+      bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
     }))
   )
   const [gameSearch, setGameSearch] = useState('')
@@ -773,7 +773,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
         board_game_name: game.name,
         event_listing: null,
         listing_code: null,
-        money_amount: '',
+        bid: '',
       },
     ])
   }
@@ -794,7 +794,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
         board_game_name: listing.board_game_name,
         event_listing: listing.id,
         listing_code: listing.listing_code,
-        money_amount: '',
+        bid: '',
       },
     ])
   }
@@ -811,7 +811,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   }
 
   function setMoney(localId: string, amount: string) {
-    setItems((prev) => prev.map((i) => (i.localId === localId ? { ...i, money_amount: amount } : i)))
+    setItems((prev) => prev.map((i) => (i.localId === localId ? { ...i, bid: amount } : i)))
   }
 
   function buildPayloadItems(): WantGroupItemPayload[] {
@@ -830,7 +830,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   async function saveWantBids() {
     if (!moneyEnabled) return
     for (const item of items) {
-      const trimmed = item.money_amount.trim()
+      const trimmed = item.bid.trim()
       if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
         if (trimmed === '') {
           await deleteWantBid(slug, { board_game: item.board_game })
@@ -959,7 +959,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                       type="number"
                       min={0}
                       step="0.01"
-                      value={item.money_amount}
+                      value={item.bid}
                       onChange={(e) => setMoney(item.localId, e.target.value)}
                       placeholder="0"
                       title="Most money you'll pay to receive this game (needs a seller who accepts money)"

@@ -70,13 +70,6 @@ class OfferGroupItem(models.Model):
         on_delete=models.CASCADE,
         related_name="offer_memberships",
     )
-    # Sell side of money trading: the LEAST money the owner will accept to give
-    # this listing for money (Q). Null = not for sale for money. A money trade is
-    # feasible only when a buyer's WantGroupItem.money_amount (P) >= this Q.
-    # Placeholder for the MIP solver (not yet consumed by the matcher).
-    money_amount = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True
-    )
 
     class Meta:
         unique_together = [("offer_group", "event_listing")]
@@ -163,12 +156,6 @@ class WantGroupItem(models.Model):
         null=True,
         blank=True,
         related_name="want_memberships",
-    )
-    # Optional money bid: the most the user will pay to receive this game/copy.
-    # Only meaningful when the event has money_enabled. Placeholder for the MIP
-    # solver (not yet consumed by the matcher).
-    money_amount  = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True
     )
 
     class Meta:
