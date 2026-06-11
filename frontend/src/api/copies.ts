@@ -15,6 +15,8 @@ export interface Copy {
   owner_username: string
   board_game: number
   board_game_name: string
+  version: number | null
+  version_name: string
   condition: CopyCondition
   language: string
   edition: string
@@ -38,6 +40,7 @@ export interface Copy {
 export interface CopyCreatePayload {
   board_game: number
   condition: CopyCondition
+  version?: number | null
   language?: string
   edition?: string
   sleeved?: CopySleeved
