@@ -206,6 +206,10 @@ export async function setGamePrice(slug: string, board_game: number, price: stri
   return data
 }
 
+export async function deleteGamePrice(slug: string, board_game: number): Promise<void> {
+  await apiClient.delete(`/events/${slug}/game-prices/`, { params: { board_game } })
+}
+
 // ---- Want Bids ----
 
 export interface WantBidPayload {
