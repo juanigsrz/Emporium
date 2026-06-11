@@ -11,7 +11,7 @@ Endpoints:
     POST          /api/events/{slug}/join/
     DELETE        /api/events/{slug}/leave/
     GET/POST      /api/events/{slug}/listings/
-    DELETE        /api/events/{slug}/listings/{id}/
+    PATCH/DELETE  /api/events/{slug}/listings/{id}/
 
 Permissions:
     - List/Retrieve: IsAuthenticated
@@ -72,7 +72,7 @@ class TradeEventViewSet(
         join         — POST /{slug}/join/
         leave        — DELETE /{slug}/leave/
         listings     — GET/POST /{slug}/listings/
-        listing_detail — DELETE /{slug}/listings/{id}/
+        listing_detail — PATCH/DELETE /{slug}/listings/{id}/
     """
 
     serializer_class = TradeEventSerializer
@@ -349,8 +349,10 @@ class TradeEventViewSet(
             listing.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
+        # PATCH — only sell_price is editable via this route (never copy/active)
+        data = {"sell_price": request.data.get("sell_price")} if "sell_price" in request.data else {}
         ser = EventListingSerializer(
-            listing, data=request.data, partial=True, context={"request": request}
+            listing, data=data, partial=True, context={"request": request}
         )
         ser.is_valid(raise_exception=True)
         ser.save()
