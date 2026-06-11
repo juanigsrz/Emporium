@@ -1,4 +1,6 @@
 from django.test import TestCase
+from rest_framework.test import APITestCase
+from rest_framework import status
 
 from catalog.models import BoardGame, BoardGameVersion
 from catalog.serializers import BoardGameDetailSerializer, BoardGameListSerializer
@@ -55,3 +57,44 @@ class DetailEnrichmentFieldsTest(TestCase):
         self.assertEqual(data["language_dependence"], 2)
         self.assertEqual(data["language_dependence_label"], "Some text")
         self.assertEqual(data["min_players"], 3)
+
+
+class GameVersionsAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.game = BoardGame.objects.create(bgg_id=500001, name="Versioned Game")
+        cls.v1 = BoardGameVersion.objects.create(
+            board_game=cls.game, bgg_version_id=9001, name="First Edition",
+            language="English", year_published=2018,
+        )
+        cls.v2 = BoardGameVersion.objects.create(
+            board_game=cls.game, bgg_version_id=9002, name="Deluxe",
+            language="English|German", year_published=2021,
+        )
+        cls.unknown = BoardGameVersion.get_or_create_unknown(cls.game)
+
+    def test_lists_real_versions_excludes_unknown(self):
+        resp = self.client.get(f"/api/games/{self.game.bgg_id}/versions/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        ids = {v["id"] for v in resp.data}
+        self.assertEqual(ids, {self.v1.id, self.v2.id})
+        self.assertNotIn(self.unknown.id, ids)
+
+    def test_version_fields_present(self):
+        resp = self.client.get(f"/api/games/{self.game.bgg_id}/versions/")
+        v = next(v for v in resp.data if v["id"] == self.v1.id)
+        self.assertEqual(v["bgg_version_id"], 9001)
+        self.assertEqual(v["name"], "First Edition")
+        self.assertEqual(v["language"], "English")
+        self.assertEqual(v["year_published"], 2018)
+        self.assertIn("thumbnail_url", v)
+
+    def test_unknown_game_404(self):
+        resp = self.client.get("/api/games/424242/versions/")
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_game_with_no_versions_returns_empty(self):
+        g2 = BoardGame.objects.create(bgg_id=500002, name="No Versions")
+        resp = self.client.get(f"/api/games/{g2.bgg_id}/versions/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data, [])

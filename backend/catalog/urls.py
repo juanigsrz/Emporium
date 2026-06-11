@@ -10,10 +10,11 @@ URL patterns for the catalog app.
 
 from django.urls import path
 
-from .views import BoardGameCopiesView, BoardGameDetailView, BoardGameListView
+from .views import BoardGameCopiesView, BoardGameDetailView, BoardGameListView, BoardGameVersionsView
 
 urlpatterns = [
     path("games/", BoardGameListView.as_view(), name="game-list"),
     path("games/<int:bgg_id>/", BoardGameDetailView.as_view(), name="game-detail"),
     path("games/<int:bgg_id>/copies/", BoardGameCopiesView.as_view(), name="game-copies"),
+    path("games/<int:bgg_id>/versions/", BoardGameVersionsView.as_view(), name="game-versions"),
 ]
