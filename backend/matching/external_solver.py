@@ -163,6 +163,7 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
     _build_xtoy_money_directives instead; only #! DUP-PROTECT lines appear here.
     Comment lines (`#! ...`) are ignored by both parse_ftm and parse_gurobi.
     """
+    from trades.pricing import resolve_ask, resolve_bid
     lines = []
     is_xtoy = event.matching_mode == TradeEvent.MatchingMode.XTOY
 
@@ -180,10 +181,9 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
             lines.append(f"#! DUP-PROTECT ({w.user.username}) wish={w.id}")
         if not event.money_enabled or is_xtoy:
             continue
-        from trades.pricing import resolve_ask, resolve_bid
         # Buy side (P): max the user pays to receive a wanted game.
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, w.event, it)
+            bid = resolve_bid(w.user, event, it)
             if bid is None:
                 continue
             if it.target_type == WantGroupItem.TargetType.BOARD_GAME:
@@ -220,6 +220,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
       bid <username> <code> <cents>    — per buy-side want item with a resolved bid price
     """
     from events.models import EventParticipation
+    from trades.pricing import resolve_ask, resolve_bid
 
     lines = []
 
@@ -242,7 +243,6 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
             lines.append(f"user {username} budget {_to_cents(default_cap)}")
 
     # --- item lines ---
-    from trades.pricing import resolve_ask
     for el in sorted(listings, key=lambda e: e.copy.listing_code):
         code = el.copy.listing_code
         owner_username = el.copy.owner.username
@@ -257,7 +257,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     bid_map = {}
     blocked_cache = {}
     coords = _load_coords()
-    from trades.pricing import resolve_bid
+    # resolve_bid/resolve_ask do per-item DB lookups; fine on this once-per-export path.
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -270,7 +270,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
             if ogi.event_listing.active
         }
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, w.event, it)
+            bid = resolve_bid(w.user, event, it)
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)
