@@ -12,8 +12,13 @@ Resolve effective money prices from the per-game default + overrides.
         ?? UserGamePrice(user, event, target.board_game)
         ?? None  (no bid)
 
-`target` is anything exposing `.target_type`, `.board_game(_id)`, and
-`.event_listing` — i.e. a WantGroupItem or a WantBid-shaped object.
+`target` is a WantGroupItem (or any object exposing `.target_type`,
+`.board_game_id`, and `.event_listing` with the same TextChoices string values).
+
+Callers that invoke these helpers in a loop should pre-load related rows to
+avoid N+1: select_related("copy") on listings passed to resolve_ask, and
+prefetch `event_listing__copy` for any LISTING-target want items passed to
+resolve_bid.
 """
 
 from .models import UserGamePrice, WantBid, WantGroupItem
