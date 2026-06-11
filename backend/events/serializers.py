@@ -171,9 +171,19 @@ class EventListingSerializer(serializers.ModelSerializer):
         queryset=__import__("copies.models", fromlist=["Copy"]).Copy.objects.all(),
         write_only=True,
     )
-    sell_price = serializers.DecimalField(
+    sell_price      = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True
     )
+    resolved_ask    = serializers.SerializerMethodField()
+    ask_is_override = serializers.SerializerMethodField()
+
+    def get_resolved_ask(self, obj):
+        from trades.pricing import resolve_ask
+        v = resolve_ask(obj)
+        return str(v) if v is not None else None
+
+    def get_ask_is_override(self, obj):
+        return obj.sell_price is not None
 
     def validate_sell_price(self, value):
         if value is not None and value < 0:
@@ -198,6 +208,8 @@ class EventListingSerializer(serializers.ModelSerializer):
             "owner_too_far",
             "active",
             "sell_price",
+            "resolved_ask",
+            "ask_is_override",
             "created",
         ]
         read_only_fields = [
@@ -213,6 +225,8 @@ class EventListingSerializer(serializers.ModelSerializer):
             "copy_condition",
             "copy_language",
             "owner_too_far",
+            "resolved_ask",
+            "ask_is_override",
             "created",
         ]
 
