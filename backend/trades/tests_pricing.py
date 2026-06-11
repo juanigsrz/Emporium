@@ -219,3 +219,16 @@ class SellPricePatchTests(MatchingTestBase):
         self.assertEqual(r.status_code, 200)
         self.el_a1.refresh_from_db()
         self.assertIsNone(self.el_a1.sell_price)
+
+    def test_negative_sell_price_rejected(self):
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.patch(self.url, {"sell_price": "-1"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_patch_cannot_change_active_or_copy(self):
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.patch(self.url, {"active": False, "sell_price": "5"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.el_a1.refresh_from_db()
+        self.assertTrue(self.el_a1.active)          # active untouched by PATCH
+        self.assertEqual(self.el_a1.sell_price, Decimal("5"))
