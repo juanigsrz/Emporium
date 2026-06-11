@@ -566,6 +566,8 @@ git commit -m "feat(pricing): solver export reads resolved ask/bid"
 
 `PUT /api/events/{slug}/game-prices/` body `{board_game, price}` — idempotent upsert for `request.user`. `GET` lists the user's prices. `DELETE` via `?board_game=` clears one.
 
+> **Not gated by `inputs_locked`** — price endpoints (game-prices, want-bids, listing sell_price PATCH) are tunable at any event lifecycle stage. The test fixture event is in MATCHING status (locked); gating would 403 these calls. Prices only take effect when an export/solve runs.
+
 **Files:**
 - Modify: `backend/trades/serializers.py` (add `UserGamePriceSerializer`)
 - Modify: `backend/trades/views.py` (add `GamePriceView`)
@@ -651,7 +653,6 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
-        self._assert_editable(event)
         ser = UserGamePriceSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         board_game = ser.validated_data["board_game"]
@@ -663,7 +664,6 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
-        self._assert_editable(event)
         bgg_id = request.query_params.get("board_game")
         UserGamePrice.objects.filter(
             user=request.user, event=event, board_game_id=bgg_id
@@ -797,7 +797,6 @@ class WantBidView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
-        self._assert_editable(event)
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
@@ -813,7 +812,6 @@ class WantBidView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
-        self._assert_editable(event)
         f = {"user": request.user, "event": event}
         if request.query_params.get("board_game"):
             f["board_game_id"] = request.query_params["board_game"]
