@@ -208,6 +208,12 @@ class EventListing(models.Model):
     )
     active = models.BooleanField(default=True)
 
+    # Per-copy sell-price override for money trading. null => fall through to the
+    # owner's UserGamePrice for this game (see trades/pricing.resolve_ask).
+    sell_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
