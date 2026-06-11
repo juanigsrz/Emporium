@@ -78,7 +78,6 @@ export async function listGameVersions(bggId: number): Promise<GameVersion[]> {
   return data
 }
 
-
 export async function fetchGamesList(
   params: GamesListParams
 ): Promise<PaginatedResponse<GameListItem>> {
@@ -125,7 +124,6 @@ export function useGameVersions(bggId: number | undefined) {
     staleTime: 5 * 60_000,
   })
 }
-
 
 export const GAMES_KEYS = {
   all: ['games'] as const,
