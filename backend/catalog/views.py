@@ -32,7 +32,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import BoardGame
-from .serializers import BoardGameDetailSerializer, BoardGameListSerializer
+from .serializers import BoardGameDetailSerializer, BoardGameListSerializer, BoardGameVersionSerializer
 
 CACHE_TIMEOUT = getattr(settings, "GAME_CACHE_TIMEOUT", 60)
 
@@ -233,3 +233,26 @@ class BoardGameCopiesView(generics.ListAPIView):
 
         # ?event= accepted and ignored until F4
         return qs
+
+
+# ---------------------------------------------------------------------------
+# Versions sub-route
+# ---------------------------------------------------------------------------
+
+class BoardGameVersionsView(generics.ListAPIView):
+    """GET /api/games/{bgg_id}/versions/ — real BGG versions of a game (excludes Unknown)."""
+
+    serializer_class = BoardGameVersionSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        from .models import BoardGameVersion
+        bgg_id = self.kwargs["bgg_id"]
+        if not BoardGame.objects.filter(bgg_id=bgg_id).exists():
+            raise NotFound(f"No game with bgg_id={bgg_id}.")
+        return (
+            BoardGameVersion.objects
+            .filter(board_game_id=bgg_id, bgg_version_id__isnull=False)
+            .order_by("bgg_version_id")
+        )

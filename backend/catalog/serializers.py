@@ -15,7 +15,13 @@ Detail shape: all list fields + deferred placeholders:
 
 from rest_framework import serializers
 
-from .models import BoardGame
+from .models import BoardGame, BoardGameVersion
+
+
+class BoardGameVersionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BoardGameVersion
+        fields = ["id", "bgg_version_id", "name", "language", "year_published", "thumbnail_url"]
 
 
 class BoardGameListSerializer(serializers.ModelSerializer):
