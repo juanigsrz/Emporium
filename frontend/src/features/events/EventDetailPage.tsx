@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,6 +15,8 @@ import {
   useRemoveEventListing,
   useEventParticipants,
   useSetEventBudget,
+  setListingSellPrice,
+  EVENTS_KEYS,
   EVENT_STATUSES,
   EVENT_STATUS_LABELS,
   MATCHING_MODE_LABELS,
@@ -701,6 +704,7 @@ interface MyListingsSectionProps {
 }
 
 function MyListingsSection({ event, username }: MyListingsSectionProps) {
+  const qc = useQueryClient()
   const { data: listingsData, isLoading } = useEventListings(event.slug, {
     user: username,
     page_size: 100,
@@ -763,6 +767,28 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
                   <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
                 </div>
               </div>
+              {event.money_enabled && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs text-gray-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={listing.ask_is_override ? (listing.resolved_ask ?? '') : ''}
+                    placeholder={
+                      listing.resolved_ask && !listing.ask_is_override
+                        ? `default ${listing.resolved_ask}`
+                        : 'price'
+                    }
+                    onBlur={async (e) => {
+                      const v = e.target.value.trim()
+                      await setListingSellPrice(event.slug, listing.id, v === '' ? null : v)
+                      qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
+                    }}
+                    className="w-24 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                </div>
+              )}
               <button
                 onClick={() => handleRemove(listing.id)}
                 disabled={removeListing.isPending}
