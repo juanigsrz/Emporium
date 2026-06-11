@@ -711,6 +711,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
   })
   const removeListing = useRemoveEventListing()
   const [removeError, setRemoveError] = useState<string | null>(null)
+  const [sellPriceError, setSellPriceError] = useState<string | null>(null)
 
   const myListings = (listingsData?.results ?? []).filter(
     (l: EventListing) => l.copy_owner_username === username
@@ -749,6 +750,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
       ) : (
         <div className="space-y-2">
           {removeError && <p className="text-xs text-red-600">{removeError}</p>}
+          {sellPriceError && <p className="text-xs text-red-600">{sellPriceError}</p>}
           {myListings.map((listing) => (
             <div
               key={listing.id}
@@ -771,6 +773,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="text-xs text-gray-400">$</span>
                   <input
+                    key={`sp-${listing.id}-${listing.ask_is_override ? (listing.resolved_ask ?? '') : 'def'}`}
                     type="number"
                     step="0.01"
                     min="0"
@@ -781,9 +784,14 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
                         : 'price'
                     }
                     onBlur={async (e) => {
+                      setSellPriceError(null)
                       const v = e.target.value.trim()
-                      await setListingSellPrice(event.slug, listing.id, v === '' ? null : v)
-                      qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
+                      try {
+                        await setListingSellPrice(event.slug, listing.id, v === '' ? null : v)
+                        qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
+                      } catch (err: unknown) {
+                        setSellPriceError(extractErrorMsg(err) ?? 'Failed to save price.')
+                      }
                     }}
                     className="w-24 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
                   />
