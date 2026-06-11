@@ -32,7 +32,7 @@ from rest_framework import serializers
 
 from events.models import EventListing
 from catalog.models import BoardGame
-from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice
+from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice, WantBid
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,45 @@ class UserGamePriceSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("price cannot be negative.")
         return value
+
+
+# ---------------------------------------------------------------------------
+# WantBid
+# ---------------------------------------------------------------------------
+
+class WantBidSerializer(serializers.ModelSerializer):
+    board_game = serializers.PrimaryKeyRelatedField(
+        queryset=BoardGame.objects.all(), pk_field=serializers.IntegerField(),
+        required=False, allow_null=True,
+    )
+    event_listing = serializers.PrimaryKeyRelatedField(
+        queryset=EventListing.objects.all(), required=False, allow_null=True,
+    )
+
+    class Meta:
+        model = WantBid
+        fields = ["id", "target_type", "board_game", "event_listing", "amount", "updated"]
+        read_only_fields = ["id", "updated"]
+
+    def validate(self, data):
+        tt = data.get("target_type")
+        bg = data.get("board_game")
+        el = data.get("event_listing")
+        if tt == WantBid.TargetType.BOARD_GAME:
+            if not bg:
+                raise serializers.ValidationError({"board_game": "required for BOARD_GAME."})
+            if el:
+                raise serializers.ValidationError({"event_listing": "must be null for BOARD_GAME."})
+        elif tt == WantBid.TargetType.LISTING:
+            if not el:
+                raise serializers.ValidationError({"event_listing": "required for LISTING."})
+            if bg:
+                raise serializers.ValidationError({"board_game": "must be null for LISTING."})
+        else:
+            raise serializers.ValidationError({"target_type": f"Invalid: {tt}"})
+        if data.get("amount") is not None and data["amount"] < 0:
+            raise serializers.ValidationError({"amount": "amount cannot be negative."})
+        return data
 
 
 # ---------------------------------------------------------------------------

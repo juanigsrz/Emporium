@@ -30,8 +30,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice
-from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer
+from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice, WantBid
+from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer, WantBidSerializer
 
 
 # ---------------------------------------------------------------------------
@@ -410,4 +410,52 @@ class GamePriceView(EventScopedMixin, APIView):
         UserGamePrice.objects.filter(
             user=request.user, event=event, board_game_id=bgg_id
         ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# WantBid upsert
+# ---------------------------------------------------------------------------
+
+class WantBidView(EventScopedMixin, APIView):
+    """GET/PUT/DELETE /api/events/{slug}/want-bids/ — the user's per-target bids."""
+
+    def get(self, request, slug):
+        event = self._get_event(slug)
+        qs = WantBid.objects.filter(event=event, user=request.user)
+        return Response(WantBidSerializer(qs, many=True).data)
+
+    def put(self, request, slug):
+        event = self._get_event(slug)
+        ser = WantBidSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        if d["target_type"] == WantBid.TargetType.BOARD_GAME:
+            key = {"board_game": d["board_game"], "event_listing": None}
+        else:
+            key = {"event_listing": d["event_listing"], "board_game": None}
+        obj, _ = WantBid.objects.update_or_create(
+            user=request.user, event=event, target_type=d["target_type"], **key,
+            defaults={"amount": d["amount"]},
+        )
+        return Response(WantBidSerializer(obj).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, slug):
+        event = self._get_event(slug)
+        bgg = request.query_params.get("board_game")
+        el = request.query_params.get("event_listing")
+        if not bgg and not el:
+            raise ValidationError({"detail": "board_game or event_listing query param required."})
+        f = {"user": request.user, "event": event}
+        if bgg:
+            try:
+                f["board_game_id"] = int(bgg)
+            except (TypeError, ValueError):
+                raise ValidationError({"board_game": "Must be an integer."})
+        if el:
+            try:
+                f["event_listing_id"] = int(el)
+            except (TypeError, ValueError):
+                raise ValidationError({"event_listing": "Must be an integer."})
+        WantBid.objects.filter(**f).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
