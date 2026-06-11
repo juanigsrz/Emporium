@@ -32,7 +32,28 @@ from rest_framework import serializers
 
 from events.models import EventListing
 from catalog.models import BoardGame
-from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish
+from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice
+
+
+# ---------------------------------------------------------------------------
+# UserGamePrice
+# ---------------------------------------------------------------------------
+
+class UserGamePriceSerializer(serializers.ModelSerializer):
+    board_game = serializers.PrimaryKeyRelatedField(
+        queryset=BoardGame.objects.all(), pk_field=serializers.IntegerField()
+    )
+    board_game_name = serializers.CharField(source="board_game.name", read_only=True)
+
+    class Meta:
+        model = UserGamePrice
+        fields = ["id", "board_game", "board_game_name", "price", "updated"]
+        read_only_fields = ["id", "board_game_name", "updated"]
+
+    def validate_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError("price cannot be negative.")
+        return value
 
 
 # ---------------------------------------------------------------------------
