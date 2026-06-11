@@ -16,9 +16,11 @@ import {
   createWishRaw,
   patchWantGroupRaw,
   invalidateTrades,
+  listGamePrices,
+  setGamePrice,
 } from '../../api/trades'
-import type { OfferGroup, WantGroup, WantGroupItemPayload } from '../../api/trades'
-import { useQueryClient } from '@tanstack/react-query'
+import type { OfferGroup, WantGroup, WantGroupItemPayload, GamePrice } from '../../api/trades'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 // ============================================================
 // Model: a "want target" is one row in the matrix.
@@ -112,7 +114,7 @@ interface PageModel {
   baseMatrix: Map<number, Set<string>>
   /** All want targets referenced by any of my lists, keyed for dedupe. */
   baseTargets: Map<string, Target>
-  /** Canonical gameId -> existing buy-price (money_amount as string), server truth. */
+  /** Canonical gameId (bgg id) -> per-game price (UserGamePrice.price), server truth. */
   baseMoneyByGame: Map<number, string>
 }
 
@@ -120,7 +122,8 @@ function buildModel(
   myListings: EventListing[],
   offerGroups: OfferGroup[],
   wantGroups: WantGroup[],
-  wishes: { offer_group: number; want_group: number }[]
+  wishes: { offer_group: number; want_group: number }[],
+  gamePrices: GamePrice[]
 ): PageModel {
   const wantGroupById = new Map(wantGroups.map((wg) => [wg.id, wg]))
   const wantGroupIdByOffer = new Map(wishes.map((w) => [w.offer_group, w.want_group]))
@@ -137,7 +140,10 @@ function buildModel(
   const wantGroupByListing = new Map<number, WantGroup>()
   const baseMatrix = new Map<number, Set<string>>()
   const baseTargets = new Map<string, Target>()
-  const baseMoneyByGame = new Map<number, string>()
+  // Per-game price comes from UserGamePrice rows (keyed by bgg id), not want items.
+  const baseMoneyByGame = new Map<number, string>(
+    gamePrices.map((gp) => [gp.board_game, gp.price])
+  )
 
   for (const listing of myListings) {
     const og = offerGroupByListing.get(listing.id)
@@ -151,9 +157,6 @@ function buildModel(
           if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
             const key = gameTargetKey(item.board_game)
             set.add(key)
-            if (item.money_amount != null && !baseMoneyByGame.has(item.board_game)) {
-              baseMoneyByGame.set(item.board_game, item.money_amount)
-            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -167,10 +170,6 @@ function buildModel(
           } else if (item.target_type === 'LISTING' && item.event_listing != null) {
             const key = listingTargetKey(item.event_listing)
             set.add(key)
-            const lgid = item.board_game_id ?? -item.event_listing
-            if (item.money_amount != null && !baseMoneyByGame.has(lgid)) {
-              baseMoneyByGame.set(lgid, item.money_amount)
-            }
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
@@ -216,7 +215,6 @@ interface GameBrowseProps {
 interface GameCardControlsProps {
   slug: string
   bggId: number
-  wanted: boolean
   moneyEnabled: boolean
   priceValue: string
   onPriceChange: (value: string) => void
@@ -226,7 +224,6 @@ interface GameCardControlsProps {
 function GameCardControls({
   slug,
   bggId,
-  wanted,
   moneyEnabled,
   priceValue,
   onPriceChange,
@@ -278,9 +275,8 @@ function GameCardControls({
         ...(i.target_type === 'BOARD_GAME'
           ? { board_game: i.board_game! }
           : { event_listing: i.event_listing! }),
-        money_amount: i.money_amount != null ? Number(i.money_amount) : null,
       })),
-      { target_type: 'BOARD_GAME', board_game: bggId, money_amount: null },
+      { target_type: 'BOARD_GAME', board_game: bggId },
     ]
     try {
       await patchWantGroupRaw(slug, group.id, { items })
@@ -299,7 +295,7 @@ function GameCardControls({
       await createWantGroupRaw(slug, {
         name,
         min_receive: 1,
-        items: [{ target_type: 'BOARD_GAME', board_game: bggId, money_amount: null }],
+        items: [{ target_type: 'BOARD_GAME', board_game: bggId }],
       })
       invalidateTrades(qc, slug)
       setShowNew(false)
@@ -345,19 +341,23 @@ function GameCardControls({
       </div>
 
       {moneyEnabled && (
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500">Pay up to $</span>
-          <input
-            type="number"
-            min={0}
-            step="0.01"
-            value={priceValue}
-            disabled={!wanted}
-            onChange={(e) => onPriceChange(e.target.value)}
-            placeholder={wanted ? '0' : 'want it first'}
-            title={wanted ? "Most money you'll pay to receive this game" : 'Select a copy / want this game to set a price'}
-            className="w-24 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-          />
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500">Price $</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={priceValue}
+              onChange={(e) => onPriceChange(e.target.value)}
+              placeholder="—"
+              title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
+              className="w-24 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            />
+          </div>
+          <span className="text-[10px] text-gray-400">
+            Applied to every copy — sell default for ones you own, your bid if you want it.
+          </span>
         </div>
       )}
 
@@ -590,23 +590,14 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                 </div>
                 {open && (
                   <div className="border-t border-gray-100 bg-gray-50/60">
-                    {(() => {
-                      const group = groupByGame.get(g.bgg_id)
-                      const wantedForControls = group
-                        ? myListings.some((l) => groupIsOn(editor, l.id, group))
-                        : false
-                      return (
-                        <GameCardControls
-                          slug={slug}
-                          bggId={g.bgg_id}
-                          wanted={wantedForControls}
-                          moneyEnabled={moneyEnabled}
-                          priceValue={editor.priceForGame(g.bgg_id)}
-                          onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
-                          customWantGroups={customWantGroups}
-                        />
-                      )
-                    })()}
+                    <GameCardControls
+                      slug={slug}
+                      bggId={g.bgg_id}
+                      moneyEnabled={moneyEnabled}
+                      priceValue={editor.priceForGame(g.bgg_id)}
+                      onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
+                      customWantGroups={customWantGroups}
+                    />
                     <GameCopies
                       slug={slug}
                       bggId={g.bgg_id}
@@ -961,10 +952,12 @@ interface Editor {
   isOn: (listingId: number, targetKey: string) => boolean
   toggle: (listingId: number, targetKey: string, next?: boolean) => void
   addTarget: (t: Target) => void
-  /** Current buy-price (string; '' = none) for a canonical game. */
+  /** Current per-game price (string; '' = none) for a canonical game. */
   priceForGame: (gameId: number) => string
-  /** Stage a buy-price change for a canonical game. */
+  /** Stage a per-game price change for a canonical game. */
   setMoney: (gameId: number, value: string) => void
+  /** Staged per-game price edits (gameId -> value), to persist on Save. */
+  changedGamePrices: Map<number, string>
   dirtyCount: number
   changedListingIds: Set<number>
   reset: () => void
@@ -1048,22 +1041,8 @@ function useEditor(model: PageModel): {
   const changedListingIds = useMemo(() => {
     const s = new Set<number>()
     for (const ck of changes.keys()) s.add(Number(ck.split('::')[0]))
-    if (moneyByGame.size > 0) {
-      const affectedKeys = new Set<string>()
-      for (const t of targets) {
-        if (moneyByGame.has(t.gameId)) affectedKeys.add(t.key)
-      }
-      for (const [listingId] of model.baseMatrix) {
-        for (const k of affectedKeys) {
-          if (isOn(listingId, k)) {
-            s.add(listingId)
-            break
-          }
-        }
-      }
-    }
     return s
-  }, [changes, moneyByGame, targets, model.baseMatrix, isOn])
+  }, [changes])
 
   return {
     editor: {
@@ -1073,6 +1052,7 @@ function useEditor(model: PageModel): {
       addTarget,
       priceForGame,
       setMoney,
+      changedGamePrices: moneyByGame,
       dirtyCount: changes.size + moneyByGame.size,
       changedListingIds,
       reset,
@@ -1374,6 +1354,22 @@ async function persistChanges(
   myListings: EventListing[],
   moneyEnabled: boolean
 ): Promise<void> {
+  // Per-game prices live on UserGamePrice (one per (user, event, game)) — they
+  // default both the sell ask on copies you own and your bid on wants. Persist
+  // each staged price independently of the want lists.
+  if (moneyEnabled) {
+    for (const [gameId, value] of editor.changedGamePrices) {
+      // Per-game prices are keyed by bgg id; LISTING-only targets that lack a
+      // real bgg id use a negative synthetic id and can't be priced.
+      if (gameId < 0) continue
+      const raw = value.trim()
+      // The upsert endpoint only accepts a valid decimal; a blank value (the
+      // user clearing the field) is left for an explicit delete path.
+      if (raw === '') continue
+      await setGamePrice(slug, gameId, raw)
+    }
+  }
+
   const listingById = new Map(myListings.map((l) => [l.id, l]))
 
   for (const listingId of editor.changedListingIds) {
@@ -1382,19 +1378,12 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => {
-      const item: WantGroupItemPayload = {
-        target_type: t.type,
-        ...(t.type === 'BOARD_GAME'
-          ? { board_game: t.boardGameId! }
-          : { event_listing: t.listingId! }),
-      }
-      if (moneyEnabled) {
-        const raw = editor.priceForGame(t.gameId).trim()
-        item.money_amount = raw === '' ? null : Number(raw)
-      }
-      return item
-    })
+    const items: WantGroupItemPayload[] = desired.map((t) => ({
+      target_type: t.type,
+      ...(t.type === 'BOARD_GAME'
+        ? { board_game: t.boardGameId! }
+        : { event_listing: t.listingId! }),
+    }))
 
     let wg = model.wantGroupByListing.get(listingId)
 
@@ -1439,12 +1428,19 @@ export default function MyWantsPage() {
   const { data: offerGroups = [] } = useOfferGroups(slug)
   const { data: wantGroups = [] } = useWantGroups(slug)
   const { data: wishes = [] } = useWishes(slug)
+  // Per-game prices (UserGamePrice) — the source of truth for each game's price.
+  const { data: gamePrices = [] } = useQuery({
+    queryKey: ['trades', 'game-prices', slug ?? ''],
+    queryFn: () => listGamePrices(slug!),
+    enabled: !!slug,
+    staleTime: 30_000,
+  })
 
   const myListings = useMemo(() => listingsData?.results ?? [], [listingsData])
 
   const model = useMemo(
-    () => buildModel(myListings, offerGroups, wantGroups, wishes),
-    [myListings, offerGroups, wantGroups, wishes]
+    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices),
+    [myListings, offerGroups, wantGroups, wishes, gamePrices]
   )
 
   const customWantGroups = useMemo(() => {
@@ -1472,6 +1468,7 @@ export default function MyWantsPage() {
     try {
       await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
       invalidateTrades(qc, slug)
+      qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })
       editor.reset()
     } catch (err) {
       setSaveError(
