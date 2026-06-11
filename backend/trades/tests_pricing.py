@@ -148,3 +148,42 @@ class GamePriceEndpointTests(MatchingTestBase):
     def test_delete_without_param_400(self):
         r = self.client.delete(self.url)
         self.assertEqual(r.status_code, 400)
+
+
+class WantBidEndpointTests(MatchingTestBase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(user=self.user_a)
+        self.url = f"/api/events/{self.slug}/want-bids/"
+
+    def test_put_board_game_upsert(self):
+        body = {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id, "amount": "25"}
+        r1 = self.client.put(self.url, body, format="json")
+        self.assertEqual(r1.status_code, 200, r1.data)
+        r2 = self.client.put(self.url, {**body, "amount": "30"}, format="json")
+        self.assertEqual(WantBid.objects.count(), 1)
+        self.assertEqual(WantBid.objects.get().amount, Decimal("30"))
+
+    def test_put_listing_target(self):
+        body = {"target_type": "LISTING", "event_listing": self.el_b1.id, "amount": "12"}
+        r = self.client.put(self.url, body, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(WantBid.objects.get().event_listing_id, self.el_b1.id)
+
+    def test_board_game_with_listing_rejected(self):
+        body = {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id,
+                "event_listing": self.el_b1.id, "amount": "5"}
+        r = self.client.put(self.url, body, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_delete_board_game_bid(self):
+        WantBid.objects.create(user=self.user_a, event=self.event,
+                               target_type=WantBid.TargetType.BOARD_GAME,
+                               board_game=self.game_terra, amount=Decimal("10"))
+        r = self.client.delete(f"{self.url}?board_game={self.game_terra.bgg_id}")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(WantBid.objects.count(), 0)
+
+    def test_delete_without_param_400(self):
+        r = self.client.delete(self.url)
+        self.assertEqual(r.status_code, 400)

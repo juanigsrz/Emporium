@@ -21,6 +21,7 @@ from .views import (
     OfferGroupListCreateView,
     TradeWishDetailView,
     TradeWishListCreateView,
+    WantBidView,
     WantGroupDetailView,
     WantGroupListCreateView,
 )
@@ -64,5 +65,11 @@ urlpatterns = [
         "events/<slug:slug>/game-prices/",
         GamePriceView.as_view(),
         name="game-price",
+    ),
+    # Want Bids
+    path(
+        "events/<slug:slug>/want-bids/",
+        WantBidView.as_view(),
+        name="want-bid",
     ),
 ]
