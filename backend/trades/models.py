@@ -9,6 +9,8 @@ Models:
     WantGroup       — named set of target games/listings + min_receive (Y).
     WantGroupItem   — a tiered, ranked target inside a WantGroup.
     TradeWish       — links one OfferGroup to one WantGroup (the trade intention).
+    UserGamePrice   — a user's canonical per-game price in an event (defaults ask + bid).
+    WantBid         — a per-target bid override (board game or specific listing).
 
 Design: all models are event-scoped. Owner is always set to request.user at
 create time; writes are owner-only. The unified X-to-Y model is the core
@@ -331,6 +333,7 @@ class WantBid(models.Model):
         ordering = ["id"]
 
     def clean(self):
+        """Validate exactly one of board_game / event_listing is set, matching target_type."""
         if self.target_type == self.TargetType.BOARD_GAME:
             if not self.board_game_id:
                 raise ValidationError("board_game is required when target_type is BOARD_GAME.")
@@ -341,6 +344,8 @@ class WantBid(models.Model):
                 raise ValidationError("event_listing is required when target_type is LISTING.")
             if self.board_game_id:
                 raise ValidationError("board_game must be null when target_type is LISTING.")
+            if self.event_listing.event_id != self.event_id:
+                raise ValidationError("event_listing must belong to the same event as this bid.")
         else:
             raise ValidationError(f"Unknown target_type: {self.target_type}")
 
