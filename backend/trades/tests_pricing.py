@@ -192,3 +192,30 @@ class WantBidEndpointTests(MatchingTestBase):
     def test_delete_non_numeric_param_400(self):
         r = self.client.delete(f"{self.url}?board_game=abc")
         self.assertEqual(r.status_code, 400)
+
+
+class SellPricePatchTests(MatchingTestBase):
+    def setUp(self):
+        super().setUp()
+        self.url = f"/api/events/{self.slug}/listings/{self.el_a1.id}/"
+
+    def test_owner_sets_sell_price(self):
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.patch(self.url, {"sell_price": "18.50"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.el_a1.refresh_from_db()
+        self.assertEqual(self.el_a1.sell_price, Decimal("18.50"))
+
+    def test_non_owner_forbidden(self):
+        self.client.force_authenticate(user=self.user_b)
+        r = self.client.patch(self.url, {"sell_price": "1"}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_clear_sell_price_with_null(self):
+        self.el_a1.sell_price = Decimal("9")
+        self.el_a1.save(update_fields=["sell_price"])
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.patch(self.url, {"sell_price": None}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.el_a1.refresh_from_db()
+        self.assertIsNone(self.el_a1.sell_price)

@@ -171,6 +171,14 @@ class EventListingSerializer(serializers.ModelSerializer):
         queryset=__import__("copies.models", fromlist=["Copy"]).Copy.objects.all(),
         write_only=True,
     )
+    sell_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+
+    def validate_sell_price(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("sell_price cannot be negative.")
+        return value
 
     class Meta:
         model = EventListing
@@ -189,6 +197,7 @@ class EventListingSerializer(serializers.ModelSerializer):
             "copy_language",
             "owner_too_far",
             "active",
+            "sell_price",
             "created",
         ]
         read_only_fields = [
