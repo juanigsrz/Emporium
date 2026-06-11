@@ -401,6 +401,12 @@ class GamePriceView(EventScopedMixin, APIView):
     def delete(self, request, slug):
         event = self._get_event(slug)
         bgg_id = request.query_params.get("board_game")
+        if not bgg_id:
+            raise ValidationError({"board_game": "Required query parameter."})
+        try:
+            bgg_id = int(bgg_id)
+        except (TypeError, ValueError):
+            raise ValidationError({"board_game": "Must be an integer."})
         UserGamePrice.objects.filter(
             user=request.user, event=event, board_game_id=bgg_id
         ).delete()
