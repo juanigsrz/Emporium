@@ -41,4 +41,4 @@ class PricingModelTests(MatchingTestBase):
         )
         wb.clean()  # no raise
         wb.save()
-        self.assertEqual(WantBid.objects.count(), 1)
+        self.assertEqual(WantBid.objects.filter(user=self.user_a).count(), 1)
