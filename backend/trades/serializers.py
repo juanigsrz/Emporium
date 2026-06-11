@@ -258,11 +258,12 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
     """
 
     # Display-only companions
-    board_game_name = serializers.SerializerMethodField()
-    board_game_id   = serializers.SerializerMethodField()
-    listing_code    = serializers.SerializerMethodField()
-    resolved_bid    = serializers.SerializerMethodField()
-    bid_is_override = serializers.SerializerMethodField()
+    board_game_name      = serializers.SerializerMethodField()
+    board_game_id        = serializers.SerializerMethodField()
+    board_game_thumbnail = serializers.SerializerMethodField()
+    listing_code         = serializers.SerializerMethodField()
+    resolved_bid         = serializers.SerializerMethodField()
+    bid_is_override      = serializers.SerializerMethodField()
 
     # Writable FK references
     board_game    = serializers.PrimaryKeyRelatedField(
@@ -282,15 +283,17 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "target_type",
-            "board_game",       # bgg_id int
+            "board_game",           # bgg_id int
             "board_game_name",
-            "board_game_id",    # canonical bgg_id for BOTH types (FE grouping)
-            "event_listing",    # EventListing pk int
+            "board_game_id",        # canonical bgg_id for BOTH types (FE grouping)
+            "board_game_thumbnail",
+            "event_listing",        # EventListing pk int
             "listing_code",
             "resolved_bid",
             "bid_is_override",
         ]
-        read_only_fields = ["id", "board_game_name", "board_game_id", "listing_code", "resolved_bid", "bid_is_override"]
+        read_only_fields = ["id", "board_game_name", "board_game_id", "board_game_thumbnail",
+                            "listing_code", "resolved_bid", "bid_is_override"]
 
     def get_board_game_name(self, obj):
         if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
@@ -298,6 +301,13 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
             return obj.event_listing.copy.board_game.name
         return None
+
+    def get_board_game_thumbnail(self, obj):
+        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
+            return (obj.board_game.metadata or {}).get("thumbnail", "")
+        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
+            return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        return ""
 
     def get_board_game_id(self, obj):
         """Canonical game id (bgg_id) for grouping — works for LISTING too."""

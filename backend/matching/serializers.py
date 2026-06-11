@@ -97,6 +97,7 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
     board_game_name = serializers.CharField(
         source="event_listing.copy.board_game.name", read_only=True
     )
+    board_game_thumbnail = serializers.SerializerMethodField()
 
     class Meta:
         model = TradeAssignment
@@ -107,6 +108,7 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
             "event_listing",
             "listing_code",
             "board_game_name",
+            "board_game_thumbnail",
             "giver",
             "giver_username",
             "receiver",
@@ -117,24 +119,32 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_board_game_thumbnail(self, obj):
+        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+
 
 # ---------------------------------------------------------------------------
 # Shipment
 # ---------------------------------------------------------------------------
 
 class ShipmentSerializer(serializers.ModelSerializer):
-    listing_code      = serializers.CharField(source="assignment.event_listing.copy.listing_code", read_only=True)
-    board_game_name   = serializers.CharField(source="assignment.event_listing.copy.board_game.name", read_only=True)
-    giver_username    = serializers.CharField(source="assignment.giver.username", read_only=True)
-    receiver_username = serializers.CharField(source="assignment.receiver.username", read_only=True)
-    my_role           = serializers.SerializerMethodField()
+    listing_code         = serializers.CharField(source="assignment.event_listing.copy.listing_code", read_only=True)
+    board_game_name      = serializers.CharField(source="assignment.event_listing.copy.board_game.name", read_only=True)
+    board_game_thumbnail = serializers.SerializerMethodField()
+    giver_username       = serializers.CharField(source="assignment.giver.username", read_only=True)
+    receiver_username    = serializers.CharField(source="assignment.receiver.username", read_only=True)
+    my_role              = serializers.SerializerMethodField()
 
     class Meta:
         model = Shipment
         fields = ["id", "status", "shipping_info", "listing_code", "board_game_name",
-                  "giver_username", "receiver_username", "my_role", "sent_at", "received_at"]
-        read_only_fields = ["id", "listing_code", "board_game_name", "giver_username",
-                            "receiver_username", "my_role", "sent_at", "received_at"]
+                  "board_game_thumbnail", "giver_username", "receiver_username", "my_role",
+                  "sent_at", "received_at"]
+        read_only_fields = ["id", "listing_code", "board_game_name", "board_game_thumbnail",
+                            "giver_username", "receiver_username", "my_role", "sent_at", "received_at"]
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.assignment.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
 
     def get_my_role(self, obj):
         uid = self.context["request"].user.id

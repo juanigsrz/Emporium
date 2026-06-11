@@ -31,7 +31,8 @@ class CopySerializer(serializers.ModelSerializer):
     board_game = serializers.PrimaryKeyRelatedField(
         queryset=BoardGame.objects.all(),
     )
-    board_game_name = serializers.SerializerMethodField()
+    board_game_name      = serializers.SerializerMethodField()
+    board_game_thumbnail = serializers.SerializerMethodField()
 
     # version is optional on write; language is derived from it (read-only)
     version = serializers.PrimaryKeyRelatedField(
@@ -48,6 +49,7 @@ class CopySerializer(serializers.ModelSerializer):
             "owner_username",
             "board_game",
             "board_game_name",
+            "board_game_thumbnail",
             "version",
             "version_name",
             "condition",
@@ -69,13 +71,16 @@ class CopySerializer(serializers.ModelSerializer):
             "created",
             "updated",
         ]
-        read_only_fields = ["id", "listing_code", "owner", "language", "is_pending", "import_source", "created", "updated"]
+        read_only_fields = ["id", "listing_code", "owner", "board_game_thumbnail", "language", "is_pending", "import_source", "created", "updated"]
 
     def get_owner_username(self, obj):
         return obj.owner.username
 
     def get_board_game_name(self, obj):
         return obj.board_game.name
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.board_game.metadata or {}).get("thumbnail", "")
 
     def get_version_name(self, obj):
         return obj.version.name if obj.version_id else ""
