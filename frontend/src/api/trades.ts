@@ -215,8 +215,17 @@ export interface WantBidPayload {
   amount: string
 }
 
-export async function setWantBid(slug: string, body: WantBidPayload): Promise<unknown> {
-  const { data } = await apiClient.put(`/events/${slug}/want-bids/`, body)
+export interface WantBid {
+  id: number
+  target_type: 'BOARD_GAME' | 'LISTING'
+  board_game: number | null
+  event_listing: number | null
+  amount: string
+  updated: string
+}
+
+export async function setWantBid(slug: string, body: WantBidPayload): Promise<WantBid> {
+  const { data } = await apiClient.put<WantBid>(`/events/${slug}/want-bids/`, body)
   return data
 }
 
