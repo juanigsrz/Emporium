@@ -193,6 +193,17 @@ class WantBidEndpointTests(MatchingTestBase):
         r = self.client.delete(f"{self.url}?board_game=abc")
         self.assertEqual(r.status_code, 400)
 
+    def test_listing_from_other_event_rejected(self):
+        from events.models import TradeEvent, EventListing
+        other = TradeEvent.objects.create(
+            name="Other Ev", organizer=self.user_a,
+            status=TradeEvent.Status.SUBMISSIONS_OPEN,
+        )
+        other_listing = EventListing.objects.create(event=other, copy=self.copy_a1)
+        body = {"target_type": "LISTING", "event_listing": other_listing.id, "amount": "5"}
+        r = self.client.put(self.url, body, format="json")
+        self.assertEqual(r.status_code, 400)
+
 
 class SellPricePatchTests(MatchingTestBase):
     def setUp(self):
