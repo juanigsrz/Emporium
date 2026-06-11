@@ -333,22 +333,28 @@ class TradeEventViewSet(
 
     @action(
         detail=True,
-        methods=["delete"],
+        methods=["patch", "delete"],
         url_path=r"listings/(?P<listing_id>[^/.]+)",
     )
     def listing_detail(self, request, slug=None, listing_id=None):
         event = self.get_object()
-
-        if event.inputs_locked:
-            raise PermissionDenied("Listings are locked — this event has moved to matching.")
-
         listing = get_object_or_404(EventListing, pk=listing_id, event=event)
 
         if listing.copy.owner != request.user:
-            raise PermissionDenied("Only the copy owner can remove this listing.")
+            raise PermissionDenied("Only the copy owner can modify this listing.")
 
-        listing.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if request.method == "DELETE":
+            if event.inputs_locked:
+                raise PermissionDenied("Listings are locked — this event has moved to matching.")
+            listing.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        ser = EventListingSerializer(
+            listing, data=request.data, partial=True, context={"request": request}
+        )
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
 
     @action(detail=True, methods=["get"], url_path="games")
     def games(self, request, slug=None):
