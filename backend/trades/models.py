@@ -248,3 +248,101 @@ class TradeWish(models.Model):
             f"TradeWish(offer={self.offer_group_id}, "
             f"want={self.want_group_id}, active={self.active})"
         )
+
+
+# ---------------------------------------------------------------------------
+# UserGamePrice — canonical per-game price (defaults both sell ask and buy bid)
+# ---------------------------------------------------------------------------
+
+class UserGamePrice(models.Model):
+    """A user's standing price for a game in an event.
+
+    Serves as the default ask for every copy of the game they own and the
+    default bid for any want targeting the game, unless a per-copy
+    (EventListing.sell_price) or per-want (WantBid) override is set.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="game_prices"
+    )
+    event = models.ForeignKey(
+        "events.TradeEvent", on_delete=models.CASCADE, related_name="game_prices"
+    )
+    board_game = models.ForeignKey(
+        "catalog.BoardGame", on_delete=models.CASCADE, related_name="game_prices"
+    )
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("user", "event", "board_game")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"UserGamePrice({self.user.username}, {self.board_game_id}, {self.price})"
+
+
+# ---------------------------------------------------------------------------
+# WantBid — per-target bid override (mirrors WantGroupItem target shape)
+# ---------------------------------------------------------------------------
+
+class WantBid(models.Model):
+    """A user's bid override for one target (a game or a specific listing)."""
+
+    class TargetType(models.TextChoices):
+        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
+        LISTING    = "LISTING",    "Specific Listing"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="want_bids"
+    )
+    event = models.ForeignKey(
+        "events.TradeEvent", on_delete=models.CASCADE, related_name="want_bids"
+    )
+    target_type = models.CharField(max_length=20, choices=TargetType.choices)
+    board_game = models.ForeignKey(
+        "catalog.BoardGame", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="want_bids",
+    )
+    event_listing = models.ForeignKey(
+        "events.EventListing", on_delete=models.CASCADE,
+        null=True, blank=True, related_name="want_bids",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "event", "board_game"],
+                condition=models.Q(board_game__isnull=False),
+                name="uniq_wantbid_user_event_game",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "event", "event_listing"],
+                condition=models.Q(event_listing__isnull=False),
+                name="uniq_wantbid_user_event_listing",
+            ),
+        ]
+        ordering = ["id"]
+
+    def clean(self):
+        if self.target_type == self.TargetType.BOARD_GAME:
+            if not self.board_game_id:
+                raise ValidationError("board_game is required when target_type is BOARD_GAME.")
+            if self.event_listing_id:
+                raise ValidationError("event_listing must be null when target_type is BOARD_GAME.")
+        elif self.target_type == self.TargetType.LISTING:
+            if not self.event_listing_id:
+                raise ValidationError("event_listing is required when target_type is LISTING.")
+            if self.board_game_id:
+                raise ValidationError("board_game must be null when target_type is LISTING.")
+        else:
+            raise ValidationError(f"Unknown target_type: {self.target_type}")
+
+    def __str__(self):
+        return f"WantBid({self.user.username}, {self.target_type}, {self.amount})"
