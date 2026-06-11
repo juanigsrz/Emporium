@@ -19,6 +19,7 @@ import {
   useToggleWish,
   useDeleteWish,
   setWantBid,
+  deleteWantBid,
 } from '../../api/trades'
 import type {
   OfferGroup,
@@ -582,9 +583,9 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
               {item.target_type === 'BOARD_GAME' && (
                 <span className="text-gray-400">(any copy)</span>
               )}
-              {item.money_amount != null && (
+              {item.resolved_bid != null && (
                 <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
-                  pay ≤${item.money_amount}
+                  pay ≤${item.resolved_bid}
                 </span>
               )}
             </span>
@@ -739,7 +740,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
       board_game_name: i.board_game_name,
       event_listing: i.event_listing,
       listing_code: i.listing_code,
-      money_amount: i.money_amount ?? '',
+      money_amount: i.bid_is_override ? (i.resolved_bid ?? '') : '',
     }))
   )
   const [gameSearch, setGameSearch] = useState('')
@@ -830,11 +831,18 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
     if (!moneyEnabled) return
     for (const item of items) {
       const trimmed = item.money_amount.trim()
-      if (trimmed === '') continue
       if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-        await setWantBid(slug, { target_type: 'BOARD_GAME', board_game: item.board_game, amount: trimmed })
+        if (trimmed === '') {
+          await deleteWantBid(slug, { board_game: item.board_game })
+        } else {
+          await setWantBid(slug, { target_type: 'BOARD_GAME', board_game: item.board_game, amount: trimmed })
+        }
       } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-        await setWantBid(slug, { target_type: 'LISTING', event_listing: item.event_listing, amount: trimmed })
+        if (trimmed === '') {
+          await deleteWantBid(slug, { event_listing: item.event_listing })
+        } else {
+          await setWantBid(slug, { target_type: 'LISTING', event_listing: item.event_listing, amount: trimmed })
+        }
       }
     }
   }
@@ -850,7 +858,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
     setIsSaving(true)
     try {
       const payloadItems = buildPayloadItems()
-      await saveWantBids()
+      // Persist the want group FIRST (primary action).
       if (isCreating) {
         // Signal to parent to create
         onClose({ name: name.trim(), min_receive: mr, duplicate_protection: dupProtect, items: payloadItems })
@@ -861,6 +869,12 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           payload: { name: name.trim(), min_receive: mr, duplicate_protection: dupProtect, items: payloadItems },
         })
         onClose()
+      }
+      // Persist bids as a SECONDARY step — its failure must not abort the group save.
+      try {
+        await saveWantBids()
+      } catch (e) {
+        setDuplicateWarn(`Group saved, but money bids could not be updated: ${extractErrorMsg(e)}`)
       }
     } catch (e) {
       setFormError(extractErrorMsg(e))

@@ -47,6 +47,8 @@ export interface WantGroupItem {
   listing_code: string | null
   /** Optional money bid (decimal string) or null. */
   money_amount: string | null
+  resolved_bid?: string | null
+  bid_is_override?: boolean
 }
 
 export interface WantGroup {
@@ -231,6 +233,13 @@ export interface WantBid {
 export async function setWantBid(slug: string, body: WantBidPayload): Promise<WantBid> {
   const { data } = await apiClient.put<WantBid>(`/events/${slug}/want-bids/`, body)
   return data
+}
+
+export async function deleteWantBid(
+  slug: string,
+  target: { board_game?: number; event_listing?: number }
+): Promise<void> {
+  await apiClient.delete(`/events/${slug}/want-bids/`, { params: target })
 }
 
 // ---- Raw helpers (for sequential orchestration outside React hooks) ----
