@@ -341,13 +341,14 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
             return obj.event_listing.copy.listing_code
         return None
 
+    # Per-item DB lookups; want-lists are per-user and small, so N+1 here is acceptable.
     def get_resolved_bid(self, obj):
         from trades.pricing import resolve_bid
         event = self.context.get("event")
         if event is None or not obj.pk:
             return None
         v = resolve_bid(obj.want_group.user, event, obj)
-        return str(v) if v is not None else None
+        return f"{v:.2f}" if v is not None else None
 
     def get_bid_is_override(self, obj):
         from trades.models import WantBid

@@ -258,3 +258,18 @@ class ResolvedReadFieldTests(MatchingTestBase):
         data = WantGroupItemSerializer(item, context={"event": self.event}).data
         self.assertEqual(Decimal(data["resolved_bid"]), Decimal("22"))
         self.assertFalse(data["bid_is_override"])
+
+    def test_want_item_listing_bid_override(self):
+        from trades.models import WantGroup, WantGroupItem, WantBid
+        wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg2")
+        item = WantGroupItem.objects.create(
+            want_group=wg, target_type=WantGroupItem.TargetType.LISTING, event_listing=self.el_b1
+        )
+        WantBid.objects.create(
+            user=self.user_a, event=self.event,
+            target_type=WantBid.TargetType.LISTING, event_listing=self.el_b1, amount=Decimal("17"),
+        )
+        from trades.serializers import WantGroupItemSerializer
+        data = WantGroupItemSerializer(item, context={"event": self.event}).data
+        self.assertEqual(Decimal(data["resolved_bid"]), Decimal("17"))
+        self.assertTrue(data["bid_is_override"])

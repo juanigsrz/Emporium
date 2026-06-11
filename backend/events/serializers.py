@@ -180,7 +180,7 @@ class EventListingSerializer(serializers.ModelSerializer):
     def get_resolved_ask(self, obj):
         from trades.pricing import resolve_ask
         v = resolve_ask(obj)
-        return str(v) if v is not None else None
+        return f"{v:.2f}" if v is not None else None
 
     def get_ask_is_override(self, obj):
         return obj.sell_price is not None
