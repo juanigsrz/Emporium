@@ -186,6 +186,40 @@ async function deleteWish(slug: string, id: number): Promise<void> {
   await apiClient.delete(`/events/${slug}/wishes/${id}/`)
 }
 
+// ---- Game Prices ----
+
+export interface GamePrice {
+  id: number
+  board_game: number
+  board_game_name: string
+  price: string
+  updated: string
+}
+
+export async function listGamePrices(slug: string): Promise<GamePrice[]> {
+  const { data } = await apiClient.get<GamePrice[]>(`/events/${slug}/game-prices/`)
+  return data
+}
+
+export async function setGamePrice(slug: string, board_game: number, price: string): Promise<GamePrice> {
+  const { data } = await apiClient.put<GamePrice>(`/events/${slug}/game-prices/`, { board_game, price })
+  return data
+}
+
+// ---- Want Bids ----
+
+export interface WantBidPayload {
+  target_type: 'BOARD_GAME' | 'LISTING'
+  board_game?: number | null
+  event_listing?: number | null
+  amount: string
+}
+
+export async function setWantBid(slug: string, body: WantBidPayload): Promise<unknown> {
+  const { data } = await apiClient.put(`/events/${slug}/want-bids/`, body)
+  return data
+}
+
 // ---- Raw helpers (for sequential orchestration outside React hooks) ----
 // Used by MyWantsPage to lazily create the offer/want/wish trio per item and
 // batch-PATCH want lists on Save. Same endpoints as the hooks above.
