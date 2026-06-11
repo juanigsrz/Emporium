@@ -138,3 +138,13 @@ class GamePriceEndpointTests(MatchingTestBase):
         self.client.force_authenticate(user=None)
         r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "40"}, format="json")
         self.assertIn(r.status_code, (401, 403))  # depends on DRF auth classes
+
+    def test_delete_removes_my_price(self):
+        UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_brass, price=Decimal("40"))
+        r = self.client.delete(f"{self.url}?board_game={self.game_brass.bgg_id}")
+        self.assertEqual(r.status_code, 204)
+        self.assertEqual(UserGamePrice.objects.count(), 0)
+
+    def test_delete_without_param_400(self):
+        r = self.client.delete(self.url)
+        self.assertEqual(r.status_code, 400)
