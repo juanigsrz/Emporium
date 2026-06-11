@@ -91,23 +91,22 @@ the API omits an id, so no infinite retry. Resume is O(1) (read cursor), not a
 
 ## Rate limiting / backoff
 
-Goal: settle at the smallest sleep that the server tolerates and stay there —
-no perpetual sawtooth back into the rate limit. AIMD with a ratcheting floor.
+Goal: settle at the smallest sleep the server tolerates and stay there — no
+perpetual sawtooth back into the rate limit. The delay only ever increases.
 
 - `current_delay` starts at `--min-delay` (default 1.0s); `time.sleep` before
-  each request. A `safe_floor` (init `--min-delay`) tracks the slowest delay
-  ever known to be too aggressive.
-- On rate-limit (HTTP 429/503, `<error>` body, or HTTP 202 queued): the delay
-  we were using is too fast, so raise the floor —
-  `safe_floor = min(current_delay + 1.0, --max-delay)` (only ever increases);
-  set `current_delay = safe_floor`; retry the same batch.
-- After N consecutive clean batches (N=5), decay gently but never below the
-  proven-bad floor: `current_delay = max(current_delay - 0.5, safe_floor)`.
+  each request.
+- On rate-limit (HTTP 429/503, non-XML throttle body, or HTTP 202 queued):
+  the current rate is proven too fast, so step up —
+  `current_delay = min(current_delay + 1.0, --max-delay)` — and retry the same
+  batch.
+- No decay. Once raised, the delay is not lowered for the rest of the run.
 
-Effect: with no limiting, `current_delay` stays at `--min-delay` (decay floor =
-min). After the first hit at delay X, `safe_floor` becomes X+1 and decay can
-never bring `current_delay` back down to X — so the same rate is not probed
-again. Decay only undoes a transient over-correction sitting above the floor.
+Effect: with no limiting it sits at `--min-delay`. After hits it converges to
+the smallest sustainable delay (last-failed-delay + 1) and never re-probes a
+rate already known to fail. Tradeoff: a one-off transient spike leaves the run
+slightly conservative for its remainder; deliberate, to avoid re-throttling.
+A fresh `--min-delay` is reachable on the next invocation if conditions change.
 
 ## CLI args
 
