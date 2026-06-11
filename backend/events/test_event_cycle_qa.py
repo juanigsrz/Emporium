@@ -5,8 +5,8 @@ Full end-to-end QA of the trade-event lifecycle, driven through the real DRF
 HTTP endpoints (serializers, views, permissions) — not the ORM. Walks an event
 from DRAFT → ARCHIVED and exercises the features added on top:
 
-  - money trading, two-sided: buyer max P (WantGroupItem.money_amount) +
-    seller min Q (OfferGroupItem.money_amount), event cap + per-user budget;
+  - money trading, two-sided: buyer max P (resolve_bid) + seller min Q
+    (resolve_ask), event cap + per-user budget;
   - duplicate-protection flag on want groups;
   - canonical board_game_id on want items (FE grouping);
   - solver wants-export placeholder header (MONEY-*/DUP-PROTECT) round-trip;
@@ -97,22 +97,17 @@ class EventCycleQA(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         return resp.data["id"]
 
-    def _build_wish(self, slug, user, offer_listing_id, want_game, *,
-                    buy=None, sell=None, dup=True):
-        """offer group (max_give=1, optional sell Q) + want group (dup, optional
-        buy P) + wish — the per-listing trio the normal want builder creates."""
+    def _build_wish(self, slug, user, offer_listing_id, want_game, *, dup=True):
+        """offer group (max_give=1) + want group (dup) + wish — the per-listing
+        trio the normal want builder creates."""
         self.client.force_authenticate(user)
 
         og_body = {"name": f"og-{offer_listing_id}", "max_give": 1,
                    "item_listing_ids": [offer_listing_id]}
-        if sell is not None:
-            og_body["item_money"] = {str(offer_listing_id): str(sell)}
         og = self.client.post(offer_groups(slug), og_body, format="json")
         self.assertEqual(og.status_code, status.HTTP_201_CREATED, og.data)
 
         item = {"target_type": "BOARD_GAME", "board_game": want_game.bgg_id}
-        if buy is not None:
-            item["money_amount"] = str(buy)
         wg = self.client.post(want_groups(slug), {
             "name": f"wg-{offer_listing_id}", "min_receive": 1,
             "duplicate_protection": dup, "items": [item],
@@ -182,8 +177,8 @@ class EventCycleQA(APITestCase):
         # 6. BUILD WANT LISTS ---------------------------------------------
         # reciprocal pair → guaranteed 2-cycle. money: t1 pays up to 20 for terra,
         # t2 will accept >= 10 to give terra (P >= Q feasible).
-        self._build_wish(slug, self.t1, l1_brass, self.terra, buy="20.00")
-        self._build_wish(slug, self.t2, l2_terra, self.brass, sell="10.00")
+        self._build_wish(slug, self.t1, l1_brass, self.terra)
+        self._build_wish(slug, self.t2, l2_terra, self.brass)
         self._build_wish(slug, self.t3, l3_brass, self.gaia)
 
         # read-back: want group fields surfaced for the FE
@@ -194,12 +189,6 @@ class EventCycleQA(APITestCase):
         self.assertTrue(wg["duplicate_protection"])
         it = wg["items"][0]
         self.assertEqual(it["board_game_id"], self.terra.bgg_id)   # canonical id present
-        self.assertEqual(it["money_amount"], "20.00")              # buy P
-
-        # offer group read-back: sell Q present (t2)
-        self.client.force_authenticate(self.t2)
-        og_list = self.client.get(offer_groups(slug)).data["results"]
-        self.assertEqual(og_list[0]["items"][0]["money_amount"], "10.00")
 
         # 7. WANTS EXPORT placeholder header round-trips -------------------
         # Set prices via the new resolution model (resolve_ask/resolve_bid):
@@ -287,8 +276,7 @@ class EventCycleQA(APITestCase):
 
         l1 = self._add_listing(slug, self.t1, self.c1_brass)
         self._transition(slug, "WANTLIST_OPEN")
-        # money fields ignored even if sent
-        self._build_wish(slug, self.t1, l1, self.terra, buy="15.00", dup=False)
+        self._build_wish(slug, self.t1, l1, self.terra, dup=False)
 
         self.client.force_authenticate(self.organizer)
         text = self.client.get(wants_export(slug)).content.decode()

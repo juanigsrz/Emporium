@@ -827,7 +827,7 @@ class DeleteTests(TradeTestBase):
 
 
 # ---------------------------------------------------------------------------
-# Duplicate protection + money_amount + canonical board_game_id grouping field
+# Duplicate protection + canonical board_game_id grouping field
 # ---------------------------------------------------------------------------
 
 class MoneyAndDupProtectionTests(TradeTestBase):
@@ -848,20 +848,6 @@ class MoneyAndDupProtectionTests(TradeTestBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertTrue(resp.data["duplicate_protection"])
 
-    def test_money_amount_persists_and_board_game_id_present(self):
-        resp = self.client.post(want_groups_url(self.slug), {
-            "name": "Bid", "min_receive": 1,
-            "items": [{
-                "target_type": "BOARD_GAME",
-                "board_game": self.game_terra.bgg_id,
-                "money_amount": "12.50",
-            }],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        item = resp.data["items"][0]
-        self.assertEqual(item["money_amount"], "12.50")
-        self.assertEqual(item["board_game_id"], self.game_terra.bgg_id)
-
     def test_board_game_id_resolved_for_listing_target(self):
         # user1 wants user2's specific terra listing (el2a)
         resp = self.client.post(want_groups_url(self.slug), {
@@ -870,46 +856,8 @@ class MoneyAndDupProtectionTests(TradeTestBase):
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         item = resp.data["items"][0]
-        self.assertIsNone(item["money_amount"])
         # canonical id of the listing's game (terra) is exposed for FE grouping
         self.assertEqual(item["board_game_id"], self.game_terra.bgg_id)
-
-    def test_negative_money_amount_rejected(self):
-        resp = self.client.post(want_groups_url(self.slug), {
-            "name": "BadBid", "min_receive": 1,
-            "items": [{
-                "target_type": "BOARD_GAME",
-                "board_game": self.game_terra.bgg_id,
-                "money_amount": "-1",
-            }],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_offer_item_money_ask_persists(self):
-        # Sell side (Q): user1 will accept >= $15 to give el1a.
-        resp = self.client.post(offer_groups_url(self.slug), {
-            "name": "Sell Brass", "max_give": 1,
-            "item_listing_ids": [self.el1a.id],
-            "item_money": {str(self.el1a.id): "15.00"},
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertEqual(resp.data["items"][0]["money_amount"], "15.00")
-
-    def test_offer_item_money_defaults_null(self):
-        resp = self.client.post(offer_groups_url(self.slug), {
-            "name": "Plain Offer", "max_give": 1,
-            "item_listing_ids": [self.el1a.id],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertIsNone(resp.data["items"][0]["money_amount"])
-
-    def test_negative_offer_money_rejected(self):
-        resp = self.client.post(offer_groups_url(self.slug), {
-            "name": "Bad Offer", "max_give": 1,
-            "item_listing_ids": [self.el1a.id],
-            "item_money": {str(self.el1a.id): "-3"},
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 # ---------------------------------------------------------------------------

@@ -11,8 +11,6 @@ export interface OfferGroupItem {
   listing_code: string
   board_game_name: string
   board_game_id: number
-  /** Sell-side min money the owner accepts for this listing (Q), or null. */
-  money_amount: string | null
 }
 
 export interface OfferGroup {
@@ -32,8 +30,6 @@ export interface OfferGroupPayload {
   name: string
   max_give: number
   item_listing_ids: number[]
-  /** Sell-side asks keyed by listing id: { "<listing_id>": amount } */
-  item_money?: Record<string, number | null>
 }
 
 export interface WantGroupItem {
@@ -45,8 +41,6 @@ export interface WantGroupItem {
   board_game_id: number | null
   event_listing: number | null
   listing_code: string | null
-  /** Optional money bid (decimal string) or null. */
-  money_amount: string | null
   resolved_bid?: string | null
   bid_is_override?: boolean
 }
@@ -68,7 +62,6 @@ export interface WantGroupItemPayload {
   target_type: 'BOARD_GAME' | 'LISTING'
   board_game?: number
   event_listing?: number
-  money_amount?: number | null
 }
 
 export interface WantGroupPayload {
