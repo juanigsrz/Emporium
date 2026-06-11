@@ -430,6 +430,13 @@ class WantBidView(EventScopedMixin, APIView):
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
+        if (
+            d["target_type"] == WantBid.TargetType.LISTING
+            and d["event_listing"].event_id != event.id
+        ):
+            raise ValidationError(
+                {"event_listing": "Listing does not belong to this event."}
+            )
         if d["target_type"] == WantBid.TargetType.BOARD_GAME:
             key = {"board_game": d["board_game"], "event_listing": None}
         else:
