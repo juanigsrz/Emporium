@@ -18,6 +18,7 @@ import {
   invalidateTrades,
   listGamePrices,
   setGamePrice,
+  deleteGamePrice,
 } from '../../api/trades'
 import type { OfferGroup, WantGroup, WantGroupItemPayload, GamePrice } from '../../api/trades'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -1362,11 +1363,12 @@ async function persistChanges(
       // Per-game prices are keyed by bgg id; LISTING-only targets that lack a
       // real bgg id use a negative synthetic id and can't be priced.
       if (gameId < 0) continue
-      const raw = value.trim()
-      // The upsert endpoint only accepts a valid decimal; a blank value (the
-      // user clearing the field) is left for an explicit delete path.
-      if (raw === '') continue
-      await setGamePrice(slug, gameId, raw)
+      const raw = (value ?? '').trim()
+      if (raw === '') {
+        await deleteGamePrice(slug, gameId)
+      } else {
+        await setGamePrice(slug, gameId, raw)
+      }
     }
   }
 
