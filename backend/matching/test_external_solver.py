@@ -139,14 +139,14 @@ class ExportXToYTests(MatchingTestBase):
         EventParticipation.objects.get_or_create(
             event=self.event, user=self.user_a, defaults={"max_spend": 50}
         )
-        # Set a sell ask on alice's offered listing
-        ogi = self.wish_a.offer_group.items.first()
-        ogi.money_amount = 20   # $20.00 -> 2000 cents
-        ogi.save(update_fields=["money_amount"])
-        # Set a buy bid on alice's want item
-        item = self.wish_a.want_group.items.first()
-        item.money_amount = 30  # $30.00 -> 3000 cents
-        item.save(update_fields=["money_amount"])
+        from trades.models import UserGamePrice
+        # Sell ask: per-copy override on alice's offered listing (el_a1 = brass copy)
+        self.el_a1.sell_price = 20   # $20.00 -> 2000 cents
+        self.el_a1.save(update_fields=["sell_price"])
+        # Buy bid: alice's per-game default for terra = $30.00 -> 3000 cents
+        UserGamePrice.objects.create(
+            user=self.user_a, event=self.event, board_game=self.game_terra, price=30
+        )
 
         text = external_solver.build_wants(self.event)
 
@@ -165,10 +165,6 @@ class ExportXToYTests(MatchingTestBase):
         # Clean up (avoid polluting other tests)
         self.event.money_enabled = False
         self.event.save(update_fields=["money_enabled"])
-        ogi.money_amount = None
-        ogi.save(update_fields=["money_amount"])
-        item.money_amount = None
-        item.save(update_fields=["money_amount"])
 
 
 # ---------------------------------------------------------------------------
@@ -406,13 +402,12 @@ class PlaceholderHeaderTests(MatchingTestBase):
         cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
-        item = cls.wish_a.want_group.items.first()
-        item.money_amount = 30   # buy bid P
-        item.save(update_fields=["money_amount"])
-        # sell ask Q on the offered listing (el_a1)
-        ogi = cls.wish_a.offer_group.items.first()
-        ogi.money_amount = 20
-        ogi.save(update_fields=["money_amount"])
+        from trades.models import UserGamePrice
+        UserGamePrice.objects.create(
+            user=cls.user_a, event=cls.event, board_game=cls.game_terra, price=30
+        )  # buy bid P
+        cls.el_a1.sell_price = 20  # sell ask Q
+        cls.el_a1.save(update_fields=["sell_price"])
 
     def test_header_has_money_budget_dup_and_money_want(self):
         text = external_solver.build_wants(self.event)

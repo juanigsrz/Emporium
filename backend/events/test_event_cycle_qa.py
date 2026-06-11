@@ -202,6 +202,16 @@ class EventCycleQA(APITestCase):
         self.assertEqual(og_list[0]["items"][0]["money_amount"], "10.00")
 
         # 7. WANTS EXPORT placeholder header round-trips -------------------
+        # Set prices via the new resolution model (resolve_ask/resolve_bid):
+        # t1 buy bid for terra via UserGamePrice, t2 sell ask via EventListing.sell_price.
+        from events.models import EventListing, TradeEvent
+        from trades.models import UserGamePrice
+        event_obj = TradeEvent.objects.get(slug=slug)
+        UserGamePrice.objects.create(
+            user=self.t1, event=event_obj, board_game=self.terra, price=20
+        )
+        EventListing.objects.filter(id=l2_terra).update(sell_price=10)
+
         self.client.force_authenticate(self.organizer)
         exp = self.client.get(wants_export(slug))
         self.assertEqual(exp.status_code, status.HTTP_200_OK)

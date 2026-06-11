@@ -68,6 +68,7 @@ def _active_wishes(event):
         .prefetch_related(
             "offer_group__items__event_listing__copy",
             "want_group__items",
+            "want_group__items__event_listing__copy",
         )
     )
 
@@ -179,23 +180,26 @@ def _build_placeholder_header(event, wishes, by_id) -> str:
             lines.append(f"#! DUP-PROTECT ({w.user.username}) wish={w.id}")
         if not event.money_enabled or is_xtoy:
             continue
+        from trades.pricing import resolve_ask, resolve_bid
         # Buy side (P): max the user pays to receive a wanted game.
         for it in w.want_group.items.all():
-            if it.money_amount is None:
+            bid = resolve_bid(w.user, w.event, it)
+            if bid is None:
                 continue
             if it.target_type == WantGroupItem.TargetType.BOARD_GAME:
                 token = f"game={it.board_game_id}"
             else:
                 el = by_id.get(it.event_listing_id)
                 token = f"listing={el.copy.listing_code}" if el else f"listing_id={it.event_listing_id}"
-            lines.append(f"#! MONEY-WANT ({w.user.username}) {token} max={it.money_amount}")
+            lines.append(f"#! MONEY-WANT ({w.user.username}) {token} max={bid:.2f}")
         # Sell side (Q): min the user accepts to give one of their listings.
         for ogi in w.offer_group.items.all():
-            if ogi.money_amount is None:
+            ask = resolve_ask(ogi.event_listing)
+            if ask is None:
                 continue
             lines.append(
                 f"#! MONEY-OFFER ({w.user.username}) "
-                f"listing={ogi.event_listing.copy.listing_code} min={ogi.money_amount}"
+                f"listing={ogi.event_listing.copy.listing_code} min={ask:.2f}"
             )
 
     return ("\n".join(lines) + "\n") if lines else ""
@@ -213,10 +217,9 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     Lines emitted (all amounts in integer cents):
       user <username> budget <cents>   — per participant with budget > 0
       item <code> owner <username>     — every active listing; + ask <cents> if sell price set
-      bid <username> <code> <cents>    — per buy-side WantGroupItem with money_amount set
+      bid <username> <code> <cents>    — per buy-side want item with a resolved bid price
     """
     from events.models import EventParticipation
-    from trades.models import OfferGroupItem
 
     lines = []
 
@@ -239,14 +242,13 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
             lines.append(f"user {username} budget {_to_cents(default_cap)}")
 
     # --- item lines ---
+    from trades.pricing import resolve_ask
     for el in sorted(listings, key=lambda e: e.copy.listing_code):
         code = el.copy.listing_code
         owner_username = el.copy.owner.username
-        ask_row = OfferGroupItem.objects.filter(
-            event_listing=el, money_amount__isnull=False
-        ).order_by("money_amount").values_list("money_amount", flat=True).first()
-        if ask_row is not None:
-            lines.append(f"item {code} owner {owner_username} ask {_to_cents(ask_row)}")
+        ask = resolve_ask(el)
+        if ask is not None:
+            lines.append(f"item {code} owner {owner_username} ask {_to_cents(ask)}")
         else:
             lines.append(f"item {code} owner {owner_username}")
 
@@ -255,6 +257,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     bid_map = {}
     blocked_cache = {}
     coords = _load_coords()
+    from trades.pricing import resolve_bid
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -267,9 +270,10 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
             if ogi.event_listing.active
         }
         for it in w.want_group.items.all():
-            if it.money_amount is None:
+            bid = resolve_bid(w.user, w.event, it)
+            if bid is None:
                 continue
-            bid_cents = _to_cents(it.money_amount)
+            bid_cents = _to_cents(bid)
             codes = _expand([it], w.user_id, by_game, by_id, blocked)
             codes = [c for c in codes if c not in give_codes]
             for code in codes:
