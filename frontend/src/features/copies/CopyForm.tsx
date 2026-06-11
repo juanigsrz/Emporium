@@ -213,12 +213,12 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
 
       <div className="flex items-center gap-2">
         <input
-          id="edit_pickup_available"
+          id={`${formId}-pickup`}
           type="checkbox"
           {...register('pickup_available')}
           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
-        <label htmlFor="edit_pickup_available" className="text-sm font-medium text-gray-700">
+        <label htmlFor={`${formId}-pickup`} className="text-sm font-medium text-gray-700">
           Pickup available
         </label>
       </div>
