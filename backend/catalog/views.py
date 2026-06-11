@@ -31,7 +31,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import BoardGame
+from .models import BoardGame, BoardGameVersion
 from .serializers import BoardGameDetailSerializer, BoardGameListSerializer, BoardGameVersionSerializer
 
 CACHE_TIMEOUT = getattr(settings, "GAME_CACHE_TIMEOUT", 60)
@@ -247,7 +247,6 @@ class BoardGameVersionsView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        from .models import BoardGameVersion
         bgg_id = self.kwargs["bgg_id"]
         if not BoardGame.objects.filter(bgg_id=bgg_id).exists():
             raise NotFound(f"No game with bgg_id={bgg_id}.")
