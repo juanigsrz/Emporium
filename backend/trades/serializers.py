@@ -289,6 +289,8 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
     board_game_name = serializers.SerializerMethodField()
     board_game_id   = serializers.SerializerMethodField()
     listing_code    = serializers.SerializerMethodField()
+    resolved_bid    = serializers.SerializerMethodField()
+    bid_is_override = serializers.SerializerMethodField()
 
     # Writable FK references
     board_game    = serializers.PrimaryKeyRelatedField(
@@ -314,8 +316,10 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
             "event_listing",    # EventListing pk int
             "listing_code",
             "money_amount",     # optional $ bid, null when none
+            "resolved_bid",
+            "bid_is_override",
         ]
-        read_only_fields = ["id", "board_game_name", "board_game_id", "listing_code"]
+        read_only_fields = ["id", "board_game_name", "board_game_id", "listing_code", "resolved_bid", "bid_is_override"]
 
     def get_board_game_name(self, obj):
         if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
@@ -336,6 +340,29 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
             return obj.event_listing.copy.listing_code
         return None
+
+    def get_resolved_bid(self, obj):
+        from trades.pricing import resolve_bid
+        event = self.context.get("event")
+        if event is None or not obj.pk:
+            return None
+        v = resolve_bid(obj.want_group.user, event, obj)
+        return str(v) if v is not None else None
+
+    def get_bid_is_override(self, obj):
+        from trades.models import WantBid
+        event = self.context.get("event")
+        if event is None or not obj.pk:
+            return False
+        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME:
+            return WantBid.objects.filter(
+                user=obj.want_group.user, event=event,
+                target_type=WantBid.TargetType.BOARD_GAME, board_game_id=obj.board_game_id,
+            ).exists()
+        return WantBid.objects.filter(
+            user=obj.want_group.user, event=event,
+            target_type=WantBid.TargetType.LISTING, event_listing_id=obj.event_listing_id,
+        ).exists()
 
     def validate(self, data):
         target_type   = data.get("target_type")

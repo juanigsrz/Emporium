@@ -232,3 +232,29 @@ class SellPricePatchTests(MatchingTestBase):
         self.el_a1.refresh_from_db()
         self.assertTrue(self.el_a1.active)          # active untouched by PATCH
         self.assertEqual(self.el_a1.sell_price, Decimal("5"))
+
+
+class ResolvedReadFieldTests(MatchingTestBase):
+    def test_listing_resolved_ask_and_override_flag(self):
+        UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_brass, price=Decimal("40"))
+        from events.serializers import EventListingSerializer
+        data = EventListingSerializer(self.el_a1, context={"request": None}).data
+        self.assertEqual(Decimal(data["resolved_ask"]), Decimal("40"))
+        self.assertFalse(data["ask_is_override"])
+        self.el_a1.sell_price = Decimal("33")
+        self.el_a1.save(update_fields=["sell_price"])
+        data = EventListingSerializer(self.el_a1, context={"request": None}).data
+        self.assertEqual(Decimal(data["resolved_ask"]), Decimal("33"))
+        self.assertTrue(data["ask_is_override"])
+
+    def test_want_item_resolved_bid_from_game_default(self):
+        from trades.models import WantGroup, WantGroupItem
+        UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_terra, price=Decimal("22"))
+        wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg")
+        item = WantGroupItem.objects.create(
+            want_group=wg, target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game_terra
+        )
+        from trades.serializers import WantGroupItemSerializer
+        data = WantGroupItemSerializer(item, context={"event": self.event}).data
+        self.assertEqual(Decimal(data["resolved_bid"]), Decimal("22"))
+        self.assertFalse(data["bid_is_override"])
