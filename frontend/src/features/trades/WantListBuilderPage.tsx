@@ -18,6 +18,7 @@ import {
   useCreateWish,
   useToggleWish,
   useDeleteWish,
+  setWantBid,
 } from '../../api/trades'
 import type {
   OfferGroup,
@@ -222,11 +223,6 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
             >
               <span className="font-mono text-gray-400">{item.listing_code}</span>
               {item.board_game_name}
-              {item.money_amount != null && (
-                <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
-                  ≥${item.money_amount}
-                </span>
-              )}
             </span>
           ))}
         </div>
@@ -244,7 +240,6 @@ interface OfferGroupFormProps {
     name: string
     max_give: number
     item_listing_ids: number[]
-    item_money?: Record<string, number | null>
   }) => Promise<void>
   onCancel: () => void
   isSaving: boolean
@@ -256,14 +251,6 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
     new Set(existing?.items.map((i) => i.event_listing) ?? [])
   )
-  // Sell-side ask (Q) per listing id, as raw input strings ('' = not for sale).
-  const [moneyById, setMoneyById] = useState<Record<number, string>>(() => {
-    const m: Record<number, string> = {}
-    for (const i of existing?.items ?? []) {
-      if (i.money_amount != null) m[i.event_listing] = i.money_amount
-    }
-    return m
-  })
   const [formError, setFormError] = useState<string | null>(null)
 
   function toggleListing(id: number) {
@@ -284,15 +271,7 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
     if (selectedIds.size === 0) { setFormError('Select at least one listing.'); return }
     if (mg > selectedIds.size) { setFormError(`Max give (${mg}) cannot exceed the number of selected listings (${selectedIds.size}).`); return }
 
-    let item_money: Record<string, number | null> | undefined
-    if (moneyEnabled) {
-      item_money = {}
-      for (const id of selectedIds) {
-        const raw = (moneyById[id] ?? '').trim()
-        item_money[String(id)] = raw === '' ? null : Number(raw)
-      }
-    }
-    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds), item_money })
+    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds) })
   }
 
   return (
@@ -356,23 +335,8 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
                 <span className="font-medium">{listing.board_game_name}</span>
                 <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
                 {moneyEnabled && selectedIds.has(listing.id) && (
-                  <span
-                    className="ml-auto flex items-center gap-1"
-                    onClick={(e) => e.preventDefault()}
-                    title="Least money you'll accept to give this (leave blank = game-only)"
-                  >
-                    <span className="text-xs text-gray-400">accept ≥$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={moneyById[listing.id] ?? ''}
-                      onChange={(e) =>
-                        setMoneyById((m) => ({ ...m, [listing.id]: e.target.value }))
-                      }
-                      placeholder="—"
-                      className="w-16 rounded border border-gray-300 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                    />
+                  <span className="ml-auto text-xs text-gray-400 italic">
+                    Sell price set in My Listings / Almanac
                   </span>
                 )}
               </label>
@@ -857,10 +821,22 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
       } else if (item.target_type === 'LISTING' && item.event_listing != null) {
         base.event_listing = item.event_listing
       }
-      const trimmed = item.money_amount.trim()
-      base.money_amount = moneyEnabled && trimmed !== '' ? Number(trimmed) : null
       return base
     })
+  }
+
+  // Persist per-target buy bids as WantBid overrides (decoupled from the want item).
+  async function saveWantBids() {
+    if (!moneyEnabled) return
+    for (const item of items) {
+      const trimmed = item.money_amount.trim()
+      if (trimmed === '') continue
+      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
+        await setWantBid(slug, { target_type: 'BOARD_GAME', board_game: item.board_game, amount: trimmed })
+      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
+        await setWantBid(slug, { target_type: 'LISTING', event_listing: item.event_listing, amount: trimmed })
+      }
+    }
   }
 
   async function handleSave() {
@@ -874,6 +850,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
     setIsSaving(true)
     try {
       const payloadItems = buildPayloadItems()
+      await saveWantBids()
       if (isCreating) {
         // Signal to parent to create
         onClose({ name: name.trim(), min_receive: mr, duplicate_protection: dupProtect, items: payloadItems })
@@ -1433,8 +1410,8 @@ export default function WantListBuilderPage() {
             <>
               {' '}
               <span className="font-semibold text-emerald-700">Money:</span> set the most
-              you'll <em>pay</em> for a wanted game, and the least you'll <em>accept</em> to
-              give one of yours. A money trade happens only when a buyer's max ≥ a seller's min.
+              you'll <em>pay</em> for a wanted game here. Your sell price is set in My
+              Listings / Almanac. A money trade happens only when a buyer's max ≥ a seller's min.
             </>
           )}
         </div>
