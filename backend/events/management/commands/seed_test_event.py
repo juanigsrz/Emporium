@@ -210,13 +210,12 @@ class Command(BaseCommand):
                     )
                     # Buy side (P): ~30% of wants get a per-target bid override.
                     if money_enabled and rng.random() < 0.3:
-                        WantBid.objects.create(
-                            user=u, event=event,
-                            target_type=WantBid.TargetType.BOARD_GAME,
-                            board_game_id=bgg_id,
-                            amount=round(rng.uniform(5, min(money_cap, 30)), 2),
+                        _, created = WantBid.objects.get_or_create(
+                            user=u, event=event, board_game_id=bgg_id,
+                            defaults={"target_type": WantBid.TargetType.BOARD_GAME, "amount": round(rng.uniform(5, min(money_cap, 30)), 2)},
                         )
-                        n_money_wants += 1
+                        if created:
+                            n_money_wants += 1
                 TradeWish.objects.create(
                     event=event, user=u, offer_group=og, want_group=wg, active=True
                 )
