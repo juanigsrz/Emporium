@@ -30,8 +30,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import OfferGroup, WantGroup, TradeWish
-from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer
+from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice
+from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer
 
 
 # ---------------------------------------------------------------------------
@@ -372,4 +372,36 @@ class TradeWishDetailView(EventScopedMixin, APIView):
         event, wish = self._get_wish(slug, pk, request)
         self._assert_editable(event)
         wish.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# GamePrice upsert
+# ---------------------------------------------------------------------------
+
+class GamePriceView(EventScopedMixin, APIView):
+    """GET/PUT/DELETE /api/events/{slug}/game-prices/ — the user's per-game prices."""
+
+    def get(self, request, slug):
+        event = self._get_event(slug)
+        qs = UserGamePrice.objects.filter(event=event, user=request.user).select_related("board_game")
+        return Response(UserGamePriceSerializer(qs, many=True).data)
+
+    def put(self, request, slug):
+        event = self._get_event(slug)
+        ser = UserGamePriceSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        board_game = ser.validated_data["board_game"]
+        obj, _ = UserGamePrice.objects.update_or_create(
+            user=request.user, event=event, board_game=board_game,
+            defaults={"price": ser.validated_data["price"]},
+        )
+        return Response(UserGamePriceSerializer(obj).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, slug):
+        event = self._get_event(slug)
+        bgg_id = request.query_params.get("board_game")
+        UserGamePrice.objects.filter(
+            user=request.user, event=event, board_game_id=bgg_id
+        ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

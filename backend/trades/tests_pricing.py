@@ -106,3 +106,35 @@ class ResolveBidTests(MatchingTestBase):
             event_listing=self.el_b1,
         )
         self.assertEqual(pricing.resolve_bid(self.user_a, self.event, target), Decimal("15"))
+
+
+class GamePriceEndpointTests(MatchingTestBase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(user=self.user_a)
+        self.url = f"/api/events/{self.slug}/game-prices/"
+
+    def test_put_creates_then_updates(self):
+        r1 = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "40.00"}, format="json")
+        self.assertEqual(r1.status_code, 200, r1.data)
+        self.assertEqual(UserGamePrice.objects.count(), 1)
+        r2 = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "55.00"}, format="json")
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(UserGamePrice.objects.count(), 1)  # upsert, not duplicate
+        self.assertEqual(UserGamePrice.objects.get().price, Decimal("55.00"))
+
+    def test_get_lists_only_my_prices(self):
+        UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_brass, price=Decimal("40"))
+        UserGamePrice.objects.create(user=self.user_b, event=self.event, board_game=self.game_brass, price=Decimal("99"))
+        r = self.client.get(self.url)
+        self.assertEqual(len(r.data), 1)
+        self.assertEqual(Decimal(r.data[0]["price"]), Decimal("40"))
+
+    def test_negative_price_rejected(self):
+        r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "-5"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_requires_auth(self):
+        self.client.force_authenticate(user=None)
+        r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "40"}, format="json")
+        self.assertIn(r.status_code, (401, 403))  # depends on DRF auth classes

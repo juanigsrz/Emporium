@@ -16,6 +16,7 @@ Pattern: all routes receive `slug` from the parent URL conf.
 from django.urls import path
 
 from .views import (
+    GamePriceView,
     OfferGroupDetailView,
     OfferGroupListCreateView,
     TradeWishDetailView,
@@ -57,5 +58,11 @@ urlpatterns = [
         "events/<slug:slug>/wishes/<int:pk>/",
         TradeWishDetailView.as_view(),
         name="wish-detail",
+    ),
+    # Game Prices
+    path(
+        "events/<slug:slug>/game-prices/",
+        GamePriceView.as_view(),
+        name="game-price",
     ),
 ]
