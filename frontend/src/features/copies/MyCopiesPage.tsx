@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { useForm, useFieldArray } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy, COPIES_KEYS } from '../../api/copies'
 import type { Copy, CopyCondition } from '../../api/copies'
 import { useGamesList } from '../../api/games'
 import { CONDITION_LABELS } from './constants'
+import { CopyForm } from './CopyForm'
+import type { CopySubmitPayload } from './CopyForm'
 import { useMyRatings, useSetRating, ratingMap } from '../../api/ratings'
 import { useStartImport, useImportJob } from '../../api/bgg'
 import { useMyProfile } from '../../api/profiles'
@@ -29,36 +28,20 @@ const STATUS_COLOR: Record<string, string> = {
   WITHDRAWN: 'bg-gray-100 text-gray-400 border-gray-200',
 }
 
-const SLEEVED_LABELS: Record<string, string> = {
-  UNKNOWN: 'Unknown',
-  NONE: 'Not sleeved',
-  SLEEVED: 'Sleeved',
+// ---- Server error parsing ----
+
+function extractCopyError(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const resp = (err as { response?: { data?: unknown } }).response
+    const data = resp?.data
+    if (data && typeof data === 'object') {
+      const first = Object.values(data as Record<string, string[]>)[0]
+      return Array.isArray(first) ? first[0] : String(first)
+    }
+    return 'Failed to save. Please try again.'
+  }
+  return 'Network error. Please try again.'
 }
-
-// ---- Zod schema ----
-
-const CONDITION_VALUES = ['NEW', 'LIKE_NEW', 'EXCELLENT', 'GOOD', 'FAIR', 'POOR'] as const
-const SLEEVED_VALUES = ['UNKNOWN', 'NONE', 'SLEEVED'] as const
-
-const editSchema = z.object({
-  condition: z.enum(CONDITION_VALUES, { error: 'Condition is required' }),
-  language: z.string().max(64).optional(),
-  edition: z.string().max(120).optional(),
-  sleeved: z.enum(SLEEVED_VALUES).optional(),
-  includes_expansions: z.string().optional(),
-  missing_components: z.string().optional(),
-  upgraded_components: z.string().optional(),
-  component_notes: z.string().optional(),
-  owner_notes: z.string().optional(),
-  trade_value_hint: z.string().max(120).optional(),
-  shipping_constraints: z.string().optional(),
-  pickup_available: z.boolean().optional(),
-  photo_urls: z
-    .array(z.object({ url: z.string().url('Must be a valid URL').or(z.literal('')) }))
-    .optional(),
-})
-
-type EditFormValues = z.infer<typeof editSchema>
 
 // ---- Edit modal ----
 
@@ -71,79 +54,15 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
   const patchCopy = usePatchCopy()
   const [serverError, setServerError] = useState<string | null>(null)
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors, isSubmitting },
-  } = useForm<EditFormValues>({
-    resolver: zodResolver(editSchema),
-    defaultValues: {
-      condition: copy.condition,
-      language: copy.language ?? '',
-      edition: copy.edition ?? '',
-      sleeved: copy.sleeved ?? 'UNKNOWN',
-      includes_expansions: copy.includes_expansions ?? '',
-      missing_components: copy.missing_components ?? '',
-      upgraded_components: copy.upgraded_components ?? '',
-      component_notes: copy.component_notes ?? '',
-      owner_notes: copy.owner_notes ?? '',
-      trade_value_hint: copy.trade_value_hint ?? '',
-      shipping_constraints: copy.shipping_constraints ?? '',
-      pickup_available: copy.pickup_available ?? false,
-      photo_urls: (copy.photo_urls ?? []).map((url) => ({ url })),
-    },
-  })
-
-  const { fields: photoFields, append: appendPhoto, remove: removePhoto } = useFieldArray({
-    control,
-    name: 'photo_urls',
-  })
-
-  async function onSubmit(values: EditFormValues) {
+  async function handleSubmit(payload: CopySubmitPayload) {
     setServerError(null)
     try {
-      await patchCopy.mutateAsync({
-        id: copy.id,
-        payload: {
-          condition: values.condition,
-          language: values.language || undefined,
-          edition: values.edition || undefined,
-          sleeved: values.sleeved,
-          includes_expansions: values.includes_expansions || undefined,
-          missing_components: values.missing_components || undefined,
-          upgraded_components: values.upgraded_components || undefined,
-          component_notes: values.component_notes || undefined,
-          owner_notes: values.owner_notes || undefined,
-          trade_value_hint: values.trade_value_hint || undefined,
-          shipping_constraints: values.shipping_constraints || undefined,
-          pickup_available: values.pickup_available,
-          photo_urls: values.photo_urls
-            ?.filter((p) => p.url.trim() !== '')
-            .map((p) => p.url.trim()),
-        },
-      })
+      await patchCopy.mutateAsync({ id: copy.id, payload })
       onClose()
     } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const resp = (err as { response?: { data?: unknown } }).response
-        const data = resp?.data
-        if (data && typeof data === 'object') {
-          const first = Object.values(data as Record<string, string[]>)[0]
-          setServerError(Array.isArray(first) ? first[0] : String(first))
-        } else {
-          setServerError('Failed to save. Please try again.')
-        }
-      } else {
-        setServerError('Network error. Please try again.')
-      }
+      setServerError(extractCopyError(err))
     }
   }
-
-  const inputCls = (hasErr: boolean) =>
-    `w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-      hasErr ? 'border-red-400' : 'border-gray-300'
-    }`
 
   return (
     <div
@@ -169,132 +88,27 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
 
         {/* Form */}
         <div className="overflow-y-auto flex-1 px-5 py-4">
-          {serverError && (
-            <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-              {serverError}
-            </div>
-          )}
-
-          <form id="edit-copy-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-            {/* Condition */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Condition <span className="text-red-500">*</span>
-              </label>
-              <select {...register('condition')} className={inputCls(!!errors.condition)}>
-                <option value="">Select condition…</option>
-                {Object.entries(CONDITION_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-              {errors.condition && (
-                <p className="mt-1 text-xs text-red-600">{errors.condition.message}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
-                <input {...register('language')} placeholder="e.g. English" className={inputCls(false)} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Edition</label>
-                <input {...register('edition')} placeholder="e.g. 2nd Ed." className={inputCls(false)} />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Sleeved</label>
-              <select {...register('sleeved')} className={inputCls(false)}>
-                {Object.entries(SLEEVED_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Includes expansions</label>
-              <input {...register('includes_expansions')} placeholder="e.g. Stonemaier Expansions" className={inputCls(false)} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Missing components</label>
-                <input {...register('missing_components')} placeholder="None" className={inputCls(false)} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Upgraded components</label>
-                <input {...register('upgraded_components')} placeholder="None" className={inputCls(false)} />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Component notes</label>
-              <textarea {...register('component_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Owner notes</label>
-              <textarea {...register('owner_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Trade value hint</label>
-              <input {...register('trade_value_hint')} placeholder="e.g. ~$40 retail" className={inputCls(!!errors.trade_value_hint)} />
-              {errors.trade_value_hint && (
-                <p className="mt-1 text-xs text-red-600">{errors.trade_value_hint.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Shipping constraints</label>
-              <input {...register('shipping_constraints')} placeholder="e.g. Domestic only" className={inputCls(false)} />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                id="edit_pickup_available"
-                type="checkbox"
-                {...register('pickup_available')}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label htmlFor="edit_pickup_available" className="text-sm font-medium text-gray-700">
-                Pickup available
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Photo URLs</label>
-              <div className="space-y-2">
-                {photoFields.map((field, idx) => (
-                  <div key={field.id} className="flex gap-2">
-                    <input
-                      {...register(`photo_urls.${idx}.url`)}
-                      placeholder="https://…"
-                      className={`flex-1 ${inputCls(!!errors.photo_urls?.[idx]?.url)}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(idx)}
-                      className="shrink-0 text-gray-400 hover:text-red-500 p-1"
-                      aria-label="Remove URL"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => appendPhoto({ url: '' })}
-                  className="text-xs text-indigo-600 hover:underline"
-                >
-                  + Add photo URL
-                </button>
-              </div>
-            </div>
-          </form>
+          <CopyForm
+            boardGameId={copy.board_game}
+            formId="edit-copy-form"
+            initial={{
+              condition: copy.condition,
+              sleeved: copy.sleeved,
+              includes_expansions: copy.includes_expansions,
+              missing_components: copy.missing_components,
+              upgraded_components: copy.upgraded_components,
+              component_notes: copy.component_notes,
+              owner_notes: copy.owner_notes,
+              trade_value_hint: copy.trade_value_hint,
+              shipping_constraints: copy.shipping_constraints,
+              pickup_available: copy.pickup_available,
+              photo_urls: (copy.photo_urls ?? []).map((url) => ({ url })),
+              versionId: copy.version,
+              versionName: copy.version_name,
+            }}
+            onSubmit={handleSubmit}
+            serverError={serverError}
+          />
         </div>
 
         <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
@@ -308,10 +122,10 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
           <button
             type="submit"
             form="edit-copy-form"
-            disabled={isSubmitting}
+            disabled={patchCopy.isPending}
             className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
           >
-            {isSubmitting ? 'Saving…' : 'Save changes'}
+            {patchCopy.isPending ? 'Saving…' : 'Save changes'}
           </button>
         </div>
       </div>
