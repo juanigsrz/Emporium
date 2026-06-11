@@ -5,6 +5,15 @@ export type { Copy }
 
 // ---- Types ----
 
+export interface GameVersion {
+  id: number
+  bgg_version_id: number | null
+  name: string
+  language: string
+  year_published: number | null
+  thumbnail_url: string
+}
+
 export interface GameListItem {
   bgg_id: number
   name: string
@@ -64,6 +73,12 @@ export interface CopiesParams {
 
 // ---- API fetch functions ----
 
+export async function listGameVersions(bggId: number): Promise<GameVersion[]> {
+  const { data } = await apiClient.get<GameVersion[]>(`/games/${bggId}/versions/`)
+  return data
+}
+
+
 export async function fetchGamesList(
   params: GamesListParams
 ): Promise<PaginatedResponse<GameListItem>> {
@@ -101,6 +116,16 @@ export async function fetchGameCopies(
 }
 
 // ---- TanStack Query hooks ----
+
+export function useGameVersions(bggId: number | undefined) {
+  return useQuery({
+    queryKey: ['games', 'versions', bggId],
+    queryFn: () => listGameVersions(bggId!),
+    enabled: bggId != null,
+    staleTime: 5 * 60_000,
+  })
+}
+
 
 export const GAMES_KEYS = {
   all: ['games'] as const,
