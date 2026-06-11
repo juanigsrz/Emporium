@@ -94,3 +94,15 @@ class ResolveBidTests(MatchingTestBase):
             target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game_terra
         )
         self.assertIsNone(pricing.resolve_bid(self.user_a, self.event, target))
+
+    def test_listing_override_wins(self):
+        WantBid.objects.create(
+            user=self.user_a, event=self.event,
+            target_type=WantBid.TargetType.LISTING,
+            event_listing=self.el_b1, amount=Decimal("15"),
+        )
+        target = WantGroupItem(
+            target_type=WantGroupItem.TargetType.LISTING,
+            event_listing=self.el_b1,
+        )
+        self.assertEqual(pricing.resolve_bid(self.user_a, self.event, target), Decimal("15"))
