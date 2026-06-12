@@ -24,6 +24,7 @@ import {
 } from '../../api/trades'
 import type {
   OfferGroup,
+  OfferGroupItem,
   WantGroup,
   WantGroupItem,
   WantGroupItemPayload,
@@ -223,7 +224,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
               key={item.id}
               className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
             >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-9 w-9" />
+              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
               <span className="font-mono text-gray-400">{item.listing_code}</span>
               {item.board_game_name}
             </span>
@@ -578,7 +579,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
                   : 'bg-blue-50 text-blue-700'
               }`}
             >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-9 w-9" />
+              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
               {item.target_type === 'LISTING' && (
                 <span className="font-mono text-gray-400">{item.listing_code}</span>
               )}
@@ -1121,6 +1122,8 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
         <WishCard
           key={wish.id}
           wish={wish}
+          offerItems={offerGroups.find((g) => g.id === wish.offer_group)?.items ?? []}
+          wantItems={wantGroups.find((g) => g.id === wish.want_group)?.items ?? []}
           onToggle={async () => {
             setError(null)
             try {
@@ -1238,6 +1241,8 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
 
 interface WishCardProps {
   wish: TradeWish
+  offerItems: OfferGroupItem[]
+  wantItems: WantGroupItem[]
   onToggle: () => void
   onDelete: () => void
   isToggling: boolean
@@ -1245,7 +1250,7 @@ interface WishCardProps {
   locked?: boolean
 }
 
-function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting, locked }: WishCardProps) {
+function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling, isDeleting, locked }: WishCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -1271,6 +1276,30 @@ function WishCard({ wish, onToggle, onDelete, isToggling, isDeleting, locked }: 
           <p className="text-xs text-gray-400">
             Give up to <strong>{wish.max_give}</strong> → Receive at least <strong>{wish.min_receive}</strong>
           </p>
+
+          {(offerItems.length > 0 || wantItems.length > 0) && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {offerItems.map((item) => (
+                <GameThumb
+                  key={item.id}
+                  src={item.board_game_thumbnail}
+                  alt={item.board_game_name ?? ''}
+                  className="h-7 w-7"
+                />
+              ))}
+              <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              {wantItems.map((item) => (
+                <GameThumb
+                  key={item.id}
+                  src={item.board_game_thumbnail}
+                  alt={item.board_game_name ?? ''}
+                  className="h-7 w-7"
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {!locked && (
