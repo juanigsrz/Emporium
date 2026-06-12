@@ -15,6 +15,7 @@ import {
 import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
 import { useShipments, useUpdateShipment } from '../../api/shipping'
 import type { Shipment } from '../../api/shipping'
+import { GameThumb } from '../../components/GameThumb'
 
 // ---- helpers ----
 
@@ -339,6 +340,7 @@ function MyTradesSection({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
                 </svg>
               </div>
+              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">You give</p>
                 <p className="text-sm font-medium text-gray-900 truncate">{a.board_game_name}</p>
@@ -376,6 +378,7 @@ function MyTradesSection({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
                 </svg>
               </div>
+              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">You receive</p>
                 <p className="text-sm font-medium text-gray-900 truncate">{a.board_game_name}</p>
@@ -831,15 +834,18 @@ function ShipmentSenderCard({
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
-          <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            to{' '}
-            <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
-              {s.receiver_username}
-            </Link>
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
+            <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              to{' '}
+              <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
+                {s.receiver_username}
+              </Link>
+            </p>
+          </div>
         </div>
         <ShipmentStatusBadge status={s.status} />
       </div>
@@ -896,15 +902,18 @@ function ShipmentReceiverCard({
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
-          <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            from{' '}
-            <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">
-              {s.giver_username}
-            </Link>
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
+            <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              from{' '}
+              <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">
+                {s.giver_username}
+              </Link>
+            </p>
+          </div>
         </div>
         <ShipmentStatusBadge status={s.status} />
       </div>
