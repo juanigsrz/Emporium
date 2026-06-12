@@ -59,12 +59,19 @@ export interface MatchStats {
   cycles: number
 }
 
+export interface SettlementTransfer {
+  from_user: string
+  to_user: string
+  amount: string
+}
+
 export interface MatchResult {
   algorithm: string
   generated_at: string
   cycles: Cycle[]
   unmatched: UnmatchedWish[]
   stats: MatchStats
+  settlement?: SettlementTransfer[]
 }
 
 /** Shape returned by GET .../matches/{id}/mine/ (paginated) */
@@ -82,6 +89,7 @@ export interface TradeAssignment {
   receiver_username: string
   wish: number | null
   cash_amount: string | null
+  item_value: string | null
   created: string
 }
 
@@ -120,7 +128,7 @@ async function fetchMatchResult(slug: string, id: number): Promise<MatchResult> 
 
 async function fetchMyAssignments(slug: string, id: number): Promise<PaginatedResponse<TradeAssignment>> {
   const { data } = await apiClient.get<PaginatedResponse<TradeAssignment>>(
-    `/events/${slug}/matches/${id}/mine/`
+    `/events/${slug}/matches/${id}/mine/?page_size=100`
   )
   return data
 }

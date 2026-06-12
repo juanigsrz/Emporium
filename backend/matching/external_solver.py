@@ -465,6 +465,59 @@ def parse_gurobi_cash(output: str):
     return moves
 
 
+_CASH_SUMMARY_LINE = re.compile(
+    r"^(\S+):\s+spent\s+\$-?\d+,\s+earned\s+\$-?\d+,\s+net\s+\$(-?\d+)\b"
+)
+
+
+def parse_gurobi_cash_summary(output: str):
+    """gurobi `Cash Summary:` section -> {username: net_cents}.
+
+    Line form: `  <user>: spent $A, earned $B, net $N ...` with amounts in integer
+    cents (net may be negative). The trailing `(direction)`/`(cap ...)` are ignored.
+    Used only to cross-check the per-item money reconstruction in load_solution.
+    """
+    nets = {}
+    in_summary = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Cash Summary"):
+            in_summary = True
+            continue
+        if line.startswith("Payments") or line.startswith("Settlement plan"):
+            break
+        if not in_summary or not line:
+            continue
+        m = _CASH_SUMMARY_LINE.match(line)
+        if m:
+            nets[m.group(1)] = int(m.group(2))
+    return nets
+
+
+_SETTLEMENT_LINE = re.compile(r"^(\S+)\s+pays\s+(\S+)\s+\$(\d+)$")
+
+
+def parse_gurobi_settlement(output: str):
+    """gurobi `Settlement plan:` section -> [(from_user, to_user, amount_cents), ...].
+
+    Line form: `  <from> pays <to> $<cents>`. The minimal-transfer settlement; the
+    section runs to end of output. Amounts are integer cents.
+    """
+    transfers = []
+    in_plan = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Settlement plan"):
+            in_plan = True
+            continue
+        if not in_plan or not line:
+            continue
+        m = _SETTLEMENT_LINE.match(line)
+        if m:
+            transfers.append((m.group(1), m.group(2), int(m.group(3))))
+    return transfers
+
+
 def _assign_components(resolved):
     """Weakly-connected components over users joined by each move (XTOY)."""
     parent = {}
@@ -555,14 +608,19 @@ def load_solution(match_run, raw_output: str):
     # Best-effort: which of the receiver's active wishes this move satisfies.
     wish_index = _build_wish_index(event, by_game, by_id)
 
-    rows = []  # (moved_el, giver, receiver, cycle_id, wish_id, cash_amount)
+    from trades.pricing import resolve_ask
+
+    rows = []  # (moved_el, giver, receiver, cycle_id, wish_id, cash_amount, item_value)
     for moved_el, giver, receiver, group in resolved:
         wid = _match_wish(wish_index, receiver.id, moved_el.copy.listing_code)
         amt = cash_by_listing.get(moved_el.id)
-        rows.append((moved_el, giver, receiver, (group or 0) + 1, wid, amt))
+        # item_value = the money on this item: the parsed cash-buy amount when present
+        # (authoritative, from the solver), else the resolved ask for a swap leg.
+        val = amt if amt is not None else resolve_ask(moved_el)
+        rows.append((moved_el, giver, receiver, (group or 0) + 1, wid, amt, val))
 
     cycles = defaultdict(list)
-    for moved_el, giver, receiver, cid, wid, amt in rows:
+    for moved_el, giver, receiver, cid, wid, amt, val in rows:
         cycles[cid].append({
             "listing_code": moved_el.copy.listing_code,
             "board_game": moved_el.copy.board_game.name,
@@ -575,6 +633,33 @@ def load_solution(match_run, raw_output: str):
         {"id": cid, "length": len(steps), "steps": steps}
         for cid, steps in sorted(cycles.items())
     ]
+
+    # Money cross-check + settlement plan (XTOY money mode only). Reconstruct each
+    # user's net from item_value (received - given) and require it to equal the
+    # solver's Cash Summary net; a mismatch means stale prices or a parse error, so
+    # fail loudly rather than ship wrong money.
+    settlement = []
+    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
+        summary_net = parse_gurobi_cash_summary(raw_output)
+        if summary_net:
+            recon = defaultdict(int)  # username -> net cents (received - given)
+            for moved_el, giver, receiver, cid, wid, amt, val in rows:
+                if val:
+                    cents = _to_cents(val)
+                    recon[receiver.username] += cents
+                    recon[giver.username] -= cents
+            for username, net_cents in summary_net.items():
+                if recon.get(username, 0) != net_cents:
+                    raise ValueError(
+                        f"Money reconstruction mismatch for {username!r}: "
+                        f"reconstructed {recon.get(username, 0)}c != solver {net_cents}c"
+                    )
+        for from_u, to_u, cents in parse_gurobi_settlement(raw_output):
+            settlement.append({
+                "from_user": from_u,
+                "to_user": to_u,
+                "amount": str((Decimal(cents) / 100).quantize(Decimal("0.01"))),
+            })
 
     active_wishes = _active_wishes(event)
     received_user_ids = {r[2].id for r in rows}
@@ -589,6 +674,7 @@ def load_solution(match_run, raw_output: str):
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cycles": cycle_list,
         "unmatched": unmatched,
+        "settlement": settlement,
         "stats": {
             "users": len({w.user_id for w in active_wishes}),
             "listings": len(listings),
@@ -611,8 +697,9 @@ def load_solution(match_run, raw_output: str):
             wish_id=wid,
             cycle_id=cid,
             cash_amount=amt,
+            item_value=val,
         )
-        for moved_el, giver, receiver, cid, wid, amt in rows
+        for moved_el, giver, receiver, cid, wid, amt, val in rows
     ])
 
     log = (

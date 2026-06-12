@@ -233,6 +233,13 @@ class ParserTests(MatchingTestBase):
         self.assertTrue(f.null)
         self.assertEqual(f.decimal_places, 2)
 
+    def test_trade_assignment_has_item_value_field(self):
+        from matching.models import TradeAssignment
+        f = TradeAssignment._meta.get_field("item_value")
+        self.assertTrue(f.null)
+        self.assertEqual(f.max_digits, 10)
+        self.assertEqual(f.decimal_places, 2)
+
     def test_mine_includes_cash_amount(self):
         from matching.serializers import TradeAssignmentSerializer
         self.assertIn("cash_amount", TradeAssignmentSerializer().fields)
@@ -436,3 +443,115 @@ class PlaceholderHeaderTests(MatchingTestBase):
         self.wish_a.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
         self.assertNotIn("#!", text.replace("#! REQUIRE-COLONS REQUIRE-USERNAMES", ""))
+
+
+# ---------------------------------------------------------------------------
+# Money parsers — Cash Summary / Settlement plan
+# ---------------------------------------------------------------------------
+
+class MoneyParserTests(MatchingTestBase):
+
+    def test_parse_cash_summary_signed_nets(self):
+        out = (
+            "Cash Summary:\n"
+            "  alice: spent $3000, earned $2000, net $1000 (owes) (cap $inf)\n"
+            "  bob: spent $2000, earned $3000, net $-1000 (receives) (cap $inf)\n"
+            "\nSettlement plan:\n  alice pays bob $1000\n"
+        )
+        nets = external_solver.parse_gurobi_cash_summary(out)
+        self.assertEqual(nets, {"alice": 1000, "bob": -1000})
+
+    def test_parse_cash_summary_tolerates_missing_direction(self):
+        # Hand-written fixtures omit the "(owes)" word; parser must not require it.
+        out = "Cash Summary:\n  bob: spent $500, earned $0, net $500 (cap $inf)\n"
+        self.assertEqual(external_solver.parse_gurobi_cash_summary(out), {"bob": 500})
+
+    def test_parse_cash_summary_absent_section(self):
+        self.assertEqual(
+            external_solver.parse_gurobi_cash_summary("Trade Results:\nX -> Y\n"), {}
+        )
+
+    def test_parse_settlement_transfers(self):
+        out = (
+            "Cash Summary:\n  alice: spent $1000, earned $0, net $1000 (cap $inf)\n"
+            "\nSettlement plan:\n"
+            "  alice pays bob $700\n"
+            "  alice pays carol $300\n"
+        )
+        self.assertEqual(
+            external_solver.parse_gurobi_settlement(out),
+            [("alice", "bob", 700), ("alice", "carol", 300)],
+        )
+
+    def test_parse_settlement_absent_section(self):
+        self.assertEqual(
+            external_solver.parse_gurobi_settlement("Trade Results:\nX -> Y\n"), []
+        )
+
+
+# ---------------------------------------------------------------------------
+# Upload — XTOY money mode (item_value, settlement, reconstruction guard)
+# ---------------------------------------------------------------------------
+
+class MoneySettlementUploadTests(MatchingTestBase):
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event.matching_mode = TradeEvent.MatchingMode.XTOY
+        cls.event.money_enabled = True
+        cls.event.save(update_fields=["matching_mode", "money_enabled"])
+        cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
+        cls.wish_b = cls._make_wish(cls.user_b, cls.el_b1, want_game=cls.game_brass)
+        # alice's brass ask $20, bob's terra ask $30
+        cls.el_a1.sell_price = 20
+        cls.el_a1.save(update_fields=["sell_price"])
+        cls.el_b1.sell_price = 30
+        cls.el_b1.save(update_fields=["sell_price"])
+
+    def _money_solution(self, alice_net=1000):
+        a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
+        bob_net = -alice_net
+        return (
+            f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+            f"\nCash Summary:\n"
+            f"  {self.user_a.username}: spent $3000, earned $2000, net ${alice_net} (cap $inf)\n"
+            f"  {self.user_b.username}: spent $2000, earned $3000, net ${bob_net} (cap $inf)\n"
+            f"\nSettlement plan:\n"
+            f"  {self.user_a.username} pays {self.user_b.username} $1000\n"
+        )
+
+    def test_item_value_set_on_swap_legs(self):
+        from decimal import Decimal
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        a1_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_a1)
+        b1_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_b1)
+        self.assertEqual(a1_row.item_value, Decimal("20.00"))
+        self.assertEqual(b1_row.item_value, Decimal("30.00"))
+
+    def test_settlement_in_result(self):
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+        )
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        self.assertEqual(
+            run.result["settlement"],
+            [{"from_user": self.user_a.username, "to_user": self.user_b.username, "amount": "10.00"}],
+        )
+
+    def test_reconstruction_mismatch_rejected(self):
+        # Cash Summary claims alice owes $99.99 but the items reconstruct to $10 -> 400.
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(alice_net=9999),
+            content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MatchRun.objects.filter(status=MatchRun.Status.DONE).count(), 0)
+
+    def test_serializer_exposes_item_value(self):
+        from matching.serializers import TradeAssignmentSerializer
+        self.assertIn("item_value", TradeAssignmentSerializer().fields)
