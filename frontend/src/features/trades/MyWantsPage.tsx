@@ -1098,11 +1098,6 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
           <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-gray-100">
-                  {listing.board_game_thumbnail ? (
-                    <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
-                  ) : null}
-                </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-gray-900">
                     {listing.board_game_name}
