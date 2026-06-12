@@ -14,6 +14,7 @@ import {
 } from '../../api/matching'
 import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
 import { useShipments, useUpdateShipment } from '../../api/shipping'
+import { ShippingOverviewTab } from './ShippingOverviewTab'
 import type { Shipment } from '../../api/shipping'
 import { GameThumb } from '../../components/GameThumb'
 
@@ -942,7 +943,7 @@ function ShipmentReceiverCard({
 
 // ---- Run result view ----
 
-function RunResultView({ slug, run, eventStatus }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus }) {
+function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus; isOrganizer: boolean }) {
   const isDone = run.status === 'DONE'
   const { data: result, isLoading: resultLoading, isError: resultError } = useMatchResult(slug, run.id, isDone)
   const { data: mineData, isLoading: mineLoading } = useMyAssignments(slug, run.id, isDone)
@@ -950,7 +951,7 @@ function RunResultView({ slug, run, eventStatus }: { slug: string; run: MatchRun
   const currentUsername = user?.username ?? ''
 
   const showShipping = eventStatus === 'SHIPPING' || eventStatus === 'ARCHIVED'
-  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping'>('my-trades')
+  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping' | 'shipping-overview'>('my-trades')
 
   if (!isDone) {
     return <LiveRunView slug={slug} runId={run.id} />
@@ -961,6 +962,7 @@ function RunResultView({ slug, run, eventStatus }: { slug: string; run: MatchRun
     { id: 'cycles', label: 'All Cycles' },
     { id: 'stats', label: 'Stats & Unmatched' },
     ...(showShipping ? [{ id: 'shipping' as const, label: 'Shipping' }] : []),
+    ...(showShipping && isOrganizer ? [{ id: 'shipping-overview' as const, label: 'Shipping Overview' }] : []),
   ]
 
   return (
@@ -1038,6 +1040,8 @@ function RunResultView({ slug, run, eventStatus }: { slug: string; run: MatchRun
         {activeTab === 'shipping' && (
           <ShippingTab slug={slug} readOnly={eventStatus === 'ARCHIVED'} />
         )}
+
+        {activeTab === 'shipping-overview' && <ShippingOverviewTab slug={slug} />}
       </div>
     </div>
   )
@@ -1193,7 +1197,7 @@ export default function MatchRunPage() {
               <p className="text-sm text-gray-400">Select a run to view details.</p>
             </div>
           ) : activeRun ? (
-            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} />
+            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} />
           ) : (
             <div className="space-y-3 animate-pulse">
               <div className="h-8 w-1/3 bg-gray-100 rounded" />
