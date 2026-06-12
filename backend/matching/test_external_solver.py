@@ -487,3 +487,67 @@ class MoneyParserTests(MatchingTestBase):
         self.assertEqual(
             external_solver.parse_gurobi_settlement("Trade Results:\nX -> Y\n"), []
         )
+
+
+# ---------------------------------------------------------------------------
+# Upload — XTOY money mode (item_value, settlement, reconstruction guard)
+# ---------------------------------------------------------------------------
+
+class MoneySettlementUploadTests(MatchingTestBase):
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.event.matching_mode = TradeEvent.MatchingMode.XTOY
+        cls.event.money_enabled = True
+        cls.event.save(update_fields=["matching_mode", "money_enabled"])
+        cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
+        cls.wish_b = cls._make_wish(cls.user_b, cls.el_b1, want_game=cls.game_brass)
+        # alice's brass ask $20, bob's terra ask $30
+        cls.el_a1.sell_price = 20
+        cls.el_a1.save(update_fields=["sell_price"])
+        cls.el_b1.sell_price = 30
+        cls.el_b1.save(update_fields=["sell_price"])
+
+    def _money_solution(self, alice_net=1000):
+        a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
+        bob_net = -alice_net
+        return (
+            f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+            f"\nCash Summary:\n"
+            f"  {self.user_a.username}: spent $3000, earned $2000, net ${alice_net} (cap $inf)\n"
+            f"  {self.user_b.username}: spent $2000, earned $3000, net ${bob_net} (cap $inf)\n"
+            f"\nSettlement plan:\n"
+            f"  {self.user_a.username} pays {self.user_b.username} $1000\n"
+        )
+
+    def test_item_value_set_on_swap_legs(self):
+        from decimal import Decimal
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        a1_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_a1)
+        b1_row = TradeAssignment.objects.get(match_run=run, event_listing=self.el_b1)
+        self.assertEqual(a1_row.item_value, Decimal("20.00"))
+        self.assertEqual(b1_row.item_value, Decimal("30.00"))
+
+    def test_settlement_in_result(self):
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+        )
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        self.assertEqual(
+            run.result["settlement"],
+            [{"from_user": self.user_a.username, "to_user": self.user_b.username, "amount": "10.00"}],
+        )
+
+    def test_reconstruction_mismatch_rejected(self):
+        # Cash Summary claims alice owes $99.99 but the items reconstruct to $10 -> 400.
+        resp = self.client.post(
+            upload_url(self.slug), data=self._money_solution(alice_net=9999),
+            content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MatchRun.objects.filter(status=MatchRun.Status.DONE).count(), 0)
