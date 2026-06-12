@@ -443,3 +443,30 @@ class PlaceholderHeaderTests(MatchingTestBase):
         self.wish_a.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
         self.assertNotIn("#!", text.replace("#! REQUIRE-COLONS REQUIRE-USERNAMES", ""))
+
+
+# ---------------------------------------------------------------------------
+# Money parsers — Cash Summary / Settlement plan
+# ---------------------------------------------------------------------------
+
+class MoneyParserTests(MatchingTestBase):
+
+    def test_parse_cash_summary_signed_nets(self):
+        out = (
+            "Cash Summary:\n"
+            "  alice: spent $3000, earned $2000, net $1000 (owes) (cap $inf)\n"
+            "  bob: spent $2000, earned $3000, net $-1000 (receives) (cap $inf)\n"
+            "\nSettlement plan:\n  alice pays bob $1000\n"
+        )
+        nets = external_solver.parse_gurobi_cash_summary(out)
+        self.assertEqual(nets, {"alice": 1000, "bob": -1000})
+
+    def test_parse_cash_summary_tolerates_missing_direction(self):
+        # Hand-written fixtures omit the "(owes)" word; parser must not require it.
+        out = "Cash Summary:\n  bob: spent $500, earned $0, net $500 (cap $inf)\n"
+        self.assertEqual(external_solver.parse_gurobi_cash_summary(out), {"bob": 500})
+
+    def test_parse_cash_summary_absent_section(self):
+        self.assertEqual(
+            external_solver.parse_gurobi_cash_summary("Trade Results:\nX -> Y\n"), {}
+        )
