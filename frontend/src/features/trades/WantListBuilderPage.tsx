@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing, EventGame } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
+import { GameThumb } from '../../components/GameThumb'
 
 import {
   useOfferGroups,
@@ -222,6 +223,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
               key={item.id}
               className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
             >
+              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-9 w-9" />
               <span className="font-mono text-gray-400">{item.listing_code}</span>
               {item.board_game_name}
             </span>
@@ -576,6 +578,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
                   : 'bg-blue-50 text-blue-700'
               }`}
             >
+              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-9 w-9" />
               {item.target_type === 'LISTING' && (
                 <span className="font-mono text-gray-400">{item.listing_code}</span>
               )}

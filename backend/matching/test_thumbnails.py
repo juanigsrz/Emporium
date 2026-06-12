@@ -60,3 +60,11 @@ class ThumbnailFieldTests(MatchingTestBase):
         from copies.serializers import CopySerializer
         data = CopySerializer(self.copy_a1).data
         self.assertEqual(data["board_game_thumbnail"], "https://img/brass.jpg")
+
+    def test_offer_group_item_thumbnail(self):
+        from trades.serializers import OfferGroupItemSerializer
+        from trades.models import OfferGroup, OfferGroupItem
+        og = OfferGroup.objects.create(event=self.event, user=self.user_a, name="og")
+        ogi = OfferGroupItem.objects.create(offer_group=og, event_listing=self.el_a1)
+        data = OfferGroupItemSerializer(ogi).data
+        self.assertEqual(data["board_game_thumbnail"], "https://img/brass.jpg")
