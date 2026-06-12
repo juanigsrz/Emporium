@@ -465,6 +465,35 @@ def parse_gurobi_cash(output: str):
     return moves
 
 
+_CASH_SUMMARY_LINE = re.compile(
+    r"^(\S+):\s+spent\s+\$-?\d+,\s+earned\s+\$-?\d+,\s+net\s+\$(-?\d+)\b"
+)
+
+
+def parse_gurobi_cash_summary(output: str):
+    """gurobi `Cash Summary:` section -> {username: net_cents}.
+
+    Line form: `  <user>: spent $A, earned $B, net $N ...` with amounts in integer
+    cents (net may be negative). The trailing `(direction)`/`(cap ...)` are ignored.
+    Used only to cross-check the per-item money reconstruction in load_solution.
+    """
+    nets = {}
+    in_summary = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Cash Summary"):
+            in_summary = True
+            continue
+        if line.startswith("Payments") or line.startswith("Settlement plan"):
+            break
+        if not in_summary or not line:
+            continue
+        m = _CASH_SUMMARY_LINE.match(line)
+        if m:
+            nets[m.group(1)] = int(m.group(2))
+    return nets
+
+
 def _assign_components(resolved):
     """Weakly-connected components over users joined by each move (XTOY)."""
     parent = {}
