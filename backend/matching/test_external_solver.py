@@ -233,6 +233,13 @@ class ParserTests(MatchingTestBase):
         self.assertTrue(f.null)
         self.assertEqual(f.decimal_places, 2)
 
+    def test_trade_assignment_has_item_value_field(self):
+        from matching.models import TradeAssignment
+        f = TradeAssignment._meta.get_field("item_value")
+        self.assertTrue(f.null)
+        self.assertEqual(f.max_digits, 10)
+        self.assertEqual(f.decimal_places, 2)
+
     def test_mine_includes_cash_amount(self):
         from matching.serializers import TradeAssignmentSerializer
         self.assertIn("cash_amount", TradeAssignmentSerializer().fields)
