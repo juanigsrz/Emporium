@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
@@ -877,7 +878,7 @@ function CopyDetailRow({ label, value }: { label: string; value?: string | null 
 
 function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => void }) {
   const { data: copy, isLoading } = useCopy(copyId)
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
       role="dialog"
@@ -887,15 +888,18 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
       <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
         <div className="mb-3 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-gray-900">
-              {copy ? copy.board_game_name : 'Copy details'}
-            </h3>
-            {copy && (
-              <p className="font-mono text-xs text-gray-400">
-                {copy.listing_code} · {copy.owner_username}
-              </p>
-            )}
+          <div className="flex items-start gap-3 min-w-0">
+            <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-12 w-12" />
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-semibold text-gray-900">
+                {copy ? copy.board_game_name : 'Copy details'}
+              </h3>
+              {copy && (
+                <p className="font-mono text-xs text-gray-400">
+                  {copy.listing_code} · {copy.owner_username}
+                </p>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -914,7 +918,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
           <div className="divide-y divide-gray-50">
             <CopyDetailRow label="Condition" value={CONDITION_LABEL[copy.condition] || copy.condition} />
             <CopyDetailRow label="Language" value={copy.language} />
-            <CopyDetailRow label="Edition" value={copy.edition} />
+            <CopyDetailRow label="Edition" value={copy.version_name && copy.version_name !== 'Unknown' ? copy.version_name : ''} />
             <CopyDetailRow label="Sleeved" value={copy.sleeved !== 'UNKNOWN' ? copy.sleeved : ''} />
             <CopyDetailRow label="Includes" value={copy.includes_expansions} />
             <CopyDetailRow label="Missing" value={copy.missing_components} />
@@ -945,7 +949,8 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
