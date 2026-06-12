@@ -470,3 +470,20 @@ class MoneyParserTests(MatchingTestBase):
         self.assertEqual(
             external_solver.parse_gurobi_cash_summary("Trade Results:\nX -> Y\n"), {}
         )
+
+    def test_parse_settlement_transfers(self):
+        out = (
+            "Cash Summary:\n  alice: spent $1000, earned $0, net $1000 (cap $inf)\n"
+            "\nSettlement plan:\n"
+            "  alice pays bob $700\n"
+            "  alice pays carol $300\n"
+        )
+        self.assertEqual(
+            external_solver.parse_gurobi_settlement(out),
+            [("alice", "bob", 700), ("alice", "carol", 300)],
+        )
+
+    def test_parse_settlement_absent_section(self):
+        self.assertEqual(
+            external_solver.parse_gurobi_settlement("Trade Results:\nX -> Y\n"), []
+        )
