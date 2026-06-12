@@ -22,6 +22,7 @@ import {
 } from '../../api/trades'
 import type { OfferGroup, WantGroup, WantGroupItemPayload, GamePrice } from '../../api/trades'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { GameThumb } from '../../components/GameThumb'
 
 // ============================================================
 // Model: a "want target" is one row in the matrix.
@@ -41,6 +42,8 @@ interface Target {
   /** Canonical game this target belongs to — LISTING targets group under it. */
   gameId: number
   gameName: string
+  /** Thumbnail of the canonical game (for the Visual view's receive cluster). */
+  thumbnail?: string | null
 }
 
 // A canonical-game row in the want views: one game, its optional "any copy"
@@ -48,6 +51,7 @@ interface Target {
 interface GameGroup {
   gameId: number
   gameName: string
+  thumbnail?: string | null    // canonical game thumbnail (Visual view)
   anyTarget?: Target           // BOARD_GAME (any copy)
   copyTargets: Target[]        // specific LISTING selections
 }
@@ -57,7 +61,7 @@ function groupTargetsByGame(targets: Target[]): GameGroup[] {
   for (const t of targets) {
     let g = byGame.get(t.gameId)
     if (!g) {
-      g = { gameId: t.gameId, gameName: t.gameName, copyTargets: [] }
+      g = { gameId: t.gameId, gameName: t.gameName, thumbnail: t.thumbnail, copyTargets: [] }
       byGame.set(t.gameId, g)
     }
     if (t.type === 'BOARD_GAME') g.anyTarget = t
@@ -166,6 +170,7 @@ function buildModel(
                 label: item.board_game_name ?? `Game ${item.board_game}`,
                 gameId: item.board_game,
                 gameName: item.board_game_name ?? `Game ${item.board_game}`,
+                thumbnail: item.board_game_thumbnail,
               })
             }
           } else if (item.target_type === 'LISTING' && item.event_listing != null) {
@@ -181,6 +186,7 @@ function buildModel(
                 // lets specific-copy wants fold under their game row.
                 gameId: item.board_game_id ?? -item.event_listing,
                 gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
+                thumbnail: item.board_game_thumbnail,
               })
             }
           }
@@ -482,7 +488,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
         const key = listingTargetKey(c.id)
         editor.addTarget({
           key, type: 'LISTING', listingId: c.id, label: c.listing_code,
-          gameId: c.board_game_id, gameName: c.board_game_name,
+          gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
         })
         myListings.forEach((l) => editor.toggle(l.id, key, true))
       })
@@ -758,7 +764,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
           const k = listingTargetKey(o.id)
           editor!.addTarget({
             key: k, type: 'LISTING', listingId: o.id, label: o.listing_code,
-            gameId: o.board_game_id, gameName: o.board_game_name,
+            gameId: o.board_game_id, gameName: o.board_game_name, thumbnail: o.board_game_thumbnail,
           })
           editor!.toggle(ml.id, k, true)
         })
@@ -768,7 +774,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
     const key = listingTargetKey(l.id)
     editor.addTarget({
       key, type: 'LISTING', listingId: l.id, label: l.listing_code,
-      gameId: l.board_game_id, gameName: l.board_game_name,
+      gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
     })
     acting.forEach((ml) => editor!.toggle(ml.id, key, next))
   }
@@ -1102,6 +1108,34 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
                 wants {myWants.length}
               </span>
+            </div>
+
+            {/* Give → receive: offered copy on the left, wanted games on the right. */}
+            <div className="mb-3 flex items-center gap-2 overflow-x-auto">
+              <div className="flex shrink-0 items-center gap-1">
+                <GameThumb
+                  src={listing.board_game_thumbnail}
+                  alt={listing.board_game_name ?? ''}
+                  className="h-12 w-12"
+                />
+              </div>
+              <svg className="h-5 w-5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              {myWants.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  {myWants.map((g) => (
+                    <GameThumb
+                      key={g.gameId}
+                      src={g.thumbnail}
+                      alt={g.gameName ?? ''}
+                      className="h-12 w-12"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-gray-300">nothing yet</span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
