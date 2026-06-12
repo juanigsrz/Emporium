@@ -551,3 +551,7 @@ class MoneySettlementUploadTests(MatchingTestBase):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(MatchRun.objects.filter(status=MatchRun.Status.DONE).count(), 0)
+
+    def test_serializer_exposes_item_value(self):
+        from matching.serializers import TradeAssignmentSerializer
+        self.assertIn("item_value", TradeAssignmentSerializer().fields)
