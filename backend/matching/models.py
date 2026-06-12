@@ -87,6 +87,11 @@ class TradeAssignment(models.Model):
     # Cash purchase amount in dollars (null = barter move). Receiver pays giver.
     cash_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    # Money that moves with this item = its ask. Set for BOTH swap legs and cash
+    # buys (cash buys reuse the parsed Cash Purchases amount). null = unpriced /
+    # barter-only. Frozen at solve time, like cash_amount.
+    item_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
