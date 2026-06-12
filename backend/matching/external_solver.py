@@ -494,6 +494,30 @@ def parse_gurobi_cash_summary(output: str):
     return nets
 
 
+_SETTLEMENT_LINE = re.compile(r"^(\S+)\s+pays\s+(\S+)\s+\$(\d+)$")
+
+
+def parse_gurobi_settlement(output: str):
+    """gurobi `Settlement plan:` section -> [(from_user, to_user, amount_cents), ...].
+
+    Line form: `  <from> pays <to> $<cents>`. The minimal-transfer settlement; the
+    section runs to end of output. Amounts are integer cents.
+    """
+    transfers = []
+    in_plan = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if line.startswith("Settlement plan"):
+            in_plan = True
+            continue
+        if not in_plan or not line:
+            continue
+        m = _SETTLEMENT_LINE.match(line)
+        if m:
+            transfers.append((m.group(1), m.group(2), int(m.group(3))))
+    return transfers
+
+
 def _assign_components(resolved):
     """Weakly-connected components over users joined by each move (XTOY)."""
     parent = {}
