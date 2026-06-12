@@ -24,6 +24,11 @@ async function fetchShipments(slug: string): Promise<Shipment[]> {
   return data
 }
 
+async function fetchShippingOverview(slug: string): Promise<Shipment[]> {
+  const { data } = await apiClient.get<Shipment[]>(`/events/${slug}/shipping/overview/`)
+  return data
+}
+
 async function updateShipment(
   slug: string,
   id: number,
@@ -38,6 +43,15 @@ export function useShipments(slug: string | undefined) {
     queryKey: SHIPPING_KEYS.list(slug ?? ''),
     queryFn: () => fetchShipments(slug!),
     enabled: !!slug,
+    staleTime: 30_000,
+  })
+}
+
+export function useShippingOverview(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['shipping', 'overview', slug ?? ''],
+    queryFn: () => fetchShippingOverview(slug!),
+    enabled: !!slug && enabled,
     staleTime: 30_000,
   })
 }
