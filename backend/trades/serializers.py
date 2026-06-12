@@ -112,6 +112,10 @@ class OfferGroupItemSerializer(serializers.ModelSerializer):
     board_game_id   = serializers.IntegerField(
         source="event_listing.copy.board_game.bgg_id", read_only=True
     )
+    board_game_thumbnail = serializers.SerializerMethodField()
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
 
     class Meta:
         model = OfferGroupItem
@@ -121,6 +125,7 @@ class OfferGroupItemSerializer(serializers.ModelSerializer):
             "listing_code",
             "board_game_name",
             "board_game_id",
+            "board_game_thumbnail",
         ]
         read_only_fields = fields
 

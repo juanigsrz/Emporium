@@ -10,6 +10,7 @@ export interface OfferGroupItem {
   event_listing: number
   listing_code: string
   board_game_name: string
+  board_game_thumbnail: string
   board_game_id: number
 }
 
