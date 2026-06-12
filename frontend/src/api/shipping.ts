@@ -7,6 +7,7 @@ export interface Shipment {
   shipping_info: string
   listing_code: string
   board_game_name: string
+  board_game_thumbnail: string
   giver_username: string
   receiver_username: string
   my_role: 'sender' | 'receiver' | null
