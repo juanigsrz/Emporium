@@ -75,6 +75,7 @@ export interface TradeAssignment {
   event_listing: number
   listing_code: string
   board_game_name: string
+  board_game_thumbnail: string
   giver: number
   giver_username: string
   receiver: number

@@ -15,6 +15,7 @@ export interface Copy {
   owner_username: string
   board_game: number
   board_game_name: string
+  board_game_thumbnail: string
   version: number | null
   version_name: string
   condition: CopyCondition

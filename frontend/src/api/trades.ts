@@ -37,6 +37,7 @@ export interface WantGroupItem {
   target_type: 'BOARD_GAME' | 'LISTING'
   board_game: number | null
   board_game_name: string | null
+  board_game_thumbnail: string
   /** Canonical bgg id for BOTH types — use to group LISTING items under a game. */
   board_game_id: number | null
   event_listing: number | null
