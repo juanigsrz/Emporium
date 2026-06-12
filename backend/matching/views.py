@@ -311,6 +311,31 @@ class ShippingView(APIView):
         return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
 
 
+class ShippingOverviewView(APIView):
+    """
+    GET /api/events/{slug}/shipping/overview/
+
+    Organizer-only: ALL shipments for the latest DONE run (lazily created).
+    Read-only browse of overall shipping status.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the shipping overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response([])
+        assignments = (
+            TradeAssignment.objects.filter(match_run=run)
+            .select_related("event_listing__copy__board_game", "giver", "receiver")
+        )
+        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
+        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+
+
 class ShipmentDetailView(APIView):
     """
     PATCH /api/events/{slug}/shipping/{pk}/
