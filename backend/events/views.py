@@ -127,6 +127,16 @@ class TradeEventViewSet(
             raise ValidationError({"username": "This field is required."})
         return get_object_or_404(get_user_model(), username=username)
 
+    @staticmethod
+    def _positive_int(value, field):
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            raise ValidationError({field: "Must be an integer."})
+        if n < 1:
+            raise ValidationError({field: "Must be at least 1."})
+        return n
+
     def update(self, request, *args, **kwargs):
         kwargs["partial"] = True  # PATCH only; PUT not supported
         event = self.get_object()
@@ -469,6 +479,41 @@ class TradeEventViewSet(
                 for w in wishes
             ],
         })
+
+    @action(detail=True, methods=["patch"], url_path=r"admin/wishes/(?P<wish_id>[^/.]+)")
+    def admin_wish(self, request, slug=None, wish_id=None):
+        event = self.get_object()
+        self._check_admin(event)
+        wish = get_object_or_404(TradeWish, pk=wish_id, event=event)
+        wish.active = bool(request.data.get("active", wish.active))
+        wish.save(update_fields=["active", "updated"])
+        return Response({"id": wish.id, "active": wish.active})
+
+    @action(detail=True, methods=["patch"], url_path=r"admin/offer-groups/(?P<group_id>[^/.]+)")
+    def admin_offer_group(self, request, slug=None, group_id=None):
+        event = self.get_object()
+        self._check_admin(event)
+        group = get_object_or_404(OfferGroup, pk=group_id, event=event)
+        group.max_give = self._positive_int(request.data.get("max_give"), "max_give")
+        group.save(update_fields=["max_give", "updated"])
+        return Response({"id": group.id, "max_give": group.max_give})
+
+    @action(detail=True, methods=["patch"], url_path=r"admin/want-groups/(?P<group_id>[^/.]+)")
+    def admin_want_group(self, request, slug=None, group_id=None):
+        event = self.get_object()
+        self._check_admin(event)
+        group = get_object_or_404(WantGroup, pk=group_id, event=event)
+        group.min_receive = self._positive_int(request.data.get("min_receive"), "min_receive")
+        group.save(update_fields=["min_receive", "updated"])
+        return Response({"id": group.id, "min_receive": group.min_receive})
+
+    @action(detail=True, methods=["delete"], url_path=r"admin/listings/(?P<listing_id>[^/.]+)")
+    def admin_listing(self, request, slug=None, listing_id=None):
+        event = self.get_object()
+        self._check_admin(event)
+        listing = get_object_or_404(EventListing, pk=listing_id, event=event)
+        listing.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
