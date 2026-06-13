@@ -24,6 +24,7 @@ Permissions:
     - Listings delete: copy.owner == request.user
 """
 
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -122,7 +123,6 @@ class TradeEventViewSet(
             raise PermissionDenied("Event is archived; admin actions are disabled.")
 
     def _resolve_target_user(self, username):
-        from django.contrib.auth import get_user_model
         if not username:
             raise ValidationError({"username": "This field is required."})
         return get_object_or_404(get_user_model(), username=username)
