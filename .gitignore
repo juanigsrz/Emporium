@@ -234,6 +234,7 @@ yarn-error.log*
 qa/
 
 # BGG enrichment scraper outputs (generated; derived from boardgames_ranks.csv)
+boardgames_ranks.csv
 boardgames_enriched.csv
 boardgame_versions.csv
 *.progress.json
