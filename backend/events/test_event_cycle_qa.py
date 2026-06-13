@@ -9,7 +9,7 @@ from DRAFT → ARCHIVED and exercises the features added on top:
     (resolve_ask), event cap + per-user budget;
   - duplicate-protection flag on want groups;
   - canonical board_game_id on want items (FE grouping);
-  - solver wants-export money directives (user/item/bid) + inline DUP-PROTECT;
+  - solver wants-export money directives (user/item/bid) + dupcap directives;
   - matching run (offline FakeMatcher) → assignments → result/mine;
   - lifecycle transitions + organizer-only / invalid-transition guards.
 
@@ -208,12 +208,18 @@ class EventCycleQA(APITestCase):
         # dup protection no longer emits a tag; t1's single terra copy passes
         # through with no dummy node (t2's brass wish with 2 copies will get one).
         self.assertNotIn("DUP-PROTECT", text)
+        self.assertNotIn("__DUMMY", text)
+        # terra has a single active copy (c2_terra) -> not capped.
         self.assertFalse(
-            any(
-                tok.startswith("__DUMMY_") and tok.endswith(f"_{self.terra.pk}")
-                for l in text.splitlines() for tok in l.split()
-            ),
-            "expected no dummy node for terra (single active copy)"
+            any(l.startswith("dupcap") and self.c2_terra.listing_code in l
+                for l in text.splitlines()),
+            "single-copy terra should not be capped",
+        )
+        # brass has two copies (t1, t3) and t2 wants it -> a dupcap for t2.
+        self.assertTrue(
+            any(l.startswith(f"dupcap {self.t2.username} ")
+                for l in text.splitlines()),
+            "two-copy brass want should emit a dupcap",
         )
         self.assertIn(f"bid {self.t1.username} {self.c2_terra.listing_code} 2000", text)
         self.assertIn(f"item {self.c2_terra.listing_code} owner {self.t2.username} ask 1000", text)
