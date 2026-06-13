@@ -207,6 +207,7 @@ class TradeEventViewSet(
     def join(self, request, slug=None):
         event = self.get_object()
         self._enforce_location_gate(event, request.user)
+        self._enforce_single_event(event, request.user)
         participation, created = EventParticipation.objects.get_or_create(
             event=event,
             user=request.user,
@@ -228,6 +229,21 @@ class TradeEventViewSet(
             ser.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _enforce_single_event(event, user):
+        clash = (
+            EventParticipation.objects
+            .filter(user=user)
+            .exclude(event=event)
+            .exclude(event__status=TradeEvent.Status.ARCHIVED)
+            .select_related("event")
+            .first()
+        )
+        if clash:
+            raise ValidationError({"detail":
+                f"You're already participating in \"{clash.event.name}\". "
+                f"Leave it before joining another event."})
 
     @staticmethod
     def _enforce_location_gate(event, user):
