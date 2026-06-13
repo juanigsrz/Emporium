@@ -286,15 +286,15 @@ class TradeEventViewSet(
     @action(detail=True, methods=["delete"], url_path="leave")
     def leave(self, request, slug=None):
         event = self.get_object()
-        if event.inputs_locked:
-            raise ValidationError(
-                {"detail": "You can't leave once matching has started."}
-            )
         if not EventParticipation.objects.filter(
             event=event, user=request.user
         ).exists():
             raise ValidationError(
                 {"detail": "You are not a participant in this event."}
+            )
+        if event.inputs_locked:
+            raise ValidationError(
+                {"detail": "You can't leave once matching has started."}
             )
         summary = kick_participant(event, request.user)
         return Response(summary, status=status.HTTP_200_OK)
