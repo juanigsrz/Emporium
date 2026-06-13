@@ -63,10 +63,6 @@ class TradeEvent(models.Model):
         SHIPPING         = "SHIPPING",         "Shipping"
         ARCHIVED         = "ARCHIVED",         "Archived"
 
-    class MatchingMode(models.TextChoices):
-        ONETOONE = "ONETOONE", "Old-school 1-to-1 (online solver)"
-        XTOY     = "XTOY",     "X-to-Y (local solver)"
-
     name        = models.CharField(max_length=200)
     slug        = models.SlugField(unique=True, db_index=True, max_length=240)
     description = models.TextField(blank=True)
@@ -80,12 +76,6 @@ class TradeEvent(models.Model):
         choices=Status.choices,
         default=Status.DRAFT,
     )
-    matching_mode = models.CharField(
-        max_length=10,
-        choices=MatchingMode.choices,
-        default=MatchingMode.ONETOONE,
-    )
-
     # Money trading: organizer enables it and caps per-user spend (null = no cap).
     money_enabled       = models.BooleanField(default=False)
     max_money_per_user  = models.DecimalField(

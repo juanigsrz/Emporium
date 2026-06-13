@@ -35,7 +35,6 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "organizer",
             "organizer_username",
             "status",
-            "matching_mode",
             "money_enabled",
             "max_money_per_user",
             "require_location",
@@ -71,29 +70,6 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "created",
             "updated",
         ]
-
-    # Statuses at/after which the matching mode is frozen.
-    _MODE_FROZEN_STATUSES = {
-        TradeEvent.Status.MATCHING,
-        TradeEvent.Status.MATCH_REVIEW,
-        TradeEvent.Status.FINALIZATION,
-        TradeEvent.Status.SHIPPING,
-        TradeEvent.Status.ARCHIVED,
-    }
-
-    def validate_matching_mode(self, value):
-        # Freeze the mode once matching has begun — switching solvers mid-run
-        # would invalidate any export/result already produced.
-        if (
-            self.instance is not None
-            and value != self.instance.matching_mode
-            and self.instance.status in self._MODE_FROZEN_STATUSES
-        ):
-            raise serializers.ValidationError(
-                f"matching_mode is frozen once the event reaches "
-                f"{self.instance.status}."
-            )
-        return value
 
     def validate_max_money_per_user(self, value):
         if value is not None and value < 0:
