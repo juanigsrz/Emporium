@@ -24,7 +24,8 @@ class ShippingOverviewTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)  # organizer
         r = self.client.get(self._url())
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(len(r.data), 2)  # both, not just user_a's
+        self.assertEqual(r.data["count"], 2)
+        self.assertEqual(len(r.data["results"]), 2)
 
     def test_non_organizer_forbidden(self):
         self._setup_run()
@@ -43,7 +44,18 @@ class ShippingOverviewTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         r = self.client.get(self._url())
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.data, [])
+        self.assertEqual(r.data["count"], 0)
+        self.assertEqual(r.data["results"], [])
+
+    def test_status_filter(self):
+        run = self._setup_run()
+        self.client.force_authenticate(user=self.user_a)
+        self.client.get(self._url())  # create shipments
+        Shipment.objects.filter(assignment__match_run=run).update(status="SENT")
+        r = self.client.get(self._url() + "?status=SENT")
+        self.assertEqual(r.data["count"], 2)
+        r2 = self.client.get(self._url() + "?status=PENDING")
+        self.assertEqual(r2.data["count"], 0)
 
 
 from django.db import connection
