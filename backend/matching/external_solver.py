@@ -227,50 +227,20 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _dup_protect_take(take, username, by_code):
-    """Collapse same-game copies behind dummy nodes for duplicate protection.
-
-    Groups `take` codes by board game. A game with >=2 acceptable copies is
-    replaced in the take set by a single `__DUMMY_<username>_<boardgame>` token,
-    and its real copies move onto a dummy leg (dummy -> copies). A single-copy
-    game passes through unchanged.
-
-    The dummy is keyed per (user, board game), NOT per want group, so every
-    dup-protected wish a user has for that game shares one node — the user can
-    win at most one copy of the game across all of them. Returns
-    (take_tokens, dummy_legs), where take_tokens is sorted and dummy_legs maps
-    dummy_code -> sorted copy codes.
-    """
-    by_bg = defaultdict(list)
-    for code in take:
-        by_bg[by_code[code].copy.board_game_id].append(code)
-    take_tokens = []
-    dummy_legs = {}
-    for bg_id, codes in by_bg.items():
-        if len(codes) >= 2:
-            dummy = f"__DUMMY_{username}_{bg_id}"
-            take_tokens.append(dummy)
-            dummy_legs[dummy] = sorted(codes)
-        else:
-            take_tokens.append(codes[0])
-    return sorted(take_tokens), dummy_legs
-
-
 def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
     """gurobi: one `username : (NforM) give -> take` line per active wish.
 
-    A duplicate-protected want group routes each game that has >=2 acceptable
-    copies through a single `__DUMMY_<wantgroup>_<boardgame>` node — the wish's
-    take side points at the dummy, and a `(1for1) dummy -> copies` leg points at
-    the real copies. Because a dummy is one node, at most one copy of that game
-    can flow through any single trade chain. Dummy legs are emitted once (after
-    all wish lines, sorted by code), so a want group shared across wishes
-    collapses to one leg.
+    A duplicate-protected wish lists its real take copies and contributes a
+    `dupcap <username> <copies>` directive per (user, canonical game) that has
+    >=2 acceptable copies. The solver caps the user's total receipts (swap +
+    cash) of those copies at one. dupcap lines are emitted after the wish lines,
+    sorted by (username, board_game_id), and union a user's copies for a game
+    across all of their dup-protected wishes.
     """
     blocked_cache = {}
     coords = _load_coords()
     lines = []
-    dummy_legs = {}  # dummy_code -> (username, {copy codes})
+    dup_groups = {}  # (username, board_game_id) -> set of copy codes
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -288,16 +258,13 @@ def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
         n = w.offer_group.max_give
         m = w.want_group.min_receive
         if w.want_group.duplicate_protection:
-            take, legs = _dup_protect_take(take, w.user.username, by_code)
-            for dummy, codes in legs.items():
-                # One node per (user, game): union the copies each of the user's
-                # dup-protected wishes contributes so they share a single slot.
-                _, existing = dummy_legs.get(dummy, (w.user.username, set()))
-                dummy_legs[dummy] = (w.user.username, existing.union(codes))
+            for code in take:
+                key = (w.user.username, by_code[code].copy.board_game_id)
+                dup_groups.setdefault(key, set()).add(code)
         lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
-    for dummy in sorted(dummy_legs):
-        username, codes = dummy_legs[dummy]
-        lines.append(f"{username} : (1for1) {dummy} -> {' '.join(sorted(codes))}")
+    for (username, _bg_id), codes in sorted(dup_groups.items()):
+        if len(codes) >= 2:
+            lines.append(f"dupcap {username} {' '.join(sorted(codes))}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 
