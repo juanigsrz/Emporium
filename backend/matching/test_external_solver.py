@@ -262,10 +262,10 @@ class UploadXToYTests(MatchingTestBase):
 
 
 # ---------------------------------------------------------------------------
-# Duplicate-protection placeholder header (comments, ignored by parse_gurobi)
+# Duplicate-protection inline flag (after username on the wish line)
 # ---------------------------------------------------------------------------
 
-class PlaceholderHeaderTests(MatchingTestBase):
+class DupProtectExportTests(MatchingTestBase):
 
     @classmethod
     def setUpTestData(cls):
@@ -274,13 +274,11 @@ class PlaceholderHeaderTests(MatchingTestBase):
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
 
-    def test_header_has_dup_protect_line(self):
+    def test_wish_line_has_inline_dup_protect(self):
         text = external_solver.build_wants(self.event)
-        self.assertIn(
-            f"#! DUP-PROTECT ({self.user_a.username}) wish={self.wish_a.id}", text
-        )
+        self.assertIn(f"{self.user_a.username} DUP-PROTECT : (", text)
 
-    def test_header_comments_do_not_break_gurobi_parser(self):
+    def test_dup_protect_does_not_break_gurobi_parser(self):
         text = external_solver.build_wants(self.event)
         self.assertEqual(external_solver.parse_gurobi(text), [])
 
@@ -288,7 +286,7 @@ class PlaceholderHeaderTests(MatchingTestBase):
         self.wish_a.want_group.duplicate_protection = False
         self.wish_a.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
-        self.assertNotIn("#! DUP-PROTECT", text)
+        self.assertNotIn("DUP-PROTECT", text)
 
 
 # ---------------------------------------------------------------------------
