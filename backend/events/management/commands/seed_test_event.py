@@ -2,11 +2,13 @@
 seed_test_event — populate a testing event with many users, copies, and submitted listings.
 
 Creates:
-    - 1 organizer + N trader users (fixed usernames, idempotent via get_or_create)
+    - 1 organizer + N trader users (fixed usernames, idempotent)
     - a pool of distinct BoardGames (top-ranked) the copies spread over (so the
       same game is owned by several users → trades are actually possible)
     - K copies per trader (random game/condition/language)
     - an EventParticipation + active EventListing for every copy (= "submitted")
+    - one OfferGroup + WantGroup + TradeWish trio per listing, plus optional
+      money bids/asks, so the event has real wishes to match
 
 Usage:
     python manage.py seed_test_event
@@ -16,11 +18,33 @@ Usage:
 Re-run with --reset to wipe the event (cascades listings/participations) and the
 seeded traders' copies, then rebuild. Without --reset it refuses to clobber an
 existing event.
+
+Performance notes
+-----------------
+Every write goes through bulk_create / bulk_update instead of per-row .create() /
+.save(). For a big event (e.g. --users 300 --wants-max 299) the old version
+issued one INSERT per WantGroupItem — hundreds of thousands of round-trips; this
+version issues a few hundred statements total. The shared test password is hashed
+once and reused for every user instead of running the KDF per user.
+
+Assumptions:
+    * PostgreSQL (or any backend whose bulk_create returns primary keys, incl.
+      modern SQLite/MariaDB). The OfferGroup/WantGroup rows are bulk-created and
+      their returned PKs are used to attach items/wishes. On a backend that does
+      NOT return PKs you'd re-fetch the groups before building the children.
+    * The seeded models are plain data rows. bulk_create bypasses Model.save()
+      and post_save signals; if e.g. Copy.save() generates a field (a listing_code,
+      a denormalized counter, a search-index hook), revert that one block to a
+      per-row Copy.objects.create() loop.
+
+The RNG draw order is identical to the previous version, so a given --seed still
+produces the same data set.
 """
 
 import random
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -37,6 +61,7 @@ PASSWORD = "testpass123"
 ORGANIZER_USERNAME = "mt_organizer"
 TRADER_PREFIX = "trader"
 LANGUAGES = ["English", "Spanish", "German", "French"]
+BATCH = 2000  # rows per bulk_create / bulk_update round-trip
 
 
 class Command(BaseCommand):
@@ -90,34 +115,39 @@ class Command(BaseCommand):
                 "Need at least 2 ranked games in the catalog. Run import_games first."
             )
 
-        # --- organizer ---
-        organizer, _ = User.objects.get_or_create(
-            username=ORGANIZER_USERNAME,
-            defaults={"email": f"{ORGANIZER_USERNAME}@example.test"},
-        )
-        organizer.set_password(PASSWORD)
-        organizer.save(update_fields=["password"])
+        # --- users (organizer + traders) ------------------------------------
+        # All test users share one password, so hash it a single time and reuse
+        # the hash instead of running the KDF once per user.
+        hashed = make_password(PASSWORD)
+        usernames = [ORGANIZER_USERNAME] + [
+            f"{TRADER_PREFIX}{i:02d}" for i in range(1, n_users + 1)
+        ]
+        found = {u.username: u for u in User.objects.filter(username__in=usernames)}
 
-        # --- trader users ---
-        traders = []
-        for i in range(1, n_users + 1):
-            uname = f"{TRADER_PREFIX}{i:02d}"
-            u, _ = User.objects.get_or_create(
-                username=uname, defaults={"email": f"{uname}@example.test"}
+        if found:
+            # Keep pre-existing users' password in sync (idempotent re-runs).
+            User.objects.filter(pk__in=[u.pk for u in found.values()]).update(
+                password=hashed
             )
-            u.set_password(PASSWORD)
-            u.save(update_fields=["password"])
-            traders.append(u)
+            for u in found.values():
+                u.password = hashed
+        for uname in usernames:
+            if uname not in found:
+                found[uname] = User.objects.create(
+                    username=uname, email=f"{uname}@example.test", password=hashed
+                )
 
-        # --- event ---
+        organizer = found[ORGANIZER_USERNAME]
+        traders = [found[f"{TRADER_PREFIX}{i:02d}"] for i in range(1, n_users + 1)]
+
+        # --- event ----------------------------------------------------------
         existing = TradeEvent.objects.filter(slug=slug).first()
         if existing:
             if not opts["reset"]:
                 raise CommandError(
                     f"Event '{slug}' already exists. Re-run with --reset to rebuild it."
                 )
-            # Cascade deletes listings + participations; also drop seeded traders' copies.
-            existing.delete()
+            existing.delete()  # cascades listings + participations
             Copy.objects.filter(owner__in=traders).delete()
 
         money_cap = opts["money_cap"]
@@ -132,42 +162,47 @@ class Command(BaseCommand):
             max_money_per_user=(round(money_cap, 2) if money_enabled else None),
         )
 
-        # --- copies + participations + submitted listings ---
-        total_copies = 0
-        listings = []
+        # --- participations + copies + submitted listings -------------------
+        participations = []
+        copies = []
+        copy_counter = 1 # Use a counter to ensure uniqueness
+
         for u in traders:
-            EventParticipation.objects.get_or_create(
-                event=event,
-                user=u,
-                defaults={
-                    "region": rng.choice(["NA", "EU", "SA", "APAC"]),
-                    "max_spend": (
-                        round(rng.uniform(money_cap * 0.4, money_cap), 2)
-                        if money_enabled else 0
-                    ),
-                },
+            region = rng.choice(["NA", "EU", "SA", "APAC"])
+            max_spend = (
+                round(rng.uniform(money_cap * 0.4, money_cap), 2)
+                if money_enabled else 0
             )
-            k = rng.randint(lo, hi)
-            for _ in range(k):
-                game = rng.choice(pool)
-                copy = Copy.objects.create(
-                    owner=u,
-                    board_game=game,
-                    condition=rng.choice([c.value for c in Copy.Condition]),
-                    language=rng.choice(LANGUAGES),
-                    status=Copy.Status.ACTIVE,
+            participations.append(
+                EventParticipation(
+                    event=event, user=u, region=region, max_spend=max_spend
                 )
-                listings.append(EventListing(event=event, copy=copy, active=True))
-                total_copies += 1
+            )
+            for _ in range(rng.randint(lo, hi)):
+                copies.append(
+                    Copy(
+                        owner=u,
+                        board_game=rng.choice(pool),
+                        condition=rng.choice([c.value for c in Copy.Condition]),
+                        language=rng.choice(LANGUAGES),
+                        status=Copy.Status.ACTIVE,
+                        listing_code=f"TEST-{copy_counter:06d}" # <--- Manually inject a unique code
+                    )
+                )
+                copy_counter += 1
 
-        EventListing.objects.bulk_create(listings)
+        EventParticipation.objects.bulk_create(participations, batch_size=BATCH)
+        Copy.objects.bulk_create(copies, batch_size=BATCH)
+        EventListing.objects.bulk_create(
+            [EventListing(event=event, copy=c, active=True) for c in copies],
+            batch_size=BATCH,
+        )
+        total_copies = len(copies)
 
-        # --- want lists (one offer+want+wish trio per listing, like the normal
-        #     "My Wants" page builds) so the event has real wishes to match ---
+        # Re-read listings with their copy so listing_code etc. reflect the DB,
+        # and group them for want-list building.
         saved = list(
-            EventListing.objects
-            .filter(event=event)
-            .select_related("copy")
+            EventListing.objects.filter(event=event).select_related("copy")
         )
         listings_by_owner = {}
         games_by_owner = {}
@@ -176,53 +211,105 @@ class Command(BaseCommand):
             listings_by_owner.setdefault(el.copy.owner_id, []).append(el)
             games_by_owner.setdefault(el.copy.owner_id, set()).add(el.copy.board_game_id)
             all_games.add(el.copy.board_game_id)
+        all_games_sorted = sorted(all_games)
 
+        # --- want lists: one offer+want+wish trio per listing ---------------
         wmin, wmax = opts["wants_min"], opts["wants_max"]
-        n_wishes = n_money_wants = n_money_offers = 0
+
+        offer_groups = []          # parallel to want_groups / plan
+        want_groups = []
+        plan = []                  # (event_listing, offer_group, want_group, wanted_game_ids)
+        sell_updates = []          # listings that got a per-copy ask
+        bid_candidates = []        # (user_id, board_game_id, amount) in RNG order
+        n_money_offers = 0
+
         for u in traders:
-            # Games owned by OTHERS (so a match is actually possible).
-            candidates = sorted(all_games - games_by_owner.get(u.id, set()))
+            # Games owned by OTHERS only (so a match is actually possible).
+            owned = games_by_owner.get(u.id, set())
+            candidates = [g for g in all_games_sorted if g not in owned]
             if not candidates:
                 continue
             for el in listings_by_owner.get(u.id, []):
                 k = min(rng.randint(wmin, wmax), len(candidates))
                 wanted_games = rng.sample(candidates, k)
 
-                og = OfferGroup.objects.create(
+                og = OfferGroup(
                     event=event, user=u, name=el.copy.listing_code, max_give=1
                 )
                 # Sell side (Q): ~40% of listings get a per-copy ask override.
                 if money_enabled and rng.random() < 0.4:
                     el.sell_price = round(rng.uniform(5, min(money_cap, 25)), 2)
-                    el.save(update_fields=["sell_price"])
+                    sell_updates.append(el)
                     n_money_offers += 1
-                OfferGroupItem.objects.create(offer_group=og, event_listing=el)
 
-                wg = WantGroup.objects.create(
+                wg = WantGroup(
                     event=event, user=u, name=f"Wants for {el.copy.listing_code}",
                     min_receive=1, duplicate_protection=True,
                 )
+                # Buy side (P): ~30% of wants get a per-target bid override.
                 for bgg_id in wanted_games:
-                    WantGroupItem.objects.create(
+                    if money_enabled and rng.random() < 0.3:
+                        amount = round(rng.uniform(5, min(money_cap, 30)), 2)
+                        bid_candidates.append((u.id, bgg_id, amount))
+
+                offer_groups.append(og)
+                want_groups.append(wg)
+                plan.append((el, og, wg, wanted_games))
+
+        # Insert the groups first so their PKs are available for the children.
+        OfferGroup.objects.bulk_create(offer_groups, batch_size=BATCH)
+        WantGroup.objects.bulk_create(want_groups, batch_size=BATCH)
+
+        offer_items = []
+        want_items = []
+        wishes = []
+        for el, og, wg, wanted_games in plan:
+            offer_items.append(OfferGroupItem(offer_group=og, event_listing=el))
+            for bgg_id in wanted_games:
+                want_items.append(
+                    WantGroupItem(
                         want_group=wg,
                         target_type=WantGroupItem.TargetType.BOARD_GAME,
                         board_game_id=bgg_id,
                     )
-                    # Buy side (P): ~30% of wants get a per-target bid override.
-                    if money_enabled and rng.random() < 0.3:
-                        _, created = WantBid.objects.get_or_create(
-                            user=u, event=event, board_game_id=bgg_id,
-                            defaults={"target_type": WantBid.TargetType.BOARD_GAME, "amount": round(rng.uniform(5, min(money_cap, 30)), 2)},
-                        )
-                        if created:
-                            n_money_wants += 1
-                TradeWish.objects.create(
-                    event=event, user=u, offer_group=og, want_group=wg, active=True
                 )
-                n_wishes += 1
+            wishes.append(
+                TradeWish(
+                    event=event, user=og.user,
+                    offer_group=og, want_group=wg, active=True,
+                )
+            )
 
-        # --- report ---
-        distinct_games = len({el.copy.board_game_id for el in listings})
+        OfferGroupItem.objects.bulk_create(offer_items, batch_size=BATCH)
+        WantGroupItem.objects.bulk_create(want_items, batch_size=BATCH)
+        TradeWish.objects.bulk_create(wishes, batch_size=BATCH)
+        n_wishes = len(wishes)
+
+        if sell_updates:
+            EventListing.objects.bulk_update(
+                sell_updates, ["sell_price"], batch_size=BATCH
+            )
+
+        # WantBid is keyed per (user, event, board_game): keep the first draw for
+        # each pair (matching the old get_or_create) and drop later duplicates.
+        seen = set()
+        want_bids = []
+        for uid, bgg_id, amount in bid_candidates:
+            key = (uid, bgg_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            want_bids.append(
+                WantBid(
+                    user_id=uid, event=event, board_game_id=bgg_id,
+                    target_type=WantBid.TargetType.BOARD_GAME, amount=amount,
+                )
+            )
+        WantBid.objects.bulk_create(want_bids, batch_size=BATCH)
+        n_money_wants = len(want_bids)
+
+        # --- report ---------------------------------------------------------
+        distinct_games = len({c.board_game_id for c in copies})
         self.stdout.write(self.style.SUCCESS(f"Seeded event '{event.slug}' ({event.status})"))
         self.stdout.write(
             f"  organizer:   {organizer.username}  (password: {PASSWORD})\n"
