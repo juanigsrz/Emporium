@@ -207,6 +207,7 @@ class TradeEventViewSet(
     def join(self, request, slug=None):
         event = self.get_object()
         self._enforce_location_gate(event, request.user)
+        self._enforce_single_event(event, request.user)
         participation, created = EventParticipation.objects.get_or_create(
             event=event,
             user=request.user,
@@ -228,6 +229,21 @@ class TradeEventViewSet(
             ser.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _enforce_single_event(event, user):
+        clash = (
+            EventParticipation.objects
+            .filter(user=user)
+            .exclude(event=event)
+            .exclude(event__status=TradeEvent.Status.ARCHIVED)
+            .select_related("event")
+            .first()
+        )
+        if clash:
+            raise ValidationError({"detail":
+                f"You're already participating in \"{clash.event.name}\". "
+                f"Leave it before joining another event."})
 
     @staticmethod
     def _enforce_location_gate(event, user):
@@ -270,12 +286,18 @@ class TradeEventViewSet(
     @action(detail=True, methods=["delete"], url_path="leave")
     def leave(self, request, slug=None):
         event = self.get_object()
-        deleted, _ = EventParticipation.objects.filter(
+        if not EventParticipation.objects.filter(
             event=event, user=request.user
-        ).delete()
-        if not deleted:
-            raise ValidationError({"detail": "You are not a participant in this event."})
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        ).exists():
+            raise ValidationError(
+                {"detail": "You are not a participant in this event."}
+            )
+        if event.inputs_locked:
+            raise ValidationError(
+                {"detail": "You can't leave once matching has started."}
+            )
+        summary = kick_participant(event, request.user)
+        return Response(summary, status=status.HTTP_200_OK)
 
     # ------------------------------------------------------------------
     # GET/POST /{slug}/listings/

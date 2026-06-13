@@ -323,11 +323,11 @@ class EventJoinLeaveTests(EventTestBase):
         resp2 = self.client.post(join_url(self.slug))
         self.assertEqual(resp2.status_code, status.HTTP_200_OK)
 
-    def test_leave_removes_participation_204(self):
+    def test_leave_removes_participation_200(self):
         self.client.force_authenticate(user=self.user2)
         self.client.post(join_url(self.slug))
         resp = self.client.delete(leave_url(self.slug))
-        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertFalse(
             EventParticipation.objects.filter(
                 event__slug=self.slug, user=self.user2
@@ -363,7 +363,7 @@ class EventJoinLeaveTests(EventTestBase):
         self.assertTrue(ev["is_participant"])
         # and can leave again
         resp = self.client.delete(leave_url(self.slug))
-        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

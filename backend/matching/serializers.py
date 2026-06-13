@@ -29,7 +29,7 @@ TradeAssignment (mine):
 
 from rest_framework import serializers
 
-from .models import MatchRun, TradeAssignment, Shipment
+from .models import MatchRun, TradeAssignment, Shipment, SettlementPayment
 
 
 # ---------------------------------------------------------------------------
@@ -151,4 +151,28 @@ class ShipmentSerializer(serializers.ModelSerializer):
         uid = self.context["request"].user.id
         if obj.assignment.giver_id == uid: return "sender"
         if obj.assignment.receiver_id == uid: return "receiver"
+        return None
+
+
+# ---------------------------------------------------------------------------
+# SettlementPayment
+# ---------------------------------------------------------------------------
+
+class SettlementPaymentSerializer(serializers.ModelSerializer):
+    from_username = serializers.CharField(source="from_user.username", read_only=True)
+    to_username   = serializers.CharField(source="to_user.username", read_only=True)
+    my_role       = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SettlementPayment
+        fields = ["id", "status", "amount", "note", "from_username",
+                  "to_username", "my_role", "paid_at", "confirmed_at"]
+        read_only_fields = fields
+
+    def get_my_role(self, obj):
+        uid = self.context["request"].user.id
+        if obj.from_user_id == uid:
+            return "payer"
+        if obj.to_user_id == uid:
+            return "payee"
         return None

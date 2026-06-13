@@ -19,7 +19,7 @@ No WebSocket in v1 — the FE should poll GET /matches/{id}/ every 2 s while
 status is PENDING or RUNNING; when DONE it fetches /result/ once.
 """
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -29,10 +29,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import MatchRun, TradeAssignment, Shipment
+from .models import MatchRun, TradeAssignment, Shipment, SettlementPayment
+from .services import ensure_shipments, ensure_payments
 from .serializers import (
     MatchRunDetailSerializer,
     MatchRunListSerializer,
+    SettlementPaymentSerializer,
     ShipmentSerializer,
     TradeAssignmentSerializer,
 )
@@ -290,13 +292,19 @@ class ShippingView(APIView):
         run = _latest_done_run(event)
         if run is None:
             return Response([])
-        assignments = (
-            TradeAssignment.objects.filter(match_run=run)
-            .filter(Q(giver=request.user) | Q(receiver=request.user))
-            .select_related("event_listing__copy__board_game", "giver", "receiver")
+        ensure_shipments(run)
+        shipments = (
+            Shipment.objects.filter(assignment__match_run=run)
+            .filter(Q(assignment__giver=request.user) | Q(assignment__receiver=request.user))
+            .select_related(
+                "assignment__event_listing__copy__board_game",
+                "assignment__giver", "assignment__receiver",
+            )
+            .order_by("id")
         )
-        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
-        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+        return Response(
+            ShipmentSerializer(shipments, many=True, context={"request": request}).data
+        )
 
 
 class ShippingOverviewView(APIView):
@@ -315,13 +323,72 @@ class ShippingOverviewView(APIView):
             raise PermissionDenied("Only the organizer can view the shipping overview.")
         run = _latest_done_run(event)
         if run is None:
-            return Response([])
-        assignments = (
-            TradeAssignment.objects.filter(match_run=run)
-            .select_related("event_listing__copy__board_game", "giver", "receiver")
+            return Response({"count": 0, "next": None, "previous": None, "results": []})
+        ensure_shipments(run)
+        qs = (
+            Shipment.objects.filter(assignment__match_run=run)
+            .select_related(
+                "assignment__event_listing__copy__board_game",
+                "assignment__giver", "assignment__receiver",
+            )
+            .order_by("id")
         )
-        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
-        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(
+            ShipmentSerializer(page, many=True, context={"request": request}).data
+        )
+
+
+class ShippingOverviewSummaryView(APIView):
+    """GET /api/events/{slug}/shipping/overview/summary/ — organizer-only.
+    Global status counts + per-trader rollup (independent of pagination)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the shipping overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"counts": {}, "traders": []})
+        ensure_shipments(run)
+        base = Shipment.objects.filter(assignment__match_run=run)
+        counts = {
+            row["status"]: row["c"]
+            for row in base.values("status").annotate(c=Count("id"))
+        }
+        traders: dict[str, dict] = {}
+
+        def slot(username):
+            return traders.setdefault(username, {
+                "username": username, "out_total": 0, "out_sent": 0,
+                "in_total": 0, "in_received": 0,
+            })
+
+        for row in base.values("assignment__giver__username").annotate(
+            out_total=Count("id"),
+            out_sent=Count("id", filter=Q(status__in=["SENT", "RECEIVED"])),
+        ):
+            s = slot(row["assignment__giver__username"])
+            s["out_total"] = row["out_total"]
+            s["out_sent"] = row["out_sent"]
+        for row in base.values("assignment__receiver__username").annotate(
+            in_total=Count("id"),
+            in_received=Count("id", filter=Q(status="RECEIVED")),
+        ):
+            s = slot(row["assignment__receiver__username"])
+            s["in_total"] = row["in_total"]
+            s["in_received"] = row["in_received"]
+
+        return Response({
+            "counts": counts,
+            "traders": sorted(traders.values(), key=lambda t: t["username"]),
+        })
 
 
 class ShipmentDetailView(APIView):
@@ -367,3 +434,149 @@ class ShipmentDetailView(APIView):
 
         shipment.save()
         return Response(ShipmentSerializer(shipment, context={"request": request}).data)
+
+
+# ---------------------------------------------------------------------------
+# Settlement payments
+# ---------------------------------------------------------------------------
+
+class PaymentsView(APIView):
+    """GET /api/events/{slug}/payments/ — current user's payments (payer or payee)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        run = _latest_done_run(event)
+        if run is None:
+            return Response([])
+        ensure_payments(run)
+        qs = (
+            SettlementPayment.objects.filter(match_run=run)
+            .filter(Q(from_user=request.user) | Q(to_user=request.user))
+            .select_related("from_user", "to_user")
+            .order_by("id")
+        )
+        return Response(
+            SettlementPaymentSerializer(qs, many=True, context={"request": request}).data
+        )
+
+
+class PaymentDetailView(APIView):
+    """PATCH /api/events/{slug}/payments/{pk}/ — payer marks PAID; payee CONFIRMS.
+    Only while event.status == SHIPPING."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, slug, pk):
+        event = _get_event(slug)
+        if event.status != "SHIPPING":
+            raise PermissionDenied("Payment updates are only allowed while the event is shipping.")
+        try:
+            payment = (
+                SettlementPayment.objects
+                .select_related("from_user", "to_user", "match_run")
+                .get(pk=pk, match_run__event=event)
+            )
+        except SettlementPayment.DoesNotExist:
+            raise NotFound("Payment not found.")
+
+        target = request.data.get("status")
+        if target == "PAID":
+            if request.user != payment.from_user:
+                raise PermissionDenied("Only the payer can mark a payment paid.")
+            payment.status = SettlementPayment.Status.PAID
+            payment.paid_at = timezone.now()
+            if "note" in request.data:
+                payment.note = request.data["note"]
+        elif target == "CONFIRMED":
+            if request.user != payment.to_user:
+                raise PermissionDenied("Only the payee can confirm a payment.")
+            if payment.status != SettlementPayment.Status.PAID:
+                raise ValidationError(
+                    {"status": "Payment must be marked paid before it can be confirmed."}
+                )
+            payment.status = SettlementPayment.Status.CONFIRMED
+            payment.confirmed_at = timezone.now()
+        else:
+            raise ValidationError({"status": "Must be 'PAID' (payer) or 'CONFIRMED' (payee)."})
+
+        payment.save()
+        return Response(
+            SettlementPaymentSerializer(payment, context={"request": request}).data
+        )
+
+
+class PaymentsOverviewView(APIView):
+    """GET /api/events/{slug}/payments/overview/ — organizer-only, paginated."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the payments overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"count": 0, "next": None, "previous": None, "results": []})
+        ensure_payments(run)
+        qs = (
+            SettlementPayment.objects.filter(match_run=run)
+            .select_related("from_user", "to_user")
+            .order_by("id")
+        )
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(
+            SettlementPaymentSerializer(page, many=True, context={"request": request}).data
+        )
+
+
+class PaymentsOverviewSummaryView(APIView):
+    """GET /api/events/{slug}/payments/overview/summary/ — organizer counts + rollup."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the payments overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"counts": {}, "users": []})
+        ensure_payments(run)
+        base = SettlementPayment.objects.filter(match_run=run)
+        counts = {
+            row["status"]: row["c"]
+            for row in base.values("status").annotate(c=Count("id"))
+        }
+        users: dict[str, dict] = {}
+
+        def slot(username):
+            return users.setdefault(username, {
+                "username": username, "owe_total": 0, "owe_paid": 0,
+                "due_total": 0, "due_confirmed": 0,
+            })
+
+        for row in base.values("from_user__username").annotate(
+            owe_total=Count("id"),
+            owe_paid=Count("id", filter=Q(status__in=["PAID", "CONFIRMED"])),
+        ):
+            s = slot(row["from_user__username"])
+            s["owe_total"] = row["owe_total"]
+            s["owe_paid"] = row["owe_paid"]
+        for row in base.values("to_user__username").annotate(
+            due_total=Count("id"),
+            due_confirmed=Count("id", filter=Q(status="CONFIRMED")),
+        ):
+            s = slot(row["to_user__username"])
+            s["due_total"] = row["due_total"]
+            s["due_confirmed"] = row["due_confirmed"]
+
+        return Response({
+            "counts": counts,
+            "users": sorted(users.values(), key=lambda u: u["username"]),
+        })

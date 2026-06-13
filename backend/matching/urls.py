@@ -17,7 +17,12 @@ from .views import (
     MatchRunMineView,
     MatchRunResultView,
     MatchRunUploadView,
+    PaymentDetailView,
+    PaymentsOverviewSummaryView,
+    PaymentsOverviewView,
+    PaymentsView,
     ShipmentDetailView,
+    ShippingOverviewSummaryView,
     ShippingOverviewView,
     ShippingView,
 )
@@ -59,8 +64,33 @@ urlpatterns = [
         name="shipping-overview",
     ),
     path(
+        "events/<slug:slug>/shipping/overview/summary/",
+        ShippingOverviewSummaryView.as_view(),
+        name="shipping-overview-summary",
+    ),
+    path(
         "events/<slug:slug>/shipping/<int:pk>/",
         ShipmentDetailView.as_view(),
         name="shipping-detail",
+    ),
+    path(
+        "events/<slug:slug>/payments/",
+        PaymentsView.as_view(),
+        name="payments-list",
+    ),
+    path(
+        "events/<slug:slug>/payments/overview/",
+        PaymentsOverviewView.as_view(),
+        name="payments-overview",
+    ),
+    path(
+        "events/<slug:slug>/payments/overview/summary/",
+        PaymentsOverviewSummaryView.as_view(),
+        name="payments-overview-summary",
+    ),
+    path(
+        "events/<slug:slug>/payments/<int:pk>/",
+        PaymentDetailView.as_view(),
+        name="payments-detail",
     ),
 ]

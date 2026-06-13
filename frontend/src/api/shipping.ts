@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
+import type { PaginatedResponse } from './games'
 
 export interface Shipment {
   id: number
@@ -15,6 +16,17 @@ export interface Shipment {
   received_at: string | null
 }
 
+export interface ShippingSummary {
+  counts: Partial<Record<Shipment['status'], number>>
+  traders: {
+    username: string
+    out_total: number
+    out_sent: number
+    in_total: number
+    in_received: number
+  }[]
+}
+
 const SHIPPING_KEYS = {
   list: (slug: string) => ['shipping', slug] as const,
 }
@@ -24,8 +36,20 @@ async function fetchShipments(slug: string): Promise<Shipment[]> {
   return data
 }
 
-async function fetchShippingOverview(slug: string): Promise<Shipment[]> {
-  const { data } = await apiClient.get<Shipment[]>(`/events/${slug}/shipping/overview/`)
+async function fetchShippingOverview(
+  slug: string, page: number, status: string,
+): Promise<PaginatedResponse<Shipment>> {
+  const { data } = await apiClient.get<PaginatedResponse<Shipment>>(
+    `/events/${slug}/shipping/overview/`,
+    { params: { page, status: status || undefined } },
+  )
+  return data
+}
+
+async function fetchShippingSummary(slug: string): Promise<ShippingSummary> {
+  const { data } = await apiClient.get<ShippingSummary>(
+    `/events/${slug}/shipping/overview/summary/`,
+  )
   return data
 }
 
@@ -47,10 +71,21 @@ export function useShipments(slug: string | undefined) {
   })
 }
 
-export function useShippingOverview(slug: string | undefined, enabled: boolean) {
+export function useShippingOverview(
+  slug: string | undefined, page: number, status: string, enabled: boolean,
+) {
   return useQuery({
-    queryKey: ['shipping', 'overview', slug ?? ''],
-    queryFn: () => fetchShippingOverview(slug!),
+    queryKey: ['shipping', 'overview', slug ?? '', page, status],
+    queryFn: () => fetchShippingOverview(slug!, page, status),
+    enabled: !!slug && enabled,
+    staleTime: 30_000,
+  })
+}
+
+export function useShippingSummary(slug: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['shipping', 'summary', slug ?? ''],
+    queryFn: () => fetchShippingSummary(slug!),
     enabled: !!slug && enabled,
     staleTime: 30_000,
   })

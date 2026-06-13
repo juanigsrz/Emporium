@@ -116,6 +116,10 @@ function JoinLeaveButton({
   const joinableStatuses: EventStatus[] = ['DRAFT', 'SUBMISSIONS_OPEN', 'WANTLIST_OPEN']
   const canJoin = joinableStatuses.includes(event.status)
 
+  // Leaving is only allowed before matching begins (server enforces too).
+  const lockedStatuses: EventStatus[] = ['MATCHING', 'MATCH_REVIEW', 'FINALIZATION', 'SHIPPING', 'ARCHIVED']
+  const canLeave = !lockedStatuses.includes(event.status)
+
   async function handleJoin() {
     setError(null)
     try {
@@ -144,7 +148,9 @@ function JoinLeaveButton({
       {event.is_participant ? (
         confirmLeave ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Leave this event?</span>
+            <span className="text-xs text-gray-500">
+              Leave this event? This removes all your copies, want lists, and wishes from it.
+            </span>
             <button
               onClick={handleLeave}
               disabled={leave.isPending}
@@ -167,12 +173,14 @@ function JoinLeaveButton({
               </svg>
               You're participating
             </span>
-            <button
-              onClick={() => setConfirmLeave(true)}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-            >
-              Leave
-            </button>
+            {canLeave && (
+              <button
+                onClick={() => setConfirmLeave(true)}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+              >
+                Leave
+              </button>
+            )}
           </div>
         )
       ) : canJoin ? (
