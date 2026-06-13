@@ -48,7 +48,7 @@ from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from catalog.models import BoardGame
+from catalog.models import BoardGame, BoardGameVersion
 from copies.models import Copy
 from events.models import EventListing, EventParticipation, TradeEvent
 from trades.models import (
@@ -115,6 +115,13 @@ class Command(BaseCommand):
                 "Need at least 2 ranked games in the catalog. Run import_games first."
             )
 
+        # Real editions for the pool games, grouped by game, so each copy can be
+        # given an actual version (and inherit that edition's language). Games with
+        # no imported versions fall back to a random language and no version.
+        versions_by_game = {}
+        for v in BoardGameVersion.objects.filter(board_game__in=pool).exclude(name="Unknown"):
+            versions_by_game.setdefault(v.board_game_id, []).append(v)
+
         # --- users (organizer + traders) ------------------------------------
         # All test users share one password, so hash it a single time and reuse
         # the hash instead of running the KDF once per user.
@@ -179,12 +186,25 @@ class Command(BaseCommand):
                 )
             )
             for _ in range(rng.randint(lo, hi)):
+                game = rng.choice(pool)
+                vers = versions_by_game.get(game.bgg_id)
+                if vers:
+                    ver = rng.choice(vers)
+                    # version.language is pipe-joined when multiple; take the first.
+                    language = (ver.language or "").split("|")[0].strip() or rng.choice(LANGUAGES)
+                    edition = ver.name
+                else:
+                    ver = None
+                    language = rng.choice(LANGUAGES)
+                    edition = ""
                 copies.append(
                     Copy(
                         owner=u,
-                        board_game=rng.choice(pool),
+                        board_game=game,
+                        version=ver,
                         condition=rng.choice([c.value for c in Copy.Condition]),
-                        language=rng.choice(LANGUAGES),
+                        language=language,
+                        edition=edition,
                         status=Copy.Status.ACTIVE,
                         listing_code=f"TEST-{copy_counter:06d}" # <--- Manually inject a unique code
                     )
