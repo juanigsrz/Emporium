@@ -402,7 +402,7 @@ function MyTradesSection({
         )}
       </div>
 
-      {/* Payments — item-level breakdown (the "why") + settlement transfers (the "what to do") */}
+      {/* Payments — item-level breakdown + net balance (the "why"). Actionable payments live in the Shipping & Payments tab. */}
       {(() => {
         const bought = assignments.filter(
           (a) => a.item_value != null && a.receiver_username === currentUsername
@@ -1378,7 +1378,7 @@ export default function MatchRunPage() {
               <p className="text-sm text-gray-400">Select a run to view details.</p>
             </div>
           ) : activeRun ? (
-            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} moneyEnabled={!!event.money_enabled} />
+            <RunResultView key={activeRun.id} slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} moneyEnabled={!!event.money_enabled} />
           ) : (
             <div className="space-y-3 animate-pulse">
               <div className="h-8 w-1/3 bg-gray-100 rounded" />
