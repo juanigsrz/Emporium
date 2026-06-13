@@ -30,6 +30,7 @@ from rest_framework.views import APIView
 
 from events.models import TradeEvent
 from .models import MatchRun, TradeAssignment, Shipment
+from .services import ensure_shipments
 from .serializers import (
     MatchRunDetailSerializer,
     MatchRunListSerializer,
@@ -290,13 +291,19 @@ class ShippingView(APIView):
         run = _latest_done_run(event)
         if run is None:
             return Response([])
-        assignments = (
-            TradeAssignment.objects.filter(match_run=run)
-            .filter(Q(giver=request.user) | Q(receiver=request.user))
-            .select_related("event_listing__copy__board_game", "giver", "receiver")
+        ensure_shipments(run)
+        shipments = (
+            Shipment.objects.filter(assignment__match_run=run)
+            .filter(Q(assignment__giver=request.user) | Q(assignment__receiver=request.user))
+            .select_related(
+                "assignment__event_listing__copy__board_game",
+                "assignment__giver", "assignment__receiver",
+            )
+            .order_by("id")
         )
-        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
-        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+        return Response(
+            ShipmentSerializer(shipments, many=True, context={"request": request}).data
+        )
 
 
 class ShippingOverviewView(APIView):
@@ -316,12 +323,18 @@ class ShippingOverviewView(APIView):
         run = _latest_done_run(event)
         if run is None:
             return Response([])
-        assignments = (
-            TradeAssignment.objects.filter(match_run=run)
-            .select_related("event_listing__copy__board_game", "giver", "receiver")
+        ensure_shipments(run)
+        shipments = (
+            Shipment.objects.filter(assignment__match_run=run)
+            .select_related(
+                "assignment__event_listing__copy__board_game",
+                "assignment__giver", "assignment__receiver",
+            )
+            .order_by("id")
         )
-        shipments = [Shipment.objects.get_or_create(assignment=a)[0] for a in assignments]
-        return Response(ShipmentSerializer(shipments, many=True, context={"request": request}).data)
+        return Response(
+            ShipmentSerializer(shipments, many=True, context={"request": request}).data
+        )
 
 
 class ShipmentDetailView(APIView):

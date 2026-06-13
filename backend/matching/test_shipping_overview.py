@@ -44,3 +44,31 @@ class ShippingOverviewTests(MatchingTestBase):
         r = self.client.get(self._url())
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data, [])
+
+
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+
+class ShippingOverviewQueryTests(ShippingOverviewTests):
+    def test_query_count_does_not_grow_with_shipments(self):
+        run = self._setup_run()  # 2 assignments
+        self.client.force_authenticate(user=self.user_a)
+        self.client.get(self._url())  # warm: create the 2 shipments
+        with CaptureQueriesContext(connection) as small:
+            self.client.get(self._url() + "?page_size=100")
+
+        # Add 4 more assignments (one per remaining listing) → 6 shipments total.
+        for el in (self.el_a2, self.el_b2, self.el_c1, self.el_c2):
+            TradeAssignment.objects.create(
+                match_run=run, event_listing=el, giver=self.user_a,
+                receiver=self.user_b, cycle_id=2,
+            )
+        self.client.get(self._url())  # create the new shipments
+        with CaptureQueriesContext(connection) as large:
+            self.client.get(self._url() + "?page_size=100")
+
+        self.assertEqual(
+            len(large.captured_queries), len(small.captured_queries),
+            "shipping overview query count must be constant w.r.t. shipment count",
+        )
