@@ -36,6 +36,7 @@ export function useAdminSubmissions(slug: string, username: string | null) {
         params: { user: username },
       })).data,
     enabled: !!slug && !!username,
+    staleTime: 30_000,
   })
 }
 
@@ -82,10 +83,10 @@ export function useUnlistCopy(slug: string) {
 }
 
 export function useKickUser(slug: string) {
-  const qc = useQueryClient()
+  const invalidate = useInvalidateSubmissions(slug)
   return useMutation({
     mutationFn: async (username: string) =>
       (await apiClient.post<KickSummary>(`${base(slug)}/kick/`, { username })).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'submissions', slug] }),
+    onSuccess: invalidate,
   })
 }
