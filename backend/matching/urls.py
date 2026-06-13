@@ -18,6 +18,7 @@ from .views import (
     MatchRunResultView,
     MatchRunUploadView,
     ShipmentDetailView,
+    ShippingOverviewSummaryView,
     ShippingOverviewView,
     ShippingView,
 )
@@ -57,6 +58,11 @@ urlpatterns = [
         "events/<slug:slug>/shipping/overview/",
         ShippingOverviewView.as_view(),
         name="shipping-overview",
+    ),
+    path(
+        "events/<slug:slug>/shipping/overview/summary/",
+        ShippingOverviewSummaryView.as_view(),
+        name="shipping-overview-summary",
     ),
     path(
         "events/<slug:slug>/shipping/<int:pk>/",
