@@ -1160,11 +1160,10 @@ export default function MatchRunPage() {
           <p className="text-sm text-gray-500 mt-0.5">{event.name}</p>
         </div>
         {canTrigger && token && (
-          event.matching_mode === 'XTOY' ? (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <XToYSolvePanel slug={slug!} onUploaded={handleTriggered} />
-          ) : (
             <TriggerRunButton slug={slug!} onTriggered={handleTriggered} />
-          )
+          </div>
         )}
         {!canTrigger && event.is_organizer && event.status !== 'MATCHING' && (
           <p className="text-xs text-gray-400">
