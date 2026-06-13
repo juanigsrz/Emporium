@@ -1,7 +1,7 @@
 """
 matching/test_external_solver.py
 
-Tests for the external FastTradeMaximizer (gurobi) bridge
+Tests for the external Pareto (gurobi) bridge
 (matching/external_solver.py) and the export / upload endpoints.
 
 Covers:

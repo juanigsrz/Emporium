@@ -1,7 +1,7 @@
 """
 matching/external_solver.py
 
-Bridge to the external FastTradeMaximizer (gurobi) solver.
+Bridge to the external Pareto (gurobi) solver.
 
   build_wants(event) -> str
       Export the event's active wishes as a wants file in `(NforM) give -> take`

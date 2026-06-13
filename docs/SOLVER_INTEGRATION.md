@@ -7,7 +7,7 @@ HTTP smoke green). The sections below are the design of record; deviations from
 the original plan are noted inline.
 
 Goal: let an organizer pick how an event is matched, export a `wants.txt` the
-external [FastTradeMaximizer](../../FastTradeMaximizer) solver understands, run
+external [Pareto](https://github.com/juanigsrz/Pareto) solver understands, run
 the solve, and load the solution back as a normal `MatchRun` so the existing
 result UI (`/matches/{id}/`, `/result/`, `/mine/`) works unchanged.
 
