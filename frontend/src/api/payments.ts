@@ -95,7 +95,8 @@ export function useUpdatePayment(slug: string) {
     mutationFn: ({ id, body }: { id: number; body: { status: 'PAID' | 'CONFIRMED'; note?: string } }) =>
       updatePayment(slug, id, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: PAYMENTS_KEYS.list(slug) })
+      // Invalidate the whole payments namespace (mine list + organizer overview + summary).
+      qc.invalidateQueries({ queryKey: ['payments'] })
     },
   })
 }

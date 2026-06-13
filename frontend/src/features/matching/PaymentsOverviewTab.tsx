@@ -14,7 +14,7 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
   const [filter, setFilter] = useState<StatusFilter>('')
   const [page, setPage] = useState(1)
 
-  const { data: summary } = usePaymentsSummary(slug, true)
+  const { data: summary, isLoading: summaryLoading } = usePaymentsSummary(slug, true)
   const { data: pageData, isLoading } = usePaymentsOverview(slug, page, filter, true)
 
   const counts = summary?.counts ?? {}
@@ -29,7 +29,7 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
     setPage(1)
   }
 
-  if (!isLoading && total === 0 && rollup.length === 0) {
+  if (!isLoading && !summaryLoading && total === 0 && rollup.length === 0) {
     return <p className="py-6 text-center text-sm text-gray-400">No settlement payments.</p>
   }
 
