@@ -17,6 +17,7 @@ from events.models import TradeEvent
 from matching.models import MatchRun, TradeAssignment
 from matching import external_solver
 from matching.tests import MatchingTestBase
+from trades.models import OfferGroup, OfferGroupItem, TradeWish
 
 
 def export_url(slug):
@@ -262,7 +263,7 @@ class UploadXToYTests(MatchingTestBase):
 
 
 # ---------------------------------------------------------------------------
-# Duplicate-protection inline flag (after username on the wish line)
+# Duplicate protection via __DUMMY nodes
 # ---------------------------------------------------------------------------
 
 class DupProtectExportTests(MatchingTestBase):
@@ -270,23 +271,77 @@ class DupProtectExportTests(MatchingTestBase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
+        # alice offers brass (el_a1), wants terra — 2 active copies exist
+        # (bob's el_b1 / copy_b1, carol's el_c2 / copy_c2).
         cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
 
-    def test_wish_line_has_inline_dup_protect(self):
-        text = external_solver.build_wants(self.event)
-        self.assertIn(f"{self.user_a.username} DUP-PROTECT : (", text)
+    def _dummy_code(self, wish, game):
+        return f"__DUMMY_{wish.want_group_id}_{game.pk}"
 
-    def test_dup_protect_does_not_break_gurobi_parser(self):
+    def test_multi_copy_game_routed_through_dummy(self):
         text = external_solver.build_wants(self.event)
-        self.assertEqual(external_solver.parse_gurobi(text), [])
+        dummy = self._dummy_code(self.wish_a, self.game_terra)
+        # alice's wish line (the one carrying her brass offer)
+        main = next(
+            l for l in text.splitlines()
+            if l.startswith(f"{self.user_a.username} :")
+            and self.copy_a1.listing_code in l
+        )
+        # take side points at the dummy, not the raw terra copies
+        self.assertIn(dummy, main.split(" -> ")[1])
+        self.assertNotIn(self.copy_b1.listing_code, main)
+        self.assertNotIn(self.copy_c2.listing_code, main)
+        # a (1for1) dummy leg lists both real terra copies
+        leg = next(l for l in text.splitlines() if f"(1for1) {dummy} ->" in l)
+        self.assertIn(self.copy_b1.listing_code, leg)
+        self.assertIn(self.copy_c2.listing_code, leg)
 
-    def test_no_dup_protect_when_disabled(self):
+    def test_dup_protect_tag_removed(self):
+        text = external_solver.build_wants(self.event)
+        self.assertNotIn("DUP-PROTECT", text)
+
+    def test_single_copy_game_passes_through(self):
+        # alice offers ark (el_a2), wants brass — expands to carol's brass
+        # (el_c1 / copy_c1) only; alice's own brass is excluded -> 1 copy.
+        wish = self._make_wish(self.user_a, self.el_a2, want_game=self.game_brass)
+        wish.want_group.duplicate_protection = True
+        wish.want_group.save(update_fields=["duplicate_protection"])
+        text = external_solver.build_wants(self.event)
+        self.assertNotIn(self._dummy_code(wish, self.game_brass), text)
+        line = next(
+            l for l in text.splitlines()
+            if l.startswith(f"{self.user_a.username} :")
+            and self.copy_a2.listing_code in l
+        )
+        self.assertIn(self.copy_c1.listing_code, line.split(" -> ")[1])
+
+    def test_shared_want_group_emits_single_dummy_leg(self):
+        # a second wish (alice's ark) reuses wish_a's dup-protected terra group
+        og2 = OfferGroup.objects.create(
+            event=self.event, user=self.user_a, name="OG-a-shared", max_give=1,
+        )
+        OfferGroupItem.objects.create(offer_group=og2, event_listing=self.el_a2)
+        TradeWish.objects.create(
+            event=self.event, user=self.user_a, offer_group=og2,
+            want_group=self.wish_a.want_group, active=True,
+        )
+        text = external_solver.build_wants(self.event)
+        dummy = self._dummy_code(self.wish_a, self.game_terra)
+        legs = [l for l in text.splitlines() if f"(1for1) {dummy} ->" in l]
+        self.assertEqual(len(legs), 1)
+
+    def test_no_dummy_when_disabled(self):
         self.wish_a.want_group.duplicate_protection = False
         self.wish_a.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
+        self.assertNotIn("__DUMMY", text)
         self.assertNotIn("DUP-PROTECT", text)
+
+    def test_dummy_export_does_not_break_gurobi_parser(self):
+        text = external_solver.build_wants(self.event)
+        self.assertEqual(external_solver.parse_gurobi(text), [])
 
 
 # ---------------------------------------------------------------------------
