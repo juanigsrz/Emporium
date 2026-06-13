@@ -45,11 +45,18 @@ of its output chains. This design only produces the dummy export.
 ### Dummy code format
 
 ```
-__DUMMY_<wantgroup_id>_<board_game_id>
+__DUMMY_<username>_<board_game_id>
 ```
 
-Deterministic and unique per `(want_group, board_game)`. Stable across repeated
-exports of the same data.
+Deterministic and unique per `(user, board_game)`. Keying on the **user**, not the
+want group, is what makes the dummy enforce duplicate protection rather than act
+as a per-group alias: a user typically has many wishes/want groups that each list
+the same canonical game among their targets, and all of them must funnel through
+*one* node so the user can win at most one copy of that game across all of them.
+Keying on the want group would give each group its own node (multiple copies
+slip through); keying on the board game alone would collide across users (one
+user's trade would block another's). Usernames are unique and contain no spaces,
+so the token round-trips as a single whitespace-delimited field.
 
 ## `_build_xtoy` transform
 
@@ -79,12 +86,16 @@ excluding give codes — unchanged from today):
 dummy collapse, the wish is infeasible; that is the solver's concern, not the
 exporter's.
 
-### Dedup of dummy legs
+### Dedup and union of dummy legs
 
-A WantGroup may be referenced by more than one wish (multiple offer groups
-wanting the same game). All such wishes funnel into the *same* dummy code, which
-correctly enforces "at most one copy across all of them." The dummy leg line
-must therefore be emitted **once**. Collect dummy legs in a dict keyed by dummy
+Because the dummy is keyed per `(user, board_game)`, every dup-protected wish a
+user has that lists that game routes through the same dummy code. The dummy leg
+line is emitted **once**, and its copy set is the **union** of the acceptable
+copies contributed by each of those wishes. In practice the sets are identical
+(BOARD_GAME targets expand to all of a game's copies, and `_expand` already
+excludes the user's own copies, so the per-wish `give` filter never removes a
+shared copy) — but unioning is correct rather than last-write-wins and removes
+any chance of silently dropping a copy. Collect legs in a dict keyed by dummy
 code; emit unique legs after all main lines, sorted by code, for deterministic
 output.
 

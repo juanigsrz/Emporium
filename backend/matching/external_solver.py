@@ -227,14 +227,19 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _dup_protect_take(take, want_group_id, by_code):
+def _dup_protect_take(take, username, by_code):
     """Collapse same-game copies behind dummy nodes for duplicate protection.
 
     Groups `take` codes by board game. A game with >=2 acceptable copies is
-    replaced in the take set by a single `__DUMMY_<wantgroup>_<boardgame>` token,
+    replaced in the take set by a single `__DUMMY_<username>_<boardgame>` token,
     and its real copies move onto a dummy leg (dummy -> copies). A single-copy
-    game passes through unchanged. Returns (take_tokens, dummy_legs), where
-    take_tokens is sorted and dummy_legs maps dummy_code -> sorted copy codes.
+    game passes through unchanged.
+
+    The dummy is keyed per (user, board game), NOT per want group, so every
+    dup-protected wish a user has for that game shares one node — the user can
+    win at most one copy of the game across all of them. Returns
+    (take_tokens, dummy_legs), where take_tokens is sorted and dummy_legs maps
+    dummy_code -> sorted copy codes.
     """
     by_bg = defaultdict(list)
     for code in take:
@@ -243,7 +248,7 @@ def _dup_protect_take(take, want_group_id, by_code):
     dummy_legs = {}
     for bg_id, codes in by_bg.items():
         if len(codes) >= 2:
-            dummy = f"__DUMMY_{want_group_id}_{bg_id}"
+            dummy = f"__DUMMY_{username}_{bg_id}"
             take_tokens.append(dummy)
             dummy_legs[dummy] = sorted(codes)
         else:
@@ -265,7 +270,7 @@ def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
     blocked_cache = {}
     coords = _load_coords()
     lines = []
-    dummy_legs = {}  # dummy_code -> (username, [copy codes])
+    dummy_legs = {}  # dummy_code -> (username, {copy codes})
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -283,16 +288,16 @@ def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
         n = w.offer_group.max_give
         m = w.want_group.min_receive
         if w.want_group.duplicate_protection:
-            take, legs = _dup_protect_take(take, w.want_group_id, by_code)
+            take, legs = _dup_protect_take(take, w.user.username, by_code)
             for dummy, codes in legs.items():
-                # Last write wins. Safe because every wish sharing a want_group is
-                # the same user (enforced on the wish serializer), and _expand keys
-                # only on user_id/blocked — so the copy set is identical each time.
-                dummy_legs[dummy] = (w.user.username, codes)
+                # One node per (user, game): union the copies each of the user's
+                # dup-protected wishes contributes so they share a single slot.
+                _, existing = dummy_legs.get(dummy, (w.user.username, set()))
+                dummy_legs[dummy] = (w.user.username, existing.union(codes))
         lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
     for dummy in sorted(dummy_legs):
         username, codes = dummy_legs[dummy]
-        lines.append(f"{username} : (1for1) {dummy} -> {' '.join(codes)}")
+        lines.append(f"{username} : (1for1) {dummy} -> {' '.join(sorted(codes))}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 

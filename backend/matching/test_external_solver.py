@@ -17,7 +17,6 @@ from events.models import TradeEvent
 from matching.models import MatchRun, TradeAssignment
 from matching import external_solver
 from matching.tests import MatchingTestBase
-from trades.models import OfferGroup, OfferGroupItem, TradeWish
 
 
 def export_url(slug):
@@ -277,12 +276,12 @@ class DupProtectExportTests(MatchingTestBase):
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
 
-    def _dummy_code(self, wish, game):
-        return f"__DUMMY_{wish.want_group_id}_{game.pk}"
+    def _dummy_code(self, user, game):
+        return f"__DUMMY_{user.username}_{game.pk}"
 
     def test_multi_copy_game_routed_through_dummy(self):
         text = external_solver.build_wants(self.event)
-        dummy = self._dummy_code(self.wish_a, self.game_terra)
+        dummy = self._dummy_code(self.user_a, self.game_terra)
         # alice's wish line (the one carrying her brass offer)
         main = next(
             l for l in text.splitlines()
@@ -309,7 +308,7 @@ class DupProtectExportTests(MatchingTestBase):
         wish.want_group.duplicate_protection = True
         wish.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
-        self.assertNotIn(self._dummy_code(wish, self.game_brass), text)
+        self.assertNotIn(self._dummy_code(self.user_a, self.game_brass), text)
         line = next(
             l for l in text.splitlines()
             if l.startswith(f"{self.user_a.username} :")
@@ -317,18 +316,22 @@ class DupProtectExportTests(MatchingTestBase):
         )
         self.assertIn(self.copy_c1.listing_code, line.split(" -> ")[1])
 
-    def test_shared_want_group_emits_single_dummy_leg(self):
-        # a second wish (alice's ark) reuses wish_a's dup-protected terra group
-        og2 = OfferGroup.objects.create(
-            event=self.event, user=self.user_a, name="OG-a-shared", max_give=1,
-        )
-        OfferGroupItem.objects.create(offer_group=og2, event_listing=self.el_a2)
-        TradeWish.objects.create(
-            event=self.event, user=self.user_a, offer_group=og2,
-            want_group=self.wish_a.want_group, active=True,
-        )
+    def test_dummy_shared_across_want_groups_for_same_game(self):
+        # alice has a SECOND, independent dup-protected want group for terra
+        # (offering ark this time). Both wishes must funnel through ONE dummy so
+        # she can win at most one terra across both.
+        wish2 = self._make_wish(self.user_a, self.el_a2, want_game=self.game_terra)
+        wish2.want_group.duplicate_protection = True
+        wish2.want_group.save(update_fields=["duplicate_protection"])
         text = external_solver.build_wants(self.event)
-        dummy = self._dummy_code(self.wish_a, self.game_terra)
+        dummy = self._dummy_code(self.user_a, self.game_terra)
+        # both wish lines point their take side at the same dummy
+        mains = [
+            l for l in text.splitlines()
+            if l.startswith(f"{self.user_a.username} :") and dummy in l.split(" -> ")[1]
+        ]
+        self.assertEqual(len(mains), 2)
+        # exactly one dummy leg for that (user, game)
         legs = [l for l in text.splitlines() if f"(1for1) {dummy} ->" in l]
         self.assertEqual(len(legs), 1)
 
