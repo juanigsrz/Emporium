@@ -574,40 +574,6 @@ class EventGamesEndpointTests(EventTestBase):
 
 
 # ---------------------------------------------------------------------------
-# Matching mode (solver selection)
-# ---------------------------------------------------------------------------
-
-class MatchingModeTests(EventTestBase):
-    """matching_mode: default, organizer-writable, frozen once MATCHING."""
-
-    def setUp(self):
-        super().setUp()
-        self.event = TradeEvent.objects.create(
-            name="Mode Event 2026", organizer=self.user1,
-        )
-        self.slug = self.event.slug
-
-    def test_default_mode_is_onetoone(self):
-        resp = self.client.get(event_url(self.slug))
-        self.assertEqual(resp.data["matching_mode"], "ONETOONE")
-
-    def test_organizer_can_set_mode_before_matching(self):
-        resp = self.client.patch(
-            event_url(self.slug), {"matching_mode": "XTOY"}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertEqual(resp.data["matching_mode"], "XTOY")
-
-    def test_mode_frozen_once_matching(self):
-        self.event.status = TradeEvent.Status.MATCHING
-        self.event.save(update_fields=["status"])
-        resp = self.client.patch(
-            event_url(self.slug), {"matching_mode": "XTOY"}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-
-
-# ---------------------------------------------------------------------------
 # Money trading config (event flags + participant budget)
 # ---------------------------------------------------------------------------
 

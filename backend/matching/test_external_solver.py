@@ -344,9 +344,8 @@ class MoneySettlementUploadTests(MatchingTestBase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.event.matching_mode = TradeEvent.MatchingMode.XTOY
         cls.event.money_enabled = True
-        cls.event.save(update_fields=["matching_mode", "money_enabled"])
+        cls.event.save(update_fields=["money_enabled"])
         cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
         cls.wish_b = cls._make_wish(cls.user_b, cls.el_b1, want_game=cls.game_brass)
         # alice's brass ask $20, bob's terra ask $30
