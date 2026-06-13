@@ -1,4 +1,4 @@
-# MathTrade Platform — Master Design
+# Emporium Platform — Master Design
 
 A modern web platform for board-game **math trades**, inspired by the classic
 On-Line Want List Generator (OLWLG) but redesigned for scale, usability,

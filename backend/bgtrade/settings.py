@@ -173,7 +173,7 @@ REST_FRAMEWORK = {
 # drf-spectacular (OpenAPI schema)
 # ---------------------------------------------------------------------------
 SPECTACULAR_SETTINGS = {
-    "TITLE": "MathTrade API",
+    "TITLE": "Emporium API",
     "DESCRIPTION": "Board-game math trade platform API",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -243,7 +243,7 @@ NOMINATIM_BASE_URL = os.environ.get("NOMINATIM_BASE_URL", "https://nominatim.ope
 # https://operations.osmfoundation.org/policies/nominatim/
 NOMINATIM_USER_AGENT = os.environ.get(
     "NOMINATIM_USER_AGENT",
-    "mathtrade-app/1.0 (+https://github.com/juanigsrz/mathtrade-app)",
+    "mathtrade-app/1.0 (+https://github.com/juanigsrz/Emporium)",
 )
 
 BGG_API_KEY = os.environ.get(

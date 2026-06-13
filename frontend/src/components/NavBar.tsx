@@ -151,7 +151,7 @@ export default function NavBar() {
               </svg>
             </span>
             <span className="font-display text-2xl font-bold leading-none tracking-tight text-ink">
-              MathTrade
+              Emporium
             </span>
           </Link>
 
