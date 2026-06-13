@@ -98,13 +98,6 @@ class MatchRunListCreateView(APIView):
                 {"detail": "Event must be in MATCHING status to trigger a run."}
             )
 
-        # X-to-Y events are solved locally by the organizer and uploaded.
-        if event.matching_mode == TradeEvent.MatchingMode.XTOY:
-            raise ValidationError(
-                {"detail": "X-to-Y events are matched by uploading a solution to "
-                           "/matches/upload/, not by triggering an online run."}
-            )
-
         match_run = MatchRun.objects.create(
             event=event,
             status=MatchRun.Status.PENDING,
@@ -218,9 +211,9 @@ class MatchRunUploadView(APIView):
     """
     POST /api/events/{slug}/matches/upload/
 
-    Organizer uploads raw solver stdout (X-to-Y: gurobi `give -> take`;
-    1-to-1: ftm `TRADE LOOPS`). Body = plain text. Parsed into a DONE MatchRun
-    with TradeAssignment rows. Organizer-only; event must be in MATCHING.
+    Organizer uploads raw gurobi solver stdout (`give -> take`). Body = plain
+    text. Parsed into a DONE MatchRun with TradeAssignment rows. Organizer-only;
+    event must be in MATCHING.
     """
 
     permission_classes = [permissions.IsAuthenticated]
@@ -250,13 +243,8 @@ class MatchRunUploadView(APIView):
         if not raw.strip():
             raise ValidationError({"detail": "Empty solution upload."})
 
-        algorithm = (
-            "gurobi-xy"
-            if event.matching_mode == TradeEvent.MatchingMode.XTOY
-            else "ftm-upload"
-        )
         run = MatchRun.objects.create(
-            event=event, status=MatchRun.Status.RUNNING, algorithm=algorithm,
+            event=event, status=MatchRun.Status.RUNNING, algorithm="gurobi-xy",
             started_at=datetime.now(timezone.utc),
         )
         try:
