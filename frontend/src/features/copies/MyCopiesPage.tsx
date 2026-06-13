@@ -6,6 +6,7 @@ import { useGamesList } from '../../api/games'
 import { CONDITION_LABELS } from './constants'
 import { CopyForm } from './CopyForm'
 import type { CopySubmitPayload } from './CopyForm'
+import { GameThumb } from '../../components/GameThumb'
 import { useMyRatings, useSetRating, ratingMap } from '../../api/ratings'
 import { useStartImport, useImportJob } from '../../api/bgg'
 import { useMyProfile } from '../../api/profiles'
@@ -261,8 +262,9 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
           </div>
         )}
 
-        {/* Top: listing code + status + game link */}
+        {/* Top: thumbnail + listing code + status + game link */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
+          <GameThumb src={copy.board_game_thumbnail} alt={copy.board_game_name} className="h-8 w-8" />
           <span className="font-mono text-xs text-gray-400 border border-gray-100 rounded px-1.5 py-0.5">
             #{copy.listing_code}
           </span>
@@ -554,8 +556,9 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 px-5 py-4">
+        {/* Body — only scroll-clip once the CopyForm is shown; while searching,
+            keep overflow visible so the results dropdown isn't clipped (#2). */}
+        <div className={`flex-1 px-5 py-4 ${picked ? 'overflow-y-auto' : ''}`}>
           {!picked ? (
             <div className="relative">
               <input
