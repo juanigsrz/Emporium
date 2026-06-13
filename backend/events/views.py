@@ -39,6 +39,8 @@ from .serializers import (
     TradeEventSerializer,
     TransitionSerializer,
 )
+from trades.models import OfferGroup, WantGroup, TradeWish
+from .admin_actions import kick_participant
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +114,18 @@ class TradeEventViewSet(
     def _check_organizer(self, event):
         if event.organizer != self.request.user:
             raise PermissionDenied("Only the organizer can perform this action.")
+
+    def _check_admin(self, event):
+        """Organizer-only admin guard; disabled once the event is archived."""
+        self._check_organizer(event)
+        if event.status == TradeEvent.Status.ARCHIVED:
+            raise PermissionDenied("Event is archived; admin actions are disabled.")
+
+    def _resolve_target_user(self, username):
+        from django.contrib.auth import get_user_model
+        if not username:
+            raise ValidationError({"username": "This field is required."})
+        return get_object_or_404(get_user_model(), username=username)
 
     def update(self, request, *args, **kwargs):
         kwargs["partial"] = True  # PATCH only; PUT not supported
@@ -414,6 +428,47 @@ class TradeEventViewSet(
             return self.get_paginated_response(ser.data)
         ser = EventGameSerializer(qs, many=True, context={"request": request})
         return Response(ser.data)
+
+    # ------------------------------------------------------------------
+    # Organizer admin dashboard
+    # ------------------------------------------------------------------
+
+    @action(detail=True, methods=["get"], url_path="admin/submissions")
+    def admin_submissions(self, request, slug=None):
+        event = self.get_object()
+        self._check_admin(event)
+        user = self._resolve_target_user(request.query_params.get("user"))
+
+        listings = event.listings.select_related(
+            "copy", "copy__owner", "copy__board_game"
+        ).filter(copy__owner=user)
+        offer_groups = OfferGroup.objects.filter(event=event, user=user)
+        want_groups = WantGroup.objects.filter(event=event, user=user)
+        wishes = TradeWish.objects.filter(event=event, user=user).select_related(
+            "offer_group", "want_group"
+        )
+
+        return Response({
+            "username": user.username,
+            "listings": EventListingSerializer(
+                listings, many=True, context={"request": request}
+            ).data,
+            "offer_groups": [
+                {"id": g.id, "name": g.name, "max_give": g.max_give} for g in offer_groups
+            ],
+            "want_groups": [
+                {"id": g.id, "name": g.name, "min_receive": g.min_receive}
+                for g in want_groups
+            ],
+            "wishes": [
+                {
+                    "id": w.id, "active": w.active,
+                    "offer_group": w.offer_group_id, "offer_group_name": w.offer_group.name,
+                    "want_group": w.want_group_id, "want_group_name": w.want_group.name,
+                }
+                for w in wishes
+            ],
+        })
 
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
