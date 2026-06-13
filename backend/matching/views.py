@@ -322,9 +322,9 @@ class ShippingOverviewView(APIView):
             raise PermissionDenied("Only the organizer can view the shipping overview.")
         run = _latest_done_run(event)
         if run is None:
-            return Response([])
+            return Response({"count": 0, "next": None, "previous": None, "results": []})
         ensure_shipments(run)
-        shipments = (
+        qs = (
             Shipment.objects.filter(assignment__match_run=run)
             .select_related(
                 "assignment__event_listing__copy__board_game",
@@ -332,8 +332,13 @@ class ShippingOverviewView(APIView):
             )
             .order_by("id")
         )
-        return Response(
-            ShipmentSerializer(shipments, many=True, context={"request": request}).data
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(
+            ShipmentSerializer(page, many=True, context={"request": request}).data
         )
 
 
