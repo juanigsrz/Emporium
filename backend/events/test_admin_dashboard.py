@@ -175,6 +175,8 @@ class AdminKickEndpointTests(AdminDashboardBase):
         r = self.client.post(self.URL, {"username": "victim"}, format="json")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data["removed_listings"], 1)
+        self.assertEqual(r.data["removed_wishes"], 1)
+        self.assertEqual(r.data["affected_other_users"], 1)
         self.assertFalse(
             EventParticipation.objects.filter(event=self.event, user=self.victim).exists()
         )
