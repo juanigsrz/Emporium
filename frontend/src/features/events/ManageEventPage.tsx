@@ -35,10 +35,14 @@ export default function ManageEventPage() {
 
   async function doKick() {
     if (!selected) return
-    const res = await kick.mutateAsync(selected)
-    setKickResult(res)
-    setConfirmKick(false)
-    setSelected(null)
+    try {
+      const res = await kick.mutateAsync(selected)
+      setKickResult(res)
+      setConfirmKick(false)
+      setSelected(null)
+    } catch {
+      // Failure is surfaced via kick.isError below; keep the dialog open.
+    }
   }
 
   const rows = participants?.results ?? []
@@ -83,7 +87,7 @@ export default function ManageEventPage() {
                 <span className="truncate text-sm text-gray-700">{l.board_game_name} <span className="font-mono text-xs text-gray-400">{l.listing_code}</span></span>
                 <button
                   onClick={() => unlist.mutate(l.id)}
-                  disabled={unlist.isPending}
+                  disabled={unlist.isPending && unlist.variables === l.id}
                   className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
                 >
                   Unlist
@@ -170,6 +174,9 @@ export default function ManageEventPage() {
               This removes {subs.data?.listings.length ?? 0} listings and {subs.data?.wishes.length ?? 0} wishes
               from this event. Their copies are preserved. This cannot be undone here.
             </p>
+            {kick.isError && (
+              <p className="mb-3 text-xs text-red-600">Failed to remove user. Please try again.</p>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setConfirmKick(false)} disabled={kick.isPending}
                 className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
