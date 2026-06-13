@@ -21,7 +21,7 @@ class LeaveRulesTests(APITestCase):
         return self.client.delete(f"/api/events/{self.event.slug}/leave/")
 
     def test_leave_allowed_before_matching(self):
-        self.event.status = "WANTLIST_OPEN"
+        self.event.status = TradeEvent.Status.WANTLIST_OPEN
         self.event.save(update_fields=["status"])
         self.assertEqual(self._leave().status_code, 200)
         self.assertFalse(
@@ -29,7 +29,7 @@ class LeaveRulesTests(APITestCase):
         )
 
     def test_leave_blocked_after_matching(self):
-        self.event.status = "MATCHING"
+        self.event.status = TradeEvent.Status.MATCHING
         self.event.save(update_fields=["status"])
         r = self._leave()
         self.assertEqual(r.status_code, 400)
@@ -39,8 +39,6 @@ class LeaveRulesTests(APITestCase):
 
     def test_leave_when_not_participant(self):
         EventParticipation.objects.filter(event=self.event, user=self.u).delete()
-        self.event.status = "WANTLIST_OPEN"
-        self.event.save(update_fields=["status"])
         self.assertEqual(self._leave().status_code, 400)
 
 
@@ -49,6 +47,7 @@ class LeaveCascadeTests(AdminDashboardBase):
     and `other` references the victim's specific listing."""
 
     def test_leave_runs_full_kick_cascade(self):
+        # AdminDashboardBase creates the event in MATCH_REVIEW (locked); leaving requires a pre-matching status.
         self.event.status = TradeEvent.Status.WANTLIST_OPEN
         self.event.save(update_fields=["status"])
         self.client.force_authenticate(self.victim)
@@ -84,7 +83,7 @@ class JoinExclusivityTests(APITestCase):
 
     def test_allowed_once_other_event_archived(self):
         self._join(self.e1)
-        self.e1.status = "ARCHIVED"
+        self.e1.status = TradeEvent.Status.ARCHIVED
         self.e1.save(update_fields=["status"])
         self.assertEqual(self._join(self.e2).status_code, 201)
 
