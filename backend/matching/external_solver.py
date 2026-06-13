@@ -142,17 +142,7 @@ def build_wants(event) -> str:
         if event.money_enabled else ""
     )
     body = _build_xtoy(wishes, by_game, by_id, block_pairs)
-    header = _build_placeholder_header(wishes)
-    return money_block + header + body if (money_block or header) else body
-
-
-def _build_placeholder_header(wishes) -> str:
-    """Duplicate-protection comment lines (#! DUP-PROTECT). Ignored by parse_gurobi."""
-    lines = [
-        f"#! DUP-PROTECT ({w.user.username}) wish={w.id}"
-        for w in wishes if w.want_group.duplicate_protection
-    ]
-    return ("\n".join(lines) + "\n") if lines else ""
+    return money_block + body
 
 
 def _to_cents(amount) -> int:
@@ -238,7 +228,11 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
 
 
 def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
-    """gurobi: one `(NforM) give -> take` line per active wish."""
+    """gurobi: one `username [DUP-PROTECT] : (NforM) give -> take` line per active wish.
+
+    DUP-PROTECT appears after the username when the wish's want group is flagged
+    against receiving duplicate copies of the same game.
+    """
     blocked_cache = {}
     coords = _load_coords()
     lines = []
@@ -258,7 +252,8 @@ def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
             continue
         n = w.offer_group.max_give
         m = w.want_group.min_receive
-        lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
+        dup = " DUP-PROTECT" if w.want_group.duplicate_protection else ""
+        lines.append(f"{w.user.username}{dup} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 

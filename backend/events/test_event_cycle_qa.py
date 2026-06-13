@@ -9,7 +9,7 @@ from DRAFT → ARCHIVED and exercises the features added on top:
     (resolve_ask), event cap + per-user budget;
   - duplicate-protection flag on want groups;
   - canonical board_game_id on want items (FE grouping);
-  - solver wants-export money directives (user/item/bid) + DUP-PROTECT header;
+  - solver wants-export money directives (user/item/bid) + inline DUP-PROTECT;
   - matching run (offline FakeMatcher) → assignments → result/mine;
   - lifecycle transitions + organizer-only / invalid-transition guards.
 
@@ -205,7 +205,7 @@ class EventCycleQA(APITestCase):
         self.assertEqual(exp.status_code, status.HTTP_200_OK)
         text = exp.content.decode()
         self.assertIn(f"user {self.t1.username} budget 3000", text)
-        self.assertIn("#! DUP-PROTECT", text)
+        self.assertIn("DUP-PROTECT : (", text)
         self.assertIn(f"bid {self.t1.username} {self.c2_terra.listing_code} 2000", text)
         self.assertIn(f"item {self.c2_terra.listing_code} owner {self.t2.username} ask 1000", text)
         # body still valid NforM: at least one "user : (NforM) give -> take" line
@@ -280,4 +280,4 @@ class EventCycleQA(APITestCase):
         text = self.client.get(wants_export(slug)).content.decode()
         self.assertNotIn("#! MONEY-ENABLED", text)
         self.assertNotIn("#! MONEY-WANT", text)
-        self.assertNotIn("#! DUP-PROTECT", text)   # dup=False, money off
+        self.assertNotIn("DUP-PROTECT", text)   # dup=False, money off
