@@ -120,21 +120,21 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
   })
 
   const inputCls = (hasErr: boolean) =>
-    `w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-      hasErr ? 'border-red-400' : 'border-gray-300'
+    `w-full rounded-xl border-2 bg-parchment px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage ${
+      hasErr ? 'border-red-400' : 'border-ink/15'
     }`
 
   return (
     <form id={formId} onSubmit={submit} noValidate className="space-y-4">
       {serverError && (
-        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border-2 border-red-200 px-3 py-2 text-sm font-medium text-red-700">
           {serverError}
         </div>
       )}
 
       {/* Version (Edition) — required */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-semibold text-ink mb-1">
           Edition <span className="text-red-500">*</span>
         </label>
         <select {...register('version_sel')} className={inputCls(!!errors.version_sel)} disabled={versionsLoading}>
@@ -147,12 +147,12 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
           ))}
         </select>
         {errors.version_sel && <p className="mt-1 text-xs text-red-600">{errors.version_sel.message}</p>}
-        <p className="mt-1 text-xs text-gray-400">Language: <span className="font-medium text-gray-600">{derivedLanguage}</span> (from edition)</p>
+        <p className="mt-1 text-xs text-moss">Language: <span className="font-semibold text-ink">{derivedLanguage}</span> (from edition)</p>
       </div>
 
       {/* Condition — required */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-semibold text-ink mb-1">
           Condition <span className="text-red-500">*</span>
         </label>
         <select {...register('condition')} className={inputCls(!!errors.condition)}>
@@ -164,7 +164,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
 
       {/* Sleeved */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Sleeved</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Sleeved</label>
         <select {...register('sleeved')} className={inputCls(false)}>
           {Object.entries(SLEEVED_LABELS).map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
@@ -173,33 +173,33 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Includes expansions</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Includes expansions</label>
         <input {...register('includes_expansions')} placeholder="e.g. Stonemaier Expansions" className={inputCls(false)} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Missing components</label>
+          <label className="block text-sm font-semibold text-ink mb-1">Missing components</label>
           <input {...register('missing_components')} placeholder="None" className={inputCls(false)} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Upgraded components</label>
+          <label className="block text-sm font-semibold text-ink mb-1">Upgraded components</label>
           <input {...register('upgraded_components')} placeholder="None" className={inputCls(false)} />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Component notes</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Component notes</label>
         <textarea {...register('component_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Owner notes</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Owner notes</label>
         <textarea {...register('owner_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Trade value hint</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Trade value hint</label>
         <input {...register('trade_value_hint')} placeholder="e.g. ~$40 retail" className={inputCls(!!errors.trade_value_hint)} />
         {errors.trade_value_hint && (
           <p className="mt-1 text-xs text-red-600">{errors.trade_value_hint.message}</p>
@@ -207,7 +207,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Shipping constraints</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Shipping constraints</label>
         <input {...register('shipping_constraints')} placeholder="e.g. Domestic only" className={inputCls(false)} />
       </div>
 
@@ -216,15 +216,15 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
           id={`${formId}-pickup`}
           type="checkbox"
           {...register('pickup_available')}
-          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
         />
-        <label htmlFor={`${formId}-pickup`} className="text-sm font-medium text-gray-700">
+        <label htmlFor={`${formId}-pickup`} className="text-sm font-semibold text-ink">
           Pickup available
         </label>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Photo URLs</label>
+        <label className="block text-sm font-semibold text-ink mb-1">Photo URLs</label>
         <div className="space-y-2">
           {photoFields.map((field, idx) => (
             <div key={field.id} className="flex gap-2">
@@ -236,7 +236,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
               <button
                 type="button"
                 onClick={() => removePhoto(idx)}
-                className="shrink-0 text-gray-400 hover:text-red-500 p-1"
+                className="shrink-0 text-moss hover:text-red-500 p-1"
                 aria-label="Remove URL"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -248,7 +248,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
           <button
             type="button"
             onClick={() => appendPhoto({ url: '' })}
-            className="text-xs text-indigo-600 hover:underline"
+            className="text-xs font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
           >
             + Add photo URL
           </button>

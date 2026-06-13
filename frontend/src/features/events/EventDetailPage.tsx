@@ -44,23 +44,23 @@ function LifecycleProgress({ current }: { current: EventStatus }) {
               {/* Step dot */}
               <div className="flex flex-col items-center">
                 <div
-                  className={`w-3 h-3 rounded-full border-2 transition-colors ${
+                  className={`w-3.5 h-3.5 rounded-full border-2 transition-colors ${
                     isCurrent
-                      ? 'bg-indigo-600 border-indigo-600'
+                      ? 'bg-coral border-ink'
                       : isPast
-                      ? 'bg-indigo-300 border-indigo-300'
-                      : 'bg-white border-gray-300'
+                      ? 'bg-sage border-ink/40'
+                      : 'bg-cream border-ink/25'
                   }`}
                 />
                 <span
-                  className={`mt-1 text-xs font-medium whitespace-nowrap px-0.5 ${
+                  className={`mt-1 text-xs whitespace-nowrap px-0.5 ${
                     isCurrent
-                      ? 'text-indigo-700'
+                      ? 'text-ink font-bold'
                       : isPast
-                      ? 'text-indigo-400'
+                      ? 'text-moss font-semibold'
                       : isFuture
-                      ? 'text-gray-400'
-                      : 'text-gray-400'
+                      ? 'text-moss/50'
+                      : 'text-moss/50'
                   }`}
                   style={{ fontSize: '10px' }}
                 >
@@ -71,7 +71,7 @@ function LifecycleProgress({ current }: { current: EventStatus }) {
               {idx < EVENT_STATUSES.length - 1 && (
                 <div
                   className={`h-0.5 w-8 mx-0.5 transition-colors ${
-                    idx < currentIdx ? 'bg-indigo-300' : 'bg-gray-200'
+                    idx < currentIdx ? 'bg-sage' : 'bg-ink/15'
                   }`}
                 />
               )}
@@ -101,7 +101,7 @@ function JoinLeaveButton({
     return (
       <Link
         to="/login"
-        className="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
+        className="rounded-2xl border-2 border-ink/20 bg-cream px-4 py-2 text-sm font-semibold text-moss hover:bg-sage/40 transition-colors"
       >
         Login to join
       </Link>
@@ -148,26 +148,26 @@ function JoinLeaveButton({
       {event.is_participant ? (
         confirmLeave ? (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-moss">
               Leave this event? This removes all your copies, want lists, and wishes from it.
             </span>
             <button
               onClick={handleLeave}
               disabled={leave.isPending}
-              className="text-xs rounded border border-red-300 px-2.5 py-1 text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
+              className="text-xs rounded-xl border-2 border-red-300 px-2.5 py-1 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
             >
               {leave.isPending ? 'Leaving…' : 'Confirm leave'}
             </button>
             <button
               onClick={() => setConfirmLeave(false)}
-              className="text-xs text-gray-400 hover:text-gray-600"
+              className="text-xs font-medium text-moss hover:text-ink"
             >
               Cancel
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium">
+            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-semibold">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
@@ -176,7 +176,7 @@ function JoinLeaveButton({
             {canLeave && (
               <button
                 onClick={() => setConfirmLeave(true)}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                className="text-xs font-medium text-moss hover:text-red-500 transition-colors"
               >
                 Leave
               </button>
@@ -187,12 +187,12 @@ function JoinLeaveButton({
         <button
           onClick={handleJoin}
           disabled={join.isPending}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors shadow-sm"
+          className="rounded-2xl border-2 border-ink bg-butter px-5 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
         >
           {join.isPending ? 'Joining…' : event.is_organizer ? 'Join as trader' : 'Join event'}
         </button>
       ) : (
-        <span className="text-sm text-gray-400">Event not open for joining</span>
+        <span className="text-sm text-moss/70">Event not open for joining</span>
       )}
     </div>
   )
@@ -233,7 +233,7 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
   }
 
   return (
-    <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+    <div className="rounded-3xl border-2 border-ink/15 bg-sage/25 p-4">
       {confirmTo && (
         <TransitionConfirmDialog
           from={event.status}
@@ -243,7 +243,7 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
           onCancel={() => setConfirmTo(null)}
         />
       )}
-      <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-3">
+      <p className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
         Organizer — Advance lifecycle
       </p>
       {error && (
@@ -255,9 +255,9 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
             key={to}
             onClick={() => setConfirmTo(to)}
             disabled={transition.isPending}
-            className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
-              STATUS_BADGE_CLASSES[to] ?? 'bg-white border-gray-300 text-gray-700'
-            } hover:opacity-80`}
+            className={`rounded-2xl border-2 px-3 py-1.5 text-xs font-bold transition-transform hover:-translate-y-0.5 disabled:opacity-60 ${
+              STATUS_BADGE_CLASSES[to] ?? 'bg-cream border-ink/20 text-moss'
+            }`}
           >
             {pending === to && transition.isPending
               ? 'Advancing…'
@@ -284,15 +284,15 @@ function TransitionConfirmDialog({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-sm bg-white rounded-xl shadow-2xl p-5">
-        <h3 className="text-base font-semibold text-gray-900 mb-2">Advance event status?</h3>
-        <p className="text-sm text-gray-600 mb-1">
+      <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-sm bg-cream border-2 border-ink rounded-3xl shadow-card p-5">
+        <h3 className="font-display text-lg font-bold text-ink mb-2">Advance event status?</h3>
+        <p className="text-sm text-moss mb-1">
           Move this event from{' '}
-          <span className="font-medium text-gray-800">{EVENT_STATUS_LABELS[from]}</span> to{' '}
-          <span className="font-medium text-gray-800">{EVENT_STATUS_LABELS[to]}</span>?
+          <span className="font-semibold text-ink">{EVENT_STATUS_LABELS[from]}</span> to{' '}
+          <span className="font-semibold text-ink">{EVENT_STATUS_LABELS[to]}</span>?
         </p>
-        <p className="text-xs text-gray-400 mb-4">
+        <p className="text-xs text-moss/70 mb-4">
           All participants see the new phase immediately, and it may lock submissions or want lists.
         </p>
         <div className="flex gap-3">
@@ -300,7 +300,7 @@ function TransitionConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 disabled:opacity-60 transition-colors"
           >
             Cancel
           </button>
@@ -308,7 +308,7 @@ function TransitionConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={isPending}
-            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {isPending ? 'Advancing…' : 'Confirm'}
           </button>
@@ -419,8 +419,8 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
   }
 
   const inputCls = (hasErr: boolean) =>
-    `w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-      hasErr ? 'border-red-400' : 'border-gray-300'
+    `w-full rounded-xl border-2 bg-parchment px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage ${
+      hasErr ? 'border-red-400' : 'border-ink/15'
     }`
 
   return (
@@ -430,11 +430,11 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       aria-modal="true"
       aria-label="Edit event"
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Edit Event</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded" aria-label="Close">
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
+          <h2 className="font-display text-lg font-bold text-ink">Edit Event</h2>
+          <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label="Close">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -443,14 +443,14 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
 
         <div className="overflow-y-auto flex-1 px-5 py-4">
           {serverError && (
-            <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="mb-4 rounded-xl bg-red-50 border-2 border-red-200 px-3 py-2 text-sm font-medium text-red-700">
               {serverError}
             </div>
           )}
 
           <form id="edit-event-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-ink mb-1">
                 Event name <span className="text-red-500">*</span>
               </label>
               <input {...register('name')} className={inputCls(!!errors.name)} />
@@ -458,12 +458,12 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <label className="block text-sm font-semibold text-ink mb-1">Description</label>
               <textarea {...register('description')} rows={3} className={`${inputCls(false)} resize-none`} />
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dates</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Dates</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(
                   [
@@ -473,7 +473,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                   ] as const
                 ).map(([field, label]) => (
                   <div key={field}>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                    <label className="block text-xs font-semibold text-moss mb-1">{label}</label>
                     <input type="datetime-local" {...register(field)} className={inputCls(false)} />
                   </div>
                 ))}
@@ -481,7 +481,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Policies</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Policies</p>
               {(
                 [
                   ['shipping_rules', 'Shipping rules'],
@@ -490,25 +490,25 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                 ] as const
               ).map(([field, label]) => (
                 <div key={field}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                  <label className="block text-xs font-semibold text-moss mb-1">{label}</label>
                   <textarea {...register(field)} rows={2} className={`${inputCls(false)} resize-none`} />
                 </div>
               ))}
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Money trading</p>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Money trading</p>
+              <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('money_enabled')}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
                 Allow members to use money in trades
               </label>
               {moneyEnabled && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-semibold text-moss mb-1">
                     Max money per user (leave blank for no cap)
                   </label>
                   <input
@@ -524,12 +524,12 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location gate</p>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Location gate</p>
+              <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('require_location')}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
                 Require participants to have a geocoded location
               </label>
@@ -540,7 +540,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Center latitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">Center latitude</label>
                       <input
                         type="number"
                         step="any"
@@ -550,7 +550,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Center longitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">Center longitude</label>
                       <input
                         type="number"
                         step="any"
@@ -561,7 +561,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-xs font-semibold text-moss mb-1">
                       Max distance (km, leave blank for no radius limit)
                     </label>
                     <input
@@ -582,11 +582,11 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           </form>
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+        <div className="flex gap-3 px-5 py-4 border-t-2 border-ink/10">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Cancel
           </button>
@@ -594,7 +594,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             type="submit"
             form="edit-event-form"
             disabled={isSubmitting}
-            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {isSubmitting ? 'Saving…' : 'Save changes'}
           </button>
@@ -633,8 +633,8 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
 
   const cap = event.max_money_per_user
   return (
-    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
-      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+    <div className="rounded-3xl border-2 border-ink/15 bg-emerald-50 p-4">
+      <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">
         Your money budget
       </p>
       <p className="text-xs text-emerald-600 mb-2">
@@ -642,23 +642,23 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
         {cap ? ` Cap: ${cap}.` : ' No cap set.'}
       </p>
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-500">$</span>
+        <span className="text-sm font-semibold text-moss">$</span>
         <input
           type="number"
           min={0}
           step="0.01"
           value={effective}
           onChange={(e) => setValue(e.target.value)}
-          className="w-32 rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="w-32 rounded-xl border-2 border-ink/15 bg-parchment px-2.5 py-1.5 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-emerald-400"
         />
         <button
           onClick={handleSave}
           disabled={setBudget.isPending}
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+          className="rounded-2xl border-2 border-ink bg-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           {setBudget.isPending ? 'Saving…' : 'Save budget'}
         </button>
-        {saved && <span className="text-xs text-emerald-600">Saved ✓</span>}
+        {saved && <span className="text-xs font-semibold text-emerald-600">Saved ✓</span>}
       </div>
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
@@ -699,7 +699,7 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
       <select
         value={selectedCopyId}
         onChange={(e) => setSelectedCopyId(e.target.value)}
-        className="flex-1 py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="flex-1 py-2.5 pl-3 pr-8 text-sm border-2 border-ink/15 rounded-xl bg-parchment text-ink focus:outline-none focus:border-ink focus:ring-2 focus:ring-sage"
         aria-label="Select copy to add"
       >
         <option value="">Select a copy…</option>
@@ -712,7 +712,7 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
       <button
         onClick={handleAdd}
         disabled={!selectedCopyId || addListing.isPending}
-        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors shadow-sm whitespace-nowrap"
+        className="rounded-2xl border-2 border-ink bg-butter px-4 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 whitespace-nowrap"
       >
         {addListing.isPending ? 'Adding…' : 'Add to event'}
       </button>
@@ -754,11 +754,11 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-gray-800 mb-4">My Listings in This Event</h3>
+    <section className="rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
+      <h3 className="font-display text-base font-bold text-ink mb-4">My Listings in This Event</h3>
 
       {event.money_enabled && (
-        <p className="mb-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        <p className="mb-3 rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           The <strong>Min. ask</strong> is the lowest price you're willing to sell each game for —
           you won't be matched below it. Leave it blank to use your copy's default price.
         </p>
@@ -766,7 +766,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
 
       {/* Add form */}
       <div className="mb-4">
-        <p className="text-xs text-gray-500 mb-2">Add one of your active copies:</p>
+        <p className="text-xs text-moss mb-2">Add one of your active copies:</p>
         <AddListingForm slug={event.slug} existingCopyIds={myListingCopyIds} />
       </div>
 
@@ -774,11 +774,11 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-10 bg-gray-50 rounded animate-pulse" />
+            <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : myListings.length === 0 ? (
-        <p className="text-xs text-gray-400 py-2">No copies added yet.</p>
+        <p className="text-xs text-moss py-2">No copies added yet.</p>
       ) : (
         <div className="space-y-2">
           {removeError && <p className="text-xs text-red-600">{removeError}</p>}
@@ -788,35 +788,35 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
             return (
               <div
                 key={listing.id}
-                className="flex items-center gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                className="flex items-center gap-3 rounded-xl border-2 border-ink/10 bg-parchment px-3 py-2"
               >
                 {/* Game */}
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded bg-gray-100">
+                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-ink/10 bg-cream">
                     {listing.board_game_thumbnail ? (
                       <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : null}
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm font-medium text-gray-800 truncate block">
+                    <span className="text-sm font-semibold text-ink truncate block">
                       {listing.board_game_name}
                     </span>
-                    <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
+                    <span className="text-xs text-moss/70 font-mono">{listing.listing_code}</span>
                   </div>
                 </div>
 
                 {/* My rating — read-only, set in your profile */}
                 <div className="w-14 shrink-0 text-center" title="Your rating for this game (set in your profile)">
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">My rating</p>
-                  <p className="text-sm font-medium text-gray-700">{myRating != null ? myRating : '—'}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-moss/60">My rating</p>
+                  <p className="text-sm font-semibold text-ink">{myRating != null ? myRating : '—'}</p>
                 </div>
 
                 {/* Minimum asking price */}
                 {event.money_enabled && (
                   <div className="w-28 shrink-0">
-                    <label className="block text-[10px] uppercase tracking-wide text-gray-400">Min. ask</label>
+                    <label className="block text-[10px] uppercase tracking-wide text-moss/60">Min. ask</label>
                     <div className="flex items-center gap-1">
-                      <span className="text-xs text-gray-400">$</span>
+                      <span className="text-xs text-moss/60">$</span>
                       <input
                         key={`sp-${listing.id}-${listing.ask_is_override ? (listing.resolved_ask ?? '') : 'def'}`}
                         type="number"
@@ -838,7 +838,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
                             setSellPriceError(extractErrorMsg(err) ?? 'Failed to save price.')
                           }
                         }}
-                        className="w-20 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        className="w-20 rounded-lg border-2 border-ink/15 bg-cream px-2 py-1 text-xs text-ink placeholder-moss/40 focus:outline-none focus:ring-2 focus:ring-sage"
                       />
                     </div>
                   </div>
@@ -878,9 +878,9 @@ function DeadlineRow({ label, isoDate }: { label: string; isoDate: string | null
   })
   const isPast = d < new Date()
   return (
-    <div className="flex items-start justify-between gap-2 py-1.5 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-gray-500">{label}</span>
-      <span className={`text-xs font-medium ${isPast ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+    <div className="flex items-start justify-between gap-2 py-1.5 border-b border-ink/5 last:border-0">
+      <span className="text-xs text-moss">{label}</span>
+      <span className={`text-xs font-semibold ${isPast ? 'text-moss/50 line-through' : 'text-ink'}`}>
         {formatted}
       </span>
     </div>
@@ -913,10 +913,10 @@ export default function EventDetailPage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
-        <div className="h-8 w-2/3 bg-gray-100 rounded" />
-        <div className="h-4 w-1/3 bg-gray-100 rounded" />
-        <div className="h-24 bg-gray-100 rounded-xl" />
-        <div className="h-48 bg-gray-100 rounded-xl" />
+        <div className="h-8 w-2/3 bg-gray-200 rounded-full" />
+        <div className="h-4 w-1/3 bg-gray-200 rounded-full" />
+        <div className="h-24 bg-gray-200 rounded-3xl" />
+        <div className="h-48 bg-gray-200 rounded-3xl" />
       </div>
     )
   }
@@ -924,9 +924,9 @@ export default function EventDetailPage() {
   if (isError || !event) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
+        <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-red-700">Event not found or failed to load.</p>
+          <Link to="/events" className="mt-3 inline-block text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2">
             Back to events
           </Link>
         </div>
@@ -949,7 +949,7 @@ export default function EventDetailPage() {
       {/* Back link */}
       <Link
         to="/events"
-        className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+        className="inline-flex items-center gap-1 text-xs font-medium text-moss hover:text-ink transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -958,16 +958,16 @@ export default function EventDetailPage() {
       </Link>
 
       {/* Header card */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
+      <div className="rounded-3xl border-2 border-ink bg-cream p-5 sm:p-6 shadow-card">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
-              <h1 className="text-xl font-bold text-gray-900 leading-tight break-words">{event.name}</h1>
+              <h1 className="text-2xl font-bold text-ink leading-tight break-words">{event.name}</h1>
               <StatusBadge status={event.status} />
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-moss">
               Organized by{' '}
-              <Link to={`/u/${event.organizer_username}`} className="text-indigo-500 hover:underline">
+              <Link to={`/u/${event.organizer_username}`} className="font-semibold text-ink hover:underline">
                 {event.organizer_username}
               </Link>
               {' · '}
@@ -995,7 +995,7 @@ export default function EventDetailPage() {
             {event.is_organizer && (
               <Link
                 to={`/events/${event.slug}/manage`}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-2xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
               >
                 Manage
               </Link>
@@ -1003,7 +1003,7 @@ export default function EventDetailPage() {
             {event.is_organizer && (
               <button
                 onClick={() => setEditOpen(true)}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-2xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
               >
                 Edit
               </button>
@@ -1019,7 +1019,7 @@ export default function EventDetailPage() {
 
         {/* Description */}
         {event.description && (
-          <p className="text-sm text-gray-600 leading-relaxed mt-4 whitespace-pre-wrap">
+          <p className="text-sm text-moss leading-relaxed mt-4 whitespace-pre-wrap">
             {event.description}
           </p>
         )}
@@ -1034,8 +1034,8 @@ export default function EventDetailPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Deadlines */}
         {hasAnyDeadlines && (
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <div className="rounded-3xl border-2 border-ink/15 bg-cream p-4">
+            <h3 className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
               Schedule
             </h3>
             <DeadlineRow label="Submissions open" isoDate={event.submissions_open_at} />
@@ -1046,26 +1046,26 @@ export default function EventDetailPage() {
 
         {/* Policies */}
         {hasPolicies && (
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          <div className="rounded-3xl border-2 border-ink/15 bg-cream p-4">
+            <h3 className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
               Policies
             </h3>
             {event.shipping_rules && (
               <div className="mb-3">
-                <p className="text-xs font-medium text-gray-600 mb-0.5">Shipping rules</p>
-                <p className="text-xs text-gray-500 whitespace-pre-wrap">{event.shipping_rules}</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">Shipping rules</p>
+                <p className="text-xs text-moss whitespace-pre-wrap">{event.shipping_rules}</p>
               </div>
             )}
             {event.regional_restrictions && (
               <div className="mb-3">
-                <p className="text-xs font-medium text-gray-600 mb-0.5">Regional restrictions</p>
-                <p className="text-xs text-gray-500 whitespace-pre-wrap">{event.regional_restrictions}</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">Regional restrictions</p>
+                <p className="text-xs text-moss whitespace-pre-wrap">{event.regional_restrictions}</p>
               </div>
             )}
             {event.trade_policies && (
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-0.5">Trade policies</p>
-                <p className="text-xs text-gray-500 whitespace-pre-wrap">{event.trade_policies}</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">Trade policies</p>
+                <p className="text-xs text-moss whitespace-pre-wrap">{event.trade_policies}</p>
               </div>
             )}
           </div>
@@ -1074,19 +1074,19 @@ export default function EventDetailPage() {
 
       {/* My Wants (participant only) — primary; advanced X-to-Y builder secondary */}
       {token && (event.is_participant || event.is_organizer) && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 flex items-center justify-between gap-3">
+        <div className="rounded-3xl border-2 border-ink/15 bg-sage/30 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-indigo-800">My Wants</p>
-            <p className="text-xs text-indigo-500 mt-0.5">
+            <p className="text-sm font-bold text-ink">My Wants</p>
+            <p className="text-xs text-moss mt-0.5">
               For each item you offer, pick the games you'd accept in return.{' '}
-              <Link to={`/events/${event.slug}/builder`} className="underline hover:text-indigo-700">
+              <Link to={`/events/${event.slug}/builder`} className="font-semibold underline decoration-coral decoration-2 underline-offset-2 hover:text-ink">
                 Advanced X-to-Y builder
               </Link>
             </p>
           </div>
           <Link
             to={`/events/${event.slug}/wants`}
-            className="shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm"
+            className="shrink-0 rounded-2xl border-2 border-ink bg-butter px-4 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
             Open My Wants
           </Link>
@@ -1105,10 +1105,10 @@ export default function EventDetailPage() {
 
       {/* Matching section link */}
       {(['MATCHING', 'MATCH_REVIEW', 'FINALIZATION', 'SHIPPING', 'ARCHIVED'] as EventStatus[]).includes(event.status) && (
-        <div className="rounded-xl border border-violet-100 bg-violet-50 p-4 flex items-center justify-between gap-3">
+        <div className="rounded-3xl border-2 border-ink/15 bg-violet-100/60 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-violet-800">Match Runs</p>
-            <p className="text-xs text-violet-500 mt-0.5">
+            <p className="text-sm font-bold text-violet-900">Match Runs</p>
+            <p className="text-xs text-violet-600 mt-0.5">
               {event.is_organizer
                 ? 'Trigger and review match runs for this event.'
                 : 'View your trade assignments and cycle diagrams.'}
@@ -1116,7 +1116,7 @@ export default function EventDetailPage() {
           </div>
           <Link
             to={`/events/${event.slug}/matches`}
-            className="shrink-0 rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 transition-colors shadow-sm"
+            className="shrink-0 rounded-2xl border-2 border-ink bg-violet-300 px-4 py-2 text-sm font-bold text-violet-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {event.is_organizer ? 'Manage Matching' : 'View Results'}
           </Link>

@@ -53,7 +53,7 @@ function BggImportButton({
 
   if (!profile?.bgg_username) {
     return (
-      <span className="text-xs text-gray-400">
+      <span className="text-xs text-moss/70">
         Set your BoardGameGeek username in the Profile tab to enable.
       </span>
     )
@@ -71,7 +71,7 @@ function BggImportButton({
             .catch(() => setMsg('Could not start the import. Try again.'))
         }}
         disabled={running || start.isPending}
-        className="rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
+        className="rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
       >
         {running ? 'Working…' : label}
       </button>
@@ -175,7 +175,7 @@ function ProfileEdit() {
     }
   }, [profile, reset])
 
-  if (isLoading) return <p className="text-sm text-gray-500">Loading profile…</p>
+  if (isLoading) return <p className="text-sm text-moss">Loading profile…</p>
   if (error) return <p className="text-sm text-red-600">Failed to load profile.</p>
 
   const onSubmit = (values: ProfileFormValues) => {
@@ -210,15 +210,15 @@ function ProfileEdit() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h2>
+      <h2 className="text-lg font-semibold text-ink mb-4">Edit Profile</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
         {saveErrorMsg && (
-          <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+          <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
             {saveErrorMsg}
           </div>
         )}
         {saveMsg && (
-          <div className="rounded-md bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-700">
+          <div className="rounded-xl bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-700">
             {saveMsg}
           </div>
         )}
@@ -227,7 +227,7 @@ function ProfileEdit() {
           if (name === 'location') {
             return (
               <div key={name} className="relative">
-                <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="location" className="block text-sm font-medium text-ink mb-1">
                   {label}
                 </label>
                 <input
@@ -241,15 +241,15 @@ function ProfileEdit() {
                   {...register('location')}
                   onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors.location ? 'border-red-400' : 'border-gray-300'
+                  className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors.location ? 'border-red-400' : 'border-ink/20'
                   }`}
                 />
                 {showSuggestions && suggestions.length > 0 && (
                   <ul
                     id="location-suggestions"
                     role="listbox"
-                    className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg"
+                    className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-xl border border-ink/15 bg-white shadow-lg"
                   >
                     {suggestions.map((s) => (
                       <li key={`${s.display_name}-${s.lat}-${s.lon}`} role="option" aria-selected={false}>
@@ -262,7 +262,7 @@ function ProfileEdit() {
                             setValue('location', s.display_name, { shouldDirty: true })
                             setShowSuggestions(false)
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-indigo-50"
+                          className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-indigo-50"
                         >
                           {s.display_name}
                         </button>
@@ -278,7 +278,7 @@ function ProfileEdit() {
           }
           return (
             <div key={name}>
-              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor={name} className="block text-sm font-medium text-ink mb-1">
                 {label}
               </label>
               {multiline ? (
@@ -286,8 +286,8 @@ function ProfileEdit() {
                   id={name}
                   rows={3}
                   {...register(name)}
-                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-ink/20'
                   }`}
                 />
               ) : (
@@ -295,8 +295,8 @@ function ProfileEdit() {
                   id={name}
                   type="text"
                   {...register(name)}
-                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    errors[name] ? 'border-red-400' : 'border-gray-300'
+                  className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    errors[name] ? 'border-red-400' : 'border-ink/20'
                   }`}
                 />
               )}
@@ -308,7 +308,7 @@ function ProfileEdit() {
         })}
 
         {/* Geocoded coordinates (read-only feedback) */}
-        <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-500">
+        <div className="rounded-xl bg-gray-50 border border-ink/15 px-3 py-2 text-xs text-moss">
           {profile?.latitude != null && profile?.longitude != null ? (
             <span>
               Geocoded: {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
@@ -320,7 +320,7 @@ function ProfileEdit() {
 
         {/* Trade distance limit */}
         <div>
-          <label htmlFor="max_trade_distance_km" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="max_trade_distance_km" className="block text-sm font-medium text-ink mb-1">
             Forbid trades farther than (km)
           </label>
           <input
@@ -330,14 +330,14 @@ function ProfileEdit() {
             step={1}
             placeholder="Leave blank for no limit"
             {...register('max_trade_distance_km')}
-            className="w-full sm:max-w-[12rem] rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full sm:max-w-[12rem] rounded-xl border border-ink/20 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
 
         <button
           type="submit"
           disabled={mutation.isPending || !isDirty}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          className="rounded-2xl border-2 border-ink bg-butter px-5 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
         >
           {mutation.isPending ? 'Saving…' : 'Save changes'}
         </button>
@@ -376,7 +376,7 @@ function BlocksSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-gray-800 mb-3">Blocked Users</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">Blocked Users</h2>
 
       <div className="flex gap-2 mb-4 max-w-sm">
         <input
@@ -384,7 +384,7 @@ function BlocksSection() {
           placeholder="Username to block"
           value={blockInput}
           onChange={(e) => setBlockInput(e.target.value)}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
           onClick={() => {
@@ -393,7 +393,7 @@ function BlocksSection() {
             addMutation.mutate()
           }}
           disabled={addMutation.isPending || !blockInput.trim()}
-          className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-60 transition-colors"
+          className="rounded-2xl border-2 border-ink bg-red-400 px-4 py-1.5 text-sm font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           Block
         </button>
@@ -404,14 +404,14 @@ function BlocksSection() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <p className="text-sm text-moss">Loading…</p>
       ) : !blocks || blocks.length === 0 ? (
-        <p className="text-sm text-gray-400">No blocked users.</p>
+        <p className="text-sm text-moss/70">No blocked users.</p>
       ) : (
-        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md max-w-sm">
+        <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-sm">
           {blocks.map((b) => (
             <li key={b.id} className="flex items-center justify-between px-3 py-2">
-              <span className="text-sm text-gray-800">{b.blocked}</span>
+              <span className="text-sm text-ink">{b.blocked}</span>
               <button
                 onClick={() => removeMutation.mutate(b.id)}
                 disabled={removeMutation.isPending}
@@ -470,7 +470,7 @@ function WishlistSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-gray-800 mb-3">Wishlist</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">Wishlist</h2>
 
       <div className="mb-4">
         <BggImportButton
@@ -487,19 +487,19 @@ function WishlistSection() {
           value={bggId}
           min={1}
           onChange={(e) => setBggId(e.target.value)}
-          className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-28 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <input
           type="text"
           placeholder="Note (optional)"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          className="flex-1 min-w-0 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="flex-1 min-w-0 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button
           onClick={handleAdd}
           disabled={addMutation.isPending || !bggId.trim()}
-          className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          className="rounded-2xl border-2 border-ink bg-butter px-4 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           Add
         </button>
@@ -508,16 +508,16 @@ function WishlistSection() {
       {addError && <p className="mb-3 text-sm text-red-600">{addError}</p>}
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <p className="text-sm text-moss">Loading…</p>
       ) : !entries || entries.length === 0 ? (
-        <p className="text-sm text-gray-400">Your wishlist is empty.</p>
+        <p className="text-sm text-moss/70">Your wishlist is empty.</p>
       ) : (
-        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md max-w-lg">
+        <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-lg">
           {entries.map((e) => (
             <li key={e.id} className="flex items-center justify-between px-3 py-2 gap-2">
               <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-800">BGG #{e.board_game_bgg_id}</span>
-                {e.note && <span className="ml-2 text-xs text-gray-500 truncate">{e.note}</span>}
+                <span className="text-sm font-medium text-ink">BGG #{e.board_game_bgg_id}</span>
+                {e.note && <span className="ml-2 text-xs text-moss truncate">{e.note}</span>}
               </div>
               <button
                 onClick={() => removeMutation.mutate(e.id)}
@@ -546,7 +546,7 @@ function RatingsSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-gray-800 mb-3">Game Ratings</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">Game Ratings</h2>
 
       <div className="mb-4">
         <BggImportButton
@@ -561,22 +561,22 @@ function RatingsSection() {
         placeholder="Filter your rated games…"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
-        className="w-full max-w-sm mb-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full max-w-sm mb-3 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
+        <p className="text-sm text-moss">Loading…</p>
       ) : shown.length === 0 ? (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-moss/70">
           {ratings.length === 0
             ? 'No ratings yet. Import from BGG or rate games in the want builder.'
             : 'No matches.'}
         </p>
       ) : (
-        <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md max-w-sm">
+        <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-sm">
           {shown.map((r) => (
             <li key={r.id} className="flex items-center justify-between px-3 py-2 gap-2">
-              <span className="text-sm text-gray-800 truncate">{r.board_game_name}</span>
+              <span className="text-sm text-ink truncate">{r.board_game_name}</span>
               <span className="text-sm font-semibold text-indigo-600">{Number(r.value)}</span>
             </li>
           ))}
@@ -599,10 +599,10 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">My Account</h1>
+      <h1 className="text-2xl font-bold text-ink mb-6">My Account</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+      <div className="flex gap-1 border-b border-ink/15 mb-6 overflow-x-auto">
         {tabs.map(({ key, label }) => (
           <button
             key={key}
@@ -610,7 +610,7 @@ export default function ProfilePage() {
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               tab === key
                 ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-moss hover:text-ink'
             }`}
           >
             {label}

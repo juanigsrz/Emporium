@@ -61,23 +61,23 @@ function Pagination({ page, total, pageSize, onChange }: PaginationProps) {
       <button
         onClick={() => onChange(page - 1)}
         disabled={page === 1}
-        className="px-2.5 py-1.5 text-sm rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="px-3 py-1.5 text-sm font-semibold rounded-2xl border-2 border-ink/15 bg-cream text-moss hover:bg-sage/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         aria-label="Previous page"
       >
         ‹ Prev
       </button>
       {pages.map((p, i) =>
         p === 'ellipsis' ? (
-          <span key={`ell-${i}`} className="px-2 py-1.5 text-sm text-gray-400">…</span>
+          <span key={`ell-${i}`} className="px-2 py-1.5 text-sm font-bold text-moss/60">…</span>
         ) : (
           <button
             key={p}
             onClick={() => onChange(p)}
             aria-current={p === page ? 'page' : undefined}
-            className={`min-w-[2rem] px-2.5 py-1.5 text-sm rounded border transition-colors ${
+            className={`min-w-[2.25rem] px-2.5 py-1.5 text-sm rounded-2xl border-2 transition-colors ${
               p === page
-                ? 'bg-indigo-600 border-indigo-600 text-white font-semibold'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                ? 'bg-butter border-ink text-ink font-bold shadow-pop-sm'
+                : 'border-ink/15 bg-cream text-moss hover:bg-sage/40'
             }`}
           >
             {p}
@@ -87,7 +87,7 @@ function Pagination({ page, total, pageSize, onChange }: PaginationProps) {
       <button
         onClick={() => onChange(page + 1)}
         disabled={page === Math.ceil(total / pageSize)}
-        className="px-2.5 py-1.5 text-sm rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="px-3 py-1.5 text-sm font-semibold rounded-2xl border-2 border-ink/15 bg-cream text-moss hover:bg-sage/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         aria-label="Next page"
       >
         Next ›
@@ -117,20 +117,20 @@ function EventCard({ event }: { event: TradeEventListItem }) {
   return (
     <Link
       to={`/events/${event.slug}`}
-      className="group block rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+      className="group block rounded-3xl border-2 border-ink bg-cream p-4 shadow-card transition-transform hover:-translate-y-1.5"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors line-clamp-2 leading-snug">
+        <h3 className="font-display text-base font-bold text-ink line-clamp-2 leading-snug">
           {event.name}
         </h3>
         <StatusBadge status={event.status} />
       </div>
 
       {event.description && (
-        <p className="text-xs text-gray-500 line-clamp-2 mb-3">{event.description}</p>
+        <p className="text-xs text-moss line-clamp-2 mb-3">{event.description}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-moss/70">
         <span className="flex items-center gap-1">
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -156,12 +156,12 @@ function EventCard({ event }: { event: TradeEventListItem }) {
       {(event.is_organizer || event.is_participant) && (
         <div className="mt-3 flex gap-1.5">
           {event.is_organizer && (
-            <span className="text-xs border border-indigo-200 text-indigo-600 bg-indigo-50 rounded px-1.5 py-0.5 font-medium">
+            <span className="text-xs border border-ink/15 bg-butter/60 text-ink rounded-full px-2.5 py-0.5 font-semibold">
               Organizer
             </span>
           )}
           {event.is_participant && !event.is_organizer && (
-            <span className="text-xs border border-green-200 text-green-600 bg-green-50 rounded px-1.5 py-0.5 font-medium">
+            <span className="text-xs border border-ink/15 bg-sage/60 text-ink rounded-full px-2.5 py-0.5 font-semibold">
               Joined
             </span>
           )}
@@ -175,18 +175,18 @@ function EventCard({ event }: { event: TradeEventListItem }) {
 
 function EventCardSkeleton() {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 animate-pulse">
+    <div className="rounded-3xl border-2 border-ink/15 bg-cream p-4 animate-pulse">
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="h-4 w-2/3 bg-gray-100 rounded" />
-        <div className="h-5 w-16 bg-gray-100 rounded" />
+        <div className="h-4 w-2/3 bg-gray-200 rounded-full" />
+        <div className="h-5 w-16 bg-gray-200 rounded-full" />
       </div>
       <div className="space-y-1.5 mb-3">
-        <div className="h-3 w-full bg-gray-100 rounded" />
-        <div className="h-3 w-4/5 bg-gray-100 rounded" />
+        <div className="h-3 w-full bg-gray-200 rounded-full" />
+        <div className="h-3 w-4/5 bg-gray-200 rounded-full" />
       </div>
       <div className="flex gap-3">
-        <div className="h-3 w-16 bg-gray-100 rounded" />
-        <div className="h-3 w-20 bg-gray-100 rounded" />
+        <div className="h-3 w-16 bg-gray-200 rounded-full" />
+        <div className="h-3 w-20 bg-gray-200 rounded-full" />
       </div>
     </div>
   )
@@ -293,8 +293,8 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
   }
 
   const inputCls = (hasErr: boolean) =>
-    `w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-      hasErr ? 'border-red-400' : 'border-gray-300'
+    `w-full rounded-xl border-2 bg-parchment px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage ${
+      hasErr ? 'border-red-400' : 'border-ink/15'
     }`
 
   return (
@@ -304,14 +304,14 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
       aria-modal="true"
       aria-label="Create trade event"
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-xl bg-white rounded-t-2xl sm:rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Create Trade Event</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
+          <h2 className="font-display text-lg font-bold text-ink">Create Trade Event</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 rounded"
+            className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -323,7 +323,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
         {/* Form */}
         <div className="overflow-y-auto flex-1 px-5 py-4">
           {serverError && (
-            <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="mb-4 rounded-xl bg-red-50 border-2 border-red-200 px-3 py-2 text-sm font-medium text-red-700">
               {serverError}
             </div>
           )}
@@ -331,7 +331,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
           <form id="create-event-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-ink mb-1">
                 Event name <span className="text-red-500">*</span>
               </label>
               <input
@@ -346,7 +346,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <label className="block text-sm font-semibold text-ink mb-1">Description</label>
               <textarea
                 {...register('description')}
                 rows={3}
@@ -357,10 +357,10 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
             {/* Dates */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dates (optional)</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Dates (optional)</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-semibold text-moss mb-1">
                     Submissions open
                   </label>
                   <input
@@ -370,7 +370,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-semibold text-moss mb-1">
                     Submissions close
                   </label>
                   <input
@@ -380,7 +380,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-semibold text-moss mb-1">
                     Want list closes
                   </label>
                   <input
@@ -394,9 +394,9 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
             {/* Policies */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Policies (optional)</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Policies (optional)</p>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Shipping rules</label>
+                <label className="block text-xs font-semibold text-moss mb-1">Shipping rules</label>
                 <textarea
                   {...register('shipping_rules')}
                   rows={2}
@@ -405,7 +405,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
+                <label className="block text-xs font-semibold text-moss mb-1">
                   Regional restrictions
                 </label>
                 <textarea
@@ -416,7 +416,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Trade policies</label>
+                <label className="block text-xs font-semibold text-moss mb-1">Trade policies</label>
                 <textarea
                   {...register('trade_policies')}
                   rows={2}
@@ -428,18 +428,18 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
             {/* Money trading */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Money trading</p>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Money trading</p>
+              <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('money_enabled')}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
                 Allow members to use money in trades
               </label>
               {moneyEnabled && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-semibold text-moss mb-1">
                     Max money per user (leave blank for no cap)
                   </label>
                   <input
@@ -456,23 +456,23 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
             {/* Location gate */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Location gate</p>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">Location gate</p>
+              <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('require_location')}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
                 Require participants to have a geocoded location
               </label>
               {requireLocation && (
                 <div className="space-y-3">
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-moss/70">
                     Optionally restrict to a geographic radius (leave lat/lng blank to only require location, without radius filtering).
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Center latitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">Center latitude</label>
                       <input
                         type="number"
                         step="any"
@@ -482,7 +482,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Center longitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">Center longitude</label>
                       <input
                         type="number"
                         step="any"
@@ -493,7 +493,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                    <label className="block text-xs font-semibold text-moss mb-1">
                       Max distance (km, leave blank for no radius limit)
                     </label>
                     <input
@@ -512,11 +512,11 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+        <div className="flex gap-3 px-5 py-4 border-t-2 border-ink/10">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Cancel
           </button>
@@ -524,7 +524,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
             type="submit"
             form="create-event-form"
             disabled={isSubmitting}
-            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {isSubmitting ? 'Creating…' : 'Create event'}
           </button>
@@ -603,9 +603,9 @@ export default function EventsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Trade Events</h1>
+          <h1 className="text-3xl font-bold text-ink tracking-tight">Trade Events</h1>
           {data && !isLoading && (
-            <p className="mt-0.5 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-moss">
               {data.count.toLocaleString()} event{data.count !== 1 ? 's' : ''}
               {debouncedSearch ? ` matching "${debouncedSearch}"` : ''}
             </p>
@@ -615,9 +615,9 @@ export default function EventsPage() {
         {token ? (
           <button
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm self-start whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-2xl border-2 border-ink bg-butter px-5 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 self-start whitespace-nowrap"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Create event
@@ -625,7 +625,7 @@ export default function EventsPage() {
         ) : (
           <Link
             to="/login"
-            className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition-colors self-start whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-2xl border-2 border-ink/20 bg-cream px-5 py-2.5 text-sm font-semibold text-moss hover:bg-sage/40 transition-colors self-start whitespace-nowrap"
           >
             Login to create event
           </Link>
@@ -646,7 +646,7 @@ export default function EventsPage() {
             placeholder="Search events…"
             value={searchInput}
             onChange={handleSearchChange}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full pl-9 pr-3 py-2.5 text-sm border-2 border-ink/15 bg-cream rounded-2xl focus:outline-none focus:ring-2 focus:ring-sage focus:border-ink"
           />
           {isFetching && !isLoading && (
             <span className="absolute inset-y-0 right-3 flex items-center">
@@ -662,7 +662,7 @@ export default function EventsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatus(e.target.value)}
-          className="py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+          className="py-2.5 pl-3 pr-8 text-sm border-2 border-ink/15 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sage bg-cream font-medium text-ink"
           aria-label="Filter by status"
         >
           {STATUS_OPTIONS.map((o) => (
@@ -673,8 +673,8 @@ export default function EventsPage() {
 
       {/* Content */}
       {isError ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm font-medium text-red-700">Could not load events.</p>
+        <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-red-700">Could not load events.</p>
           <p className="mt-1 text-xs text-red-500">Check your connection or try again later.</p>
         </div>
       ) : isLoading ? (
@@ -685,11 +685,11 @@ export default function EventsPage() {
         </div>
       ) : data && data.results.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-12 h-12 text-moss/40 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <p className="text-base font-medium text-gray-600">No events found</p>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-base font-semibold text-ink">No events found</p>
+          <p className="text-sm text-moss mt-1">
             {debouncedSearch || statusFilter
               ? 'Try adjusting your filters.'
               : 'Be the first to create a trade event!'}

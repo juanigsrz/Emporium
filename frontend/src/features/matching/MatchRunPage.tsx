@@ -88,22 +88,22 @@ function RunListItem({
   return (
     <button
       onClick={onSelect}
-      className={`w-full text-left rounded-lg border px-4 py-3 transition-colors ${
+      className={`w-full text-left rounded-2xl border px-4 py-3 transition-colors ${
         selected
           ? 'border-indigo-300 bg-indigo-50'
-          : 'border-gray-200 bg-white hover:bg-gray-50'
+          : 'border-ink/15 bg-white hover:bg-gray-50'
       }`}
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-gray-400">#{run.id}</span>
+          <span className="text-xs font-mono text-moss/70">#{run.id}</span>
           <StatusPill status={run.status} />
-          <span className="text-xs text-gray-400">{run.algorithm}</span>
+          <span className="text-xs text-moss/70">{run.algorithm}</span>
         </div>
-        <span className="text-xs text-gray-400">{formatDate(run.created)}</span>
+        <span className="text-xs text-moss/70">{formatDate(run.created)}</span>
       </div>
       {run.summary && run.status === 'DONE' && (
-        <div className="mt-1.5 flex items-center gap-3 text-xs text-gray-500">
+        <div className="mt-1.5 flex items-center gap-3 text-xs text-moss">
           <span>{run.summary.cycles} cycle{run.summary.cycles !== 1 ? 's' : ''}</span>
           <span>{run.summary.matched_wishes} matched</span>
           <span>{run.summary.unmatched} unmatched</span>
@@ -134,7 +134,7 @@ function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (i
       <button
         onClick={handleClick}
         disabled={trigger.isPending}
-        className="rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60 transition-colors shadow-sm"
+        className="rounded-2xl border-2 border-ink bg-violet-400 px-4 py-2 text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
       >
         {trigger.isPending ? 'Triggering…' : 'Run matching'}
       </button>
@@ -194,11 +194,11 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
   }
 
   return (
-    <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 space-y-2 w-full sm:w-80">
+    <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 space-y-2 w-full sm:w-80">
       <button
         onClick={handleDownload}
         disabled={downloading}
-        className="w-full rounded-md bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-60 transition-colors shadow-sm"
+        className="w-full rounded-2xl border-2 border-ink bg-violet-400 px-4 py-2 text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
       >
         {downloading ? 'Preparing…' : 'Download wants.txt'}
       </button>
@@ -212,25 +212,25 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
             onChange={(e) => setOutput(e.target.value)}
             placeholder="Paste solver output…"
             rows={4}
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
           <input
             type="file"
             accept=".txt,text/plain"
             onChange={handleFile}
-            className="block w-full text-xs text-gray-500 file:mr-2 file:rounded file:border-0 file:bg-violet-100 file:px-2 file:py-1 file:text-violet-700"
+            className="block w-full text-xs text-moss file:mr-2 file:rounded file:border-0 file:bg-violet-100 file:px-2 file:py-1 file:text-violet-700"
           />
           <div className="flex gap-2">
             <button
               onClick={() => { setOpen(false); setError(null) }}
-              className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleUpload}
               disabled={upload.isPending}
-              className="flex-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500 disabled:opacity-60 transition-colors"
+              className="flex-1 rounded-xl border-2 border-ink bg-violet-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
               {upload.isPending ? 'Uploading…' : 'Upload solution'}
             </button>
@@ -239,7 +239,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="w-full rounded-md border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+          className="w-full rounded-xl border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
         >
           Upload solution…
         </button>
@@ -256,7 +256,7 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 
   if (!run) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-5 animate-pulse">
+      <div className="rounded-xl border border-ink/15 bg-white p-5 animate-pulse">
         <div className="h-4 bg-gray-100 rounded w-1/3 mb-3" />
         <div className="h-24 bg-gray-100 rounded" />
       </div>
@@ -264,31 +264,31 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+    <div className="rounded-xl border border-ink/15 bg-white p-5 space-y-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-semibold text-gray-800">Run #{run.id}</span>
+        <span className="text-sm font-semibold text-ink">Run #{run.id}</span>
         <StatusPill status={run.status} />
         {run.status === 'PENDING' || run.status === 'RUNNING' ? (
-          <span className="text-xs text-gray-400 animate-pulse">Polling every 2s…</span>
+          <span className="text-xs text-moss/70 animate-pulse">Polling every 2s…</span>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-500">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-moss">
         <div>
-          <p className="font-medium text-gray-700 mb-0.5">Algorithm</p>
+          <p className="font-medium text-ink mb-0.5">Algorithm</p>
           <p>{run.algorithm}</p>
         </div>
         <div>
-          <p className="font-medium text-gray-700 mb-0.5">Started</p>
+          <p className="font-medium text-ink mb-0.5">Started</p>
           <p>{formatDate(run.started_at)}</p>
         </div>
         <div>
-          <p className="font-medium text-gray-700 mb-0.5">Finished</p>
+          <p className="font-medium text-ink mb-0.5">Finished</p>
           <p>{formatDate(run.finished_at)}</p>
         </div>
         {run.summary && (
           <div>
-            <p className="font-medium text-gray-700 mb-0.5">Summary</p>
+            <p className="font-medium text-ink mb-0.5">Summary</p>
             <p>{run.summary.cycles} cycles · {run.summary.matched_wishes} matched</p>
           </div>
         )}
@@ -296,8 +296,8 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 
       {run.log && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Log</p>
-          <pre className="rounded-md bg-gray-950 text-gray-200 text-xs p-3 overflow-x-auto whitespace-pre-wrap max-h-56 font-mono leading-relaxed">
+          <p className="text-xs font-semibold text-moss uppercase tracking-wide mb-1.5">Log</p>
+          <pre className="rounded-xl bg-gray-950 text-gray-200 text-xs p-3 overflow-x-auto whitespace-pre-wrap max-h-56 font-mono leading-relaxed">
             {run.log}
           </pre>
         </div>
@@ -332,12 +332,12 @@ function MyTradesSection({
           Giving ({giveList.length})
         </p>
         {giveList.length === 0 ? (
-          <p className="text-sm text-gray-400">You are not giving anything in this run.</p>
+          <p className="text-sm text-moss/70">You are not giving anything in this run.</p>
         ) : (
           giveList.map((a) => (
             <div
               key={a.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 flex items-start gap-3"
+              className="rounded-2xl border border-ink/15 bg-white p-4 flex items-start gap-3"
             >
               <div className="shrink-0 w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
                 <svg className="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -347,9 +347,9 @@ function MyTradesSection({
               <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">You give</p>
-                <p className="text-sm font-medium text-gray-900 truncate">{a.board_game_name}</p>
-                <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
+                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+                <p className="text-xs text-moss mt-0.5">
                   to{' '}
                   <Link
                     to={`/u/${a.receiver_username}`}
@@ -370,12 +370,12 @@ function MyTradesSection({
           Receiving ({receiveList.length})
         </p>
         {receiveList.length === 0 ? (
-          <p className="text-sm text-gray-400">You are not receiving anything in this run.</p>
+          <p className="text-sm text-moss/70">You are not receiving anything in this run.</p>
         ) : (
           receiveList.map((a) => (
             <div
               key={a.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 flex items-start gap-3"
+              className="rounded-2xl border border-ink/15 bg-white p-4 flex items-start gap-3"
             >
               <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
                 <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -385,9 +385,9 @@ function MyTradesSection({
               <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">You receive</p>
-                <p className="text-sm font-medium text-gray-900 truncate">{a.board_game_name}</p>
-                <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
+                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+                <p className="text-xs text-moss mt-0.5">
                   from{' '}
                   <Link
                     to={`/u/${a.giver_username}`}
@@ -423,33 +423,33 @@ function MyTradesSection({
             </p>
 
             {bought.map((a) => (
-              <div key={`buy-${a.id}`} className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-sm text-gray-900">
+              <div key={`buy-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
+                <p className="text-sm text-ink">
                   You bought <span className="font-semibold">{a.board_game_name}</span> for{' '}
                   <span className="font-semibold">${a.item_value}</span> from{' '}
                   <Link to={`/u/${a.giver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.giver_username}
                   </Link>
                 </p>
-                <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
+                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
               </div>
             ))}
 
             {sold.map((a) => (
-              <div key={`sell-${a.id}`} className="rounded-lg border border-gray-200 bg-white p-4">
-                <p className="text-sm text-gray-900">
+              <div key={`sell-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
+                <p className="text-sm text-ink">
                   You sold <span className="font-semibold">{a.board_game_name}</span> for{' '}
                   <span className="font-semibold">${a.item_value}</span> to{' '}
                   <Link to={`/u/${a.receiver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.receiver_username}
                   </Link>
                 </p>
-                <p className="text-xs text-gray-400 font-mono">{a.listing_code}</p>
+                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
               </div>
             ))}
 
             {/* Net balance — the "why" */}
-            <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
               {net > 0 ? (
                 <span>Net balance: <strong className="text-red-700">you owe ${net.toFixed(2)}</strong></span>
               ) : net < 0 ? (
@@ -616,12 +616,12 @@ function CycleDiagram({ cycle }: { cycle: Cycle }) {
               {i + 1}
             </span>
             <div className="min-w-0">
-              <span className="font-medium text-gray-800">{step.from_user}</span>
-              <span className="text-gray-400 mx-1">gives</span>
+              <span className="font-medium text-ink">{step.from_user}</span>
+              <span className="text-moss/70 mx-1">gives</span>
               <span className="text-indigo-700 font-medium">{step.board_game}</span>
-              <span className="text-gray-400 text-xs ml-1 font-mono">({step.listing_code})</span>
-              <span className="text-gray-400 mx-1">to</span>
-              <span className="font-medium text-gray-800">{step.to_user}</span>
+              <span className="text-moss/70 text-xs ml-1 font-mono">({step.listing_code})</span>
+              <span className="text-moss/70 mx-1">to</span>
+              <span className="font-medium text-ink">{step.to_user}</span>
             </div>
           </div>
         ))}
@@ -632,18 +632,18 @@ function CycleDiagram({ cycle }: { cycle: Cycle }) {
         {cycle.steps.map((step, i) => (
           <div
             key={i}
-            className="flex flex-wrap items-center gap-1 text-xs text-gray-600 border-b border-gray-50 last:border-0 py-1"
+            className="flex flex-wrap items-center gap-1 text-xs text-moss border-b border-gray-50 last:border-0 py-1"
           >
-            <span className="font-semibold text-gray-800">{step.from_user}</span>
-            <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <span className="font-semibold text-ink">{step.from_user}</span>
+            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
             </svg>
             <span className="font-mono text-indigo-700">{step.listing_code}</span>
-            <span className="text-gray-500">"{step.board_game}"</span>
-            <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <span className="text-moss">"{step.board_game}"</span>
+            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
             </svg>
-            <span className="font-semibold text-gray-800">{step.to_user}</span>
+            <span className="font-semibold text-ink">{step.to_user}</span>
           </div>
         ))}
       </div>
@@ -653,7 +653,7 @@ function CycleDiagram({ cycle }: { cycle: Cycle }) {
 
 function CyclesSection({ cycles }: { cycles: Cycle[] }) {
   if (cycles.length === 0) {
-    return <p className="text-sm text-gray-400">No cycles in this run.</p>
+    return <p className="text-sm text-moss/70">No cycles in this run.</p>
   }
 
   return (
@@ -664,7 +664,7 @@ function CyclesSection({ cycles }: { cycles: Cycle[] }) {
           className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm"
         >
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm font-semibold text-gray-800">Cycle #{cycle.id}</span>
+            <span className="text-sm font-semibold text-ink">Cycle #{cycle.id}</span>
             <span className="rounded-full bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 font-medium">
               {cycle.length} step{cycle.length !== 1 ? 's' : ''}
             </span>
@@ -692,10 +692,10 @@ function StatsSection({ result }: { result: import('../../api/matching').MatchRe
       ).map(([label, val]) => (
         <div
           key={label}
-          className="rounded-xl border border-gray-200 bg-white p-4 text-center shadow-sm"
+          className="rounded-xl border border-ink/15 bg-white p-4 text-center shadow-sm"
         >
           <p className="text-2xl font-bold text-indigo-600">{val}</p>
-          <p className="text-xs text-gray-500 mt-1">{label}</p>
+          <p className="text-xs text-moss mt-1">{label}</p>
         </div>
       ))}
     </div>
@@ -753,14 +753,14 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
     return (
       <div className="space-y-3">
         {[1, 2].map((i) => (
-          <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+          <div key={i} className="h-20 rounded-2xl bg-gray-100 animate-pulse" />
         ))}
       </div>
     )
   }
 
   if (shipments.length === 0) {
-    return <p className="text-sm text-gray-400">No shipments found for this event.</p>
+    return <p className="text-sm text-moss/70">No shipments found for this event.</p>
   }
 
   return (
@@ -771,7 +771,7 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
           Sending ({sending.length})
         </p>
         {sending.length === 0 ? (
-          <p className="text-sm text-gray-400">Nothing to send.</p>
+          <p className="text-sm text-moss/70">Nothing to send.</p>
         ) : (
           sending.map((s) => (
             <ShipmentSenderCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
@@ -785,7 +785,7 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
           Receiving ({receiving.length})
         </p>
         {receiving.length === 0 ? (
-          <p className="text-sm text-gray-400">Nothing to receive.</p>
+          <p className="text-sm text-moss/70">Nothing to receive.</p>
         ) : (
           receiving.map((s) => (
             <ShipmentReceiverCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
@@ -815,12 +815,12 @@ function OverviewTab({ slug, moneyEnabled }: { slug: string; moneyEnabled: boole
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-gray-800">Shipping</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">Shipping</h2>
         <ShippingOverviewTab slug={slug} />
       </div>
       {moneyEnabled && (
         <div>
-          <h2 className="mb-3 text-sm font-semibold text-gray-800">Settlement payments</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Settlement payments</h2>
           <PaymentsOverviewTab slug={slug} />
         </div>
       )}
@@ -850,14 +850,14 @@ function ShipmentSenderCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+    <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
-            <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
+            <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-moss mt-0.5">
               to{' '}
               <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
                 {s.receiver_username}
@@ -875,12 +875,12 @@ function ShipmentSenderCard({
             value={shippingInfo}
             onChange={(e) => setShippingInfo(e.target.value)}
             placeholder="Tracking number or shipping notes…"
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={handleMarkSent}
             disabled={onUpdate.isPending}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
             {onUpdate.isPending ? 'Saving…' : 'Mark sent'}
           </button>
@@ -889,7 +889,7 @@ function ShipmentSenderCard({
       )}
 
       {s.status !== 'PENDING' && s.shipping_info && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-moss">
           <span className="font-medium">Shipping info:</span> {s.shipping_info}
         </p>
       )}
@@ -918,14 +918,14 @@ function ShipmentReceiverCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+    <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
           <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{s.board_game_name}</p>
-            <p className="text-xs text-gray-400 font-mono">{s.listing_code}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
+            <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-moss mt-0.5">
               from{' '}
               <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">
                 {s.giver_username}
@@ -937,7 +937,7 @@ function ShipmentReceiverCard({
       </div>
 
       {s.shipping_info && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-moss">
           <span className="font-medium">Shipping info:</span> {s.shipping_info}
         </p>
       )}
@@ -947,7 +947,7 @@ function ShipmentReceiverCard({
           <button
             onClick={handleMarkReceived}
             disabled={onUpdate.isPending}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+            className="rounded-xl border-2 border-ink bg-emerald-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
             {onUpdate.isPending ? 'Saving…' : 'Mark received'}
           </button>
@@ -994,9 +994,9 @@ function PaymentPayerCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+    <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
-        <p className="text-sm text-gray-900">
+        <p className="text-sm text-ink">
           Pay{' '}
           <Link to={`/u/${p.to_username}`} className="font-semibold text-indigo-500 hover:underline">
             {p.to_username}
@@ -1013,12 +1013,12 @@ function PaymentPayerCard({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Payment reference or notes…"
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
             onClick={handleMarkPaid}
             disabled={onUpdate.isPending}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
             {onUpdate.isPending ? 'Saving…' : 'Mark paid'}
           </button>
@@ -1027,7 +1027,7 @@ function PaymentPayerCard({
       )}
 
       {p.status !== 'PENDING' && p.note && (
-        <p className="text-xs text-gray-500"><span className="font-medium">Reference:</span> {p.note}</p>
+        <p className="text-xs text-moss"><span className="font-medium">Reference:</span> {p.note}</p>
       )}
     </div>
   )
@@ -1052,9 +1052,9 @@ function PaymentPayeeCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+    <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
-        <p className="text-sm text-gray-900">
+        <p className="text-sm text-ink">
           Receive <span className="font-semibold">${p.amount}</span> from{' '}
           <Link to={`/u/${p.from_username}`} className="font-semibold text-indigo-500 hover:underline">
             {p.from_username}
@@ -1064,7 +1064,7 @@ function PaymentPayeeCard({
       </div>
 
       {p.note && (
-        <p className="text-xs text-gray-500"><span className="font-medium">Reference:</span> {p.note}</p>
+        <p className="text-xs text-moss"><span className="font-medium">Reference:</span> {p.note}</p>
       )}
 
       {!readOnly && p.status === 'PAID' && (
@@ -1072,7 +1072,7 @@ function PaymentPayeeCard({
           <button
             onClick={handleConfirm}
             disabled={onUpdate.isPending}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+            className="rounded-xl border-2 border-ink bg-emerald-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
             {onUpdate.isPending ? 'Saving…' : 'Confirm received'}
           </button>
@@ -1089,7 +1089,7 @@ function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean 
   const paying = payments.filter((p) => p.my_role === 'payer')
   const receiving = payments.filter((p) => p.my_role === 'payee')
 
-  if (isLoading) return <div className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+  if (isLoading) return <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
   if (payments.length === 0) return null
 
   return (
@@ -1099,7 +1099,7 @@ function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean 
           Payments to send ({paying.length})
         </p>
         {paying.length === 0
-          ? <p className="text-sm text-gray-400">Nothing to pay.</p>
+          ? <p className="text-sm text-moss/70">Nothing to pay.</p>
           : paying.map((p) => <PaymentPayerCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
       </div>
       <div className="space-y-2">
@@ -1107,7 +1107,7 @@ function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean 
           Payments to receive ({receiving.length})
         </p>
         {receiving.length === 0
-          ? <p className="text-sm text-gray-400">Nothing to receive.</p>
+          ? <p className="text-sm text-moss/70">Nothing to receive.</p>
           : receiving.map((p) => <PaymentPayeeCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
       </div>
     </>
@@ -1143,7 +1143,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
       <LiveRunView slug={slug} runId={run.id} />
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-ink/15">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1151,7 +1151,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
                 ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                : 'border-transparent text-moss hover:text-ink'
             }`}
           >
             {tab.label}
@@ -1166,7 +1166,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
             {mineLoading ? (
               <div className="space-y-3">
                 {[1, 2].map((i) => (
-                  <div key={i} className="h-20 rounded-lg bg-gray-100 animate-pulse" />
+                  <div key={i} className="h-20 rounded-2xl bg-gray-100 animate-pulse" />
                 ))}
               </div>
             ) : (
@@ -1272,7 +1272,7 @@ export default function MatchRunPage() {
   if (!event) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm text-red-700">Event not found.</p>
           <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
             Back to events
@@ -1285,11 +1285,11 @@ export default function MatchRunPage() {
   if (!showMatchingSection) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-10 text-center">
-          <p className="text-sm text-gray-600">
+        <div className="rounded-2xl border border-ink/15 bg-gray-50 px-5 py-10 text-center">
+          <p className="text-sm text-moss">
             Matching is not yet available for this event.
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-moss/70 mt-1">
             The event must be in MATCHING state or later.
           </p>
           <Link
@@ -1306,21 +1306,21 @@ export default function MatchRunPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs text-gray-400">
+      <div className="flex items-center gap-2 text-xs text-moss/70">
         <Link to="/events" className="hover:text-indigo-600 transition-colors">Events</Link>
         <span>/</span>
         <Link to={`/events/${slug}`} className="hover:text-indigo-600 transition-colors truncate max-w-xs">
           {event.name}
         </Link>
         <span>/</span>
-        <span className="text-gray-600">Matching</span>
+        <span className="text-moss">Matching</span>
       </div>
 
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Matching</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{event.name}</p>
+          <h1 className="text-xl font-bold text-ink">Matching</h1>
+          <p className="text-sm text-moss mt-0.5">{event.name}</p>
         </div>
         {canTrigger && token && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -1329,7 +1329,7 @@ export default function MatchRunPage() {
           </div>
         )}
         {!canTrigger && event.is_organizer && event.status !== 'MATCHING' && (
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-moss/70">
             Advance event to MATCHING state to run the matcher.
           </p>
         )}
@@ -1338,23 +1338,23 @@ export default function MatchRunPage() {
       <div className="grid grid-cols-1 sm:grid-cols-[220px_1fr] gap-6 items-start">
         {/* Run list sidebar */}
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+          <p className="text-xs font-semibold text-moss uppercase tracking-wide mb-1">
             Runs {runsData && `(${runsData.count})`}
           </p>
 
           {runsLoading && (
             <div className="space-y-2">
               {[1, 2].map((i) => (
-                <div key={i} className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+                <div key={i} className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
               ))}
             </div>
           )}
 
           {!runsLoading && runs.length === 0 && (
-            <div className="rounded-lg border border-dashed border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-400">No runs yet.</p>
+            <div className="rounded-2xl border border-dashed border-ink/15 p-4 text-center">
+              <p className="text-xs text-moss/70">No runs yet.</p>
               {canTrigger && (
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-moss/70 mt-1">
                   Use the action above to create the first run.
                 </p>
               )}
@@ -1374,8 +1374,8 @@ export default function MatchRunPage() {
         {/* Run detail pane */}
         <div>
           {activeRunId == null ? (
-            <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center">
-              <p className="text-sm text-gray-400">Select a run to view details.</p>
+            <div className="rounded-xl border border-dashed border-ink/15 p-8 text-center">
+              <p className="text-sm text-moss/70">Select a run to view details.</p>
             </div>
           ) : activeRun ? (
             <RunResultView key={activeRun.id} slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} moneyEnabled={!!event.money_enabled} />

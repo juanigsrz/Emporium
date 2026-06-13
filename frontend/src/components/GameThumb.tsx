@@ -12,13 +12,13 @@ export function GameThumb({ src, alt = '', className = 'h-10 w-10' }: GameThumbP
         src={src}
         alt={alt}
         loading="lazy"
-        className={`${className} shrink-0 rounded object-cover border border-gray-100 bg-gray-50`}
+        className={`${className} shrink-0 rounded-xl object-cover border-2 border-ink/15 bg-parchment`}
       />
     )
   }
   return (
     <div
-      className={`${className} shrink-0 rounded border border-gray-100 bg-gray-50 flex items-center justify-center text-gray-300`}
+      className={`${className} shrink-0 rounded-xl border-2 border-ink/15 bg-parchment flex items-center justify-center text-moss/40`}
       aria-hidden="true"
     >
       <svg className="h-1/2 w-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

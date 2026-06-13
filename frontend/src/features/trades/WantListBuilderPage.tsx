@@ -73,7 +73,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
     return (
       <div className="space-y-2">
         {[1, 2].map((i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="h-16 bg-gray-100 rounded-2xl animate-pulse" />
         ))}
       </div>
     )
@@ -82,13 +82,13 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       )}
 
       {groups.length === 0 && !showForm && (
-        <p className="text-xs text-gray-400 py-2">No offer groups yet. Create one to specify what you're offering.</p>
+        <p className="text-xs text-moss/70 py-2">No offer groups yet. Create one to specify what you're offering.</p>
       )}
 
       {groups.map((group) =>
@@ -152,7 +152,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
       {!showForm && !locked && (
         <button
           onClick={() => setShowForm(true)}
-          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+          className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
         >
           + New offer group
         </button>
@@ -172,10 +172,10 @@ interface OfferGroupCardProps {
 function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGroupCardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
+    <div className="rounded-2xl border border-ink/15 bg-white p-3">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div>
-          <span className="text-sm font-semibold text-gray-800">{group.name}</span>
+          <span className="text-sm font-semibold text-ink">{group.name}</span>
           <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
             Give up to {group.max_give}
           </span>
@@ -184,7 +184,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
           <div className="flex gap-1 shrink-0">
             <button
               onClick={onEdit}
-              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
+              className="text-xs text-moss/70 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
               Edit
             </button>
@@ -199,7 +199,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                  className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
                   Cancel
                 </button>
@@ -207,7 +207,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+                className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
                 Delete
               </button>
@@ -216,16 +216,16 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
         )}
       </div>
       {group.items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">No listings in this group.</p>
+        <p className="text-xs text-moss/70 italic">No listings in this group.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {group.items.map((item) => (
             <span
               key={item.id}
-              className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+              className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink"
             >
               <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              <span className="font-mono text-gray-400">{item.listing_code}</span>
+              <span className="font-mono text-moss/70">{item.listing_code}</span>
               {item.board_game_name}
             </span>
           ))}
@@ -281,23 +281,23 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-3"
+      className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 space-y-3"
     >
       {formError && (
         <p className="text-xs text-red-600">{formError}</p>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Group name</label>
+          <label className="block text-xs font-medium text-ink mb-1">Group name</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="e.g. My heavy games"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-medium text-ink mb-1">
             Max give (X) — give up to this many
           </label>
           <input
@@ -306,17 +306,17 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
             max={myListings.length || 1}
             value={maxGive}
             onChange={(e) => setMaxGive(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
       </div>
 
       <div>
-        <p className="text-xs font-medium text-gray-700 mb-1.5">
+        <p className="text-xs font-medium text-ink mb-1.5">
           Select listings to offer ({selectedIds.size} selected)
         </p>
         {myListings.length === 0 ? (
-          <p className="text-xs text-gray-400 italic">
+          <p className="text-xs text-moss/70 italic">
             No listings in this event. Add copies first.
           </p>
         ) : (
@@ -324,22 +324,22 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
             {myListings.map((listing) => (
               <label
                 key={listing.id}
-                className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer transition-colors text-sm ${
+                className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer transition-colors text-sm ${
                   selectedIds.has(listing.id)
                     ? 'border-indigo-400 bg-white text-indigo-800'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-indigo-200'
+                    : 'border-ink/15 bg-white text-ink hover:border-indigo-200'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={selectedIds.has(listing.id)}
                   onChange={() => toggleListing(listing.id)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-3.5 w-3.5 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
                 />
                 <span className="font-medium">{listing.board_game_name}</span>
-                <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
+                <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
                 {moneyEnabled && selectedIds.has(listing.id) && (
-                  <span className="ml-auto text-xs text-gray-400 italic">
+                  <span className="ml-auto text-xs text-moss/70 italic">
                     Sell price set in My Listings / Almanac
                   </span>
                 )}
@@ -353,14 +353,14 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isSaving}
-          className="flex-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          className="flex-1 rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           {isSaving ? 'Saving…' : existing ? 'Save changes' : 'Create group'}
         </button>
@@ -411,7 +411,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
     return (
       <div className="space-y-2">
         {[1, 2].map((i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="h-16 bg-gray-100 rounded-2xl animate-pulse" />
         ))}
       </div>
     )
@@ -420,13 +420,13 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       )}
 
       {groups.length === 0 && !showForm && (
-        <p className="text-xs text-gray-400 py-2">No want groups yet. Create one by adding games you'd like to receive.</p>
+        <p className="text-xs text-moss/70 py-2">No want groups yet. Create one by adding games you'd like to receive.</p>
       )}
 
       {groups.map((group) =>
@@ -489,7 +489,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
       {!showForm && editingId === null && !locked && (
         <button
           onClick={() => setShowForm(true)}
-          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-purple-300 hover:text-purple-500 transition-colors"
+          className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-purple-300 hover:text-purple-500 transition-colors"
         >
           + New want group
         </button>
@@ -511,10 +511,10 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
+    <div className="rounded-2xl border border-ink/15 bg-white p-3">
       <div className="flex items-start justify-between gap-2 mb-2">
         <div>
-          <span className="text-sm font-semibold text-gray-800">{group.name}</span>
+          <span className="text-sm font-semibold text-ink">{group.name}</span>
           <span className="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
             Receive at least {group.min_receive}
           </span>
@@ -523,7 +523,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
           <div className="flex gap-1 shrink-0">
             <button
               onClick={onEdit}
-              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
+              className="text-xs text-moss/70 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
               Edit
             </button>
@@ -538,7 +538,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                  className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
                   Cancel
                 </button>
@@ -546,7 +546,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+                className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
                 Delete
               </button>
@@ -555,19 +555,19 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+      <label className="flex items-center gap-2 text-xs text-moss mb-2">
         <input
           type="checkbox"
           checked={group.duplicate_protection}
           onChange={(e) => onToggleDuplicateProtection(e.target.checked)}
           disabled={locked}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
+          className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
         Duplication-protected (never award more than one copy of the same game)
       </label>
 
       {group.items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic">No targets yet.</p>
+        <p className="text-xs text-moss/70 italic">No targets yet.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {group.items.map((item) => (
@@ -581,11 +581,11 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
             >
               <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
               {item.target_type === 'LISTING' && (
-                <span className="font-mono text-gray-400">{item.listing_code}</span>
+                <span className="font-mono text-moss/70">{item.listing_code}</span>
               )}
               {item.board_game_name}
               {item.target_type === 'BOARD_GAME' && (
-                <span className="text-gray-400">(any copy)</span>
+                <span className="text-moss/70">(any copy)</span>
               )}
               {item.resolved_bid != null && (
                 <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
@@ -647,45 +647,45 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
   const hasSelection = (anyCopy && !anyCopyAlreadyAdded) || checkedIds.size > 0
 
   return (
-    <div className="rounded-md border border-purple-200 bg-purple-50 p-3 space-y-2">
+    <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 space-y-2">
       <p className="text-xs font-semibold text-purple-700">
         {game.name}
-        {game.year_published && <span className="ml-1 font-normal text-gray-500">({game.year_published})</span>}
+        {game.year_published && <span className="ml-1 font-normal text-moss">({game.year_published})</span>}
         {' '}— choose what to add:
       </p>
-      <label className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
+      <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
         anyCopyAlreadyAdded
-          ? 'border-gray-200 bg-white text-gray-300 cursor-not-allowed'
+          ? 'border-ink/15 bg-white text-moss/40 cursor-not-allowed'
           : anyCopy
           ? 'border-purple-400 bg-white text-purple-800'
-          : 'border-gray-200 bg-white text-gray-700 hover:border-purple-200'
+          : 'border-ink/15 bg-white text-ink hover:border-purple-200'
       }`}>
         <input
           type="checkbox"
           checked={anyCopy}
           disabled={anyCopyAlreadyAdded}
           onChange={(e) => setAnyCopy(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
+          className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
         <span className="font-medium">Any copy</span>
         <span className="text-xs text-purple-500 ml-1">(accept any trader's copy)</span>
-        {anyCopyAlreadyAdded && <span className="ml-auto text-xs text-gray-400">already added</span>}
+        {anyCopyAlreadyAdded && <span className="ml-auto text-xs text-moss/70">already added</span>}
       </label>
       {otherCopies.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs text-gray-500">Or specific copies from other traders:</p>
+          <p className="text-xs text-moss">Or specific copies from other traders:</p>
           {otherCopies.map((listing) => {
             const key = `listing-${listing.id}`
             const alreadyAdded = existingItemIds.has(key)
             return (
               <label
                 key={listing.id}
-                className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
+                className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
                   alreadyAdded
-                    ? 'border-gray-200 bg-white text-gray-300 cursor-not-allowed'
+                    ? 'border-ink/15 bg-white text-moss/40 cursor-not-allowed'
                     : checkedIds.has(listing.id)
                     ? 'border-blue-400 bg-white text-blue-800'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200'
+                    : 'border-ink/15 bg-white text-ink hover:border-blue-200'
                 }`}
               >
                 <input
@@ -693,27 +693,27 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
                   checked={checkedIds.has(listing.id)}
                   disabled={alreadyAdded}
                   onChange={() => toggleListing(listing.id)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                  className="h-3.5 w-3.5 rounded border-ink/20 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                 />
                 <span className="font-medium">{listing.board_game_name}</span>
-                <span className="font-mono text-xs text-gray-400">{listing.listing_code}</span>
+                <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
                 {listing.copy_condition && (
-                  <span className="text-xs text-gray-400">{listing.copy_condition}</span>
+                  <span className="text-xs text-moss/70">{listing.copy_condition}</span>
                 )}
-                {alreadyAdded && <span className="ml-auto text-xs text-gray-400">already added</span>}
+                {alreadyAdded && <span className="ml-auto text-xs text-moss/70">already added</span>}
               </label>
             )
           })}
         </div>
       )}
       {otherCopies.length === 0 && listingsData && (
-        <p className="text-xs text-gray-400 italic">No copies from other traders in this event.</p>
+        <p className="text-xs text-moss/70 italic">No copies from other traders in this event.</p>
       )}
       <div className="flex gap-2 pt-1">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
           Cancel
         </button>
@@ -721,7 +721,7 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
           type="button"
           onClick={() => onCommit({ anycopy: anyCopy && !anyCopyAlreadyAdded, listings: otherCopies.filter((l) => checkedIds.has(l.id)) })}
           disabled={!hasSelection}
-          className="flex-1 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60 transition-colors"
+          className="flex-1 rounded-xl border-2 border-ink bg-purple-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           Add to want group
         </button>
@@ -888,19 +888,19 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   }
 
   return (
-    <div className="rounded-lg border border-purple-200 bg-purple-50 p-3 space-y-3">
+    <div className="rounded-2xl border border-purple-200 bg-purple-50 p-3 space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Group name</label>
+          <label className="block text-xs font-medium text-ink mb-1">Group name</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="e.g. Strategy games I want"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
+          <label className="block text-xs font-medium text-ink mb-1">
             Min receive (Y) — receive at least this many
           </label>
           <input
@@ -908,46 +908,46 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
             min={1}
             value={minReceive}
             onChange={(e) => setMinReceive(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
         </div>
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-gray-600">
+      <label className="flex items-center gap-2 text-xs text-moss">
         <input
           type="checkbox"
           checked={dupProtect}
           onChange={(e) => setDupProtect(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+          className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500"
         />
         Protect against duplicates
-        <span className="text-gray-400">(don't receive more than one copy of the same game)</span>
+        <span className="text-moss/70">(don't receive more than one copy of the same game)</span>
       </label>
 
       {(formError || duplicateWarn) && (
-        <div className={`rounded-md px-3 py-2 text-xs ${formError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
+        <div className={`rounded-xl px-3 py-2 text-xs ${formError ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-yellow-50 border border-yellow-200 text-yellow-700'}`}>
           {formError || duplicateWarn}
         </div>
       )}
 
       {/* Targets list */}
       <div>
-        <p className="text-xs font-medium text-gray-600 mb-2">
+        <p className="text-xs font-medium text-moss mb-2">
           Games you'd like to receive ({items.length})
         </p>
         <div className="space-y-1.5 min-h-[40px]">
           {items.length === 0 ? (
-            <div className="rounded-md border-2 border-dashed border-purple-200 py-4 text-center text-xs text-gray-400">
+            <div className="rounded-xl border-2 border-dashed border-purple-200 py-4 text-center text-xs text-moss/70">
               Search below to add games you want
             </div>
           ) : (
             items.map((item) => (
               <div
                 key={item.localId}
-                className="rounded-md border border-gray-200 bg-white px-3 py-2 flex items-center justify-between gap-2"
+                className="rounded-xl border border-ink/15 bg-white px-3 py-2 flex items-center justify-between gap-2"
               >
                 <div className="min-w-0">
-                  <span className="text-sm text-gray-800 font-medium truncate block">
+                  <span className="text-sm text-ink font-medium truncate block">
                     {item.board_game_name}
                   </span>
                   {item.target_type === 'LISTING' ? (
@@ -958,7 +958,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                 </div>
                 {moneyEnabled && (
                   <div className="flex shrink-0 items-center gap-1">
-                    <span className="text-xs text-gray-400">pay ≤$</span>
+                    <span className="text-xs text-moss/70">pay ≤$</span>
                     <input
                       type="number"
                       min={0}
@@ -967,14 +967,14 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                       onChange={(e) => setMoney(item.localId, e.target.value)}
                       placeholder="0"
                       title="Most money you'll pay to receive this game (needs a seller who accepts money)"
-                      className="w-20 rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      className="w-20 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </div>
                 )}
                 <button
                   type="button"
                   onClick={() => removeItem(item.localId)}
-                  className="shrink-0 text-xs text-gray-300 hover:text-red-500 transition-colors"
+                  className="shrink-0 text-xs text-moss/40 hover:text-red-500 transition-colors"
                   aria-label="Remove target"
                 >
                   ✕
@@ -987,33 +987,33 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
 
       {/* Add game target via event-scoped search */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-gray-700">Search game in this event:</p>
+        <p className="text-xs font-medium text-ink">Search game in this event:</p>
         <input
           value={gameSearch}
           onChange={(e) => { setGameSearch(e.target.value); setActiveGame(null) }}
           placeholder="Type a game name…"
-          className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         {!activeGame && gameSearch.length >= 2 && gameResults && gameResults.results.length > 0 && (
-          <div className="rounded-md border border-gray-200 bg-white divide-y divide-gray-50 max-h-40 overflow-y-auto shadow-sm">
+          <div className="rounded-xl border border-ink/15 bg-white divide-y divide-gray-50 max-h-40 overflow-y-auto shadow-sm">
             {gameResults.results.map((game) => (
               <button
                 key={game.bgg_id}
                 type="button"
                 onClick={() => setActiveGame(game)}
-                className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-purple-50 text-gray-700"
+                className="w-full text-left px-3 py-2 text-sm transition-colors hover:bg-purple-50 text-ink"
               >
                 <span className="font-medium">{game.name}</span>
                 {game.year_published && (
-                  <span className="ml-1 text-xs text-gray-400">({game.year_published})</span>
+                  <span className="ml-1 text-xs text-moss/70">({game.year_published})</span>
                 )}
-                <span className="ml-2 text-xs text-gray-400">{game.copies_count} {game.copies_count === 1 ? 'copy' : 'copies'}</span>
+                <span className="ml-2 text-xs text-moss/70">{game.copies_count} {game.copies_count === 1 ? 'copy' : 'copies'}</span>
               </button>
             ))}
           </div>
         )}
         {!activeGame && gameSearch.length >= 2 && gameResults?.results.length === 0 && (
-          <p className="text-xs text-gray-400">No games found in this event.</p>
+          <p className="text-xs text-moss/70">No games found in this event.</p>
         )}
         {activeGame && (
           <GameCopyPicker
@@ -1032,7 +1032,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
         <button
           type="button"
           onClick={() => onClose()}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
           Cancel
         </button>
@@ -1040,7 +1040,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           type="button"
           onClick={handleSave}
           disabled={isSaving}
-          className="flex-1 rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60 transition-colors"
+          className="flex-1 rounded-xl border-2 border-ink bg-purple-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           {isSaving ? 'Saving…' : group ? 'Save changes' : 'Create group'}
         </button>
@@ -1098,7 +1098,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
     return (
       <div className="space-y-2">
         {[1, 2].map((i) => (
-          <div key={i} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+          <div key={i} className="h-16 bg-gray-100 rounded-2xl animate-pulse" />
         ))}
       </div>
     )
@@ -1107,13 +1107,13 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       )}
 
       {wishes.length === 0 && !showForm && (
-        <p className="text-xs text-gray-400 py-2">
+        <p className="text-xs text-moss/70 py-2">
           No wishes yet. Link an offer group to a want group to express a trade preference.
         </p>
       )}
@@ -1147,19 +1147,19 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
       ))}
 
       {showForm ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-3">
+        <div className="rounded-2xl border border-green-200 bg-green-50 p-3 space-y-3">
           <p className="text-xs font-semibold text-green-700">New wish — link an offer to a want</p>
 
           <div className="grid grid-cols-1 gap-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Offer group (what you give)</label>
+              <label className="block text-xs font-medium text-ink mb-1">Offer group (what you give)</label>
               {offerGroups.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Create an offer group first.</p>
+                <p className="text-xs text-moss/70 italic">Create an offer group first.</p>
               ) : (
                 <select
                   value={selectedOG}
                   onChange={(e) => setSelectedOG(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="">Select offer group…</option>
                   {offerGroups.map((og) => (
@@ -1171,14 +1171,14 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Want group (what you receive)</label>
+              <label className="block text-xs font-medium text-ink mb-1">Want group (what you receive)</label>
               {wantGroups.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Create a want group first.</p>
+                <p className="text-xs text-moss/70 italic">Create a want group first.</p>
               ) : (
                 <select
                   value={selectedWG}
                   onChange={(e) => setSelectedWG(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
                   <option value="">Select want group…</option>
                   {wantGroups.map((wg) => (
@@ -1196,13 +1196,13 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
             const wg = wantGroups.find((g) => g.id === parseInt(selectedWG, 10))
             if (!og || !wg) return null
             return (
-              <div className="rounded-md bg-white border border-green-200 px-3 py-2 text-xs">
+              <div className="rounded-xl bg-white border border-green-200 px-3 py-2 text-xs">
                 <span className="font-semibold text-indigo-700">{og.name}</span>
                 <span className="mx-1.5 font-mono text-green-600">
                   {og.max_give}:{wg.min_receive}
                 </span>
                 <span className="font-semibold text-purple-700">{wg.name}</span>
-                <span className="ml-2 text-gray-400">
+                <span className="ml-2 text-moss/70">
                   — give up to {og.max_give}, receive at least {wg.min_receive}
                 </span>
               </div>
@@ -1213,7 +1213,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
             <button
               type="button"
               onClick={() => { setShowForm(false); setError(null); setSelectedOG(''); setSelectedWG('') }}
-              className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
@@ -1221,7 +1221,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
               type="button"
               onClick={handleCreate}
               disabled={createWish.isPending || offerGroups.length === 0 || wantGroups.length === 0}
-              className="flex-1 rounded-md bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-500 disabled:opacity-60 transition-colors"
+              className="flex-1 rounded-xl border-2 border-ink bg-green-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
               {createWish.isPending ? 'Creating…' : 'Create wish'}
             </button>
@@ -1230,7 +1230,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
       ) : !locked ? (
         <button
           onClick={() => setShowForm(true)}
-          className="w-full rounded-lg border-2 border-dashed border-gray-200 py-3 text-xs font-medium text-gray-400 hover:border-green-300 hover:text-green-500 transition-colors"
+          className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-green-300 hover:text-green-500 transition-colors"
         >
           + New wish
         </button>
@@ -1255,8 +1255,8 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
 
   return (
     <div
-      className={`rounded-lg border p-3 transition-colors ${
-        wish.active ? 'border-green-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-70'
+      className={`rounded-2xl border p-3 transition-colors ${
+        wish.active ? 'border-green-200 bg-white' : 'border-ink/15 bg-gray-50 opacity-70'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -1273,7 +1273,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
               {wish.want_group_name}
             </span>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-moss/70">
             Give up to <strong>{wish.max_give}</strong> → Receive at least <strong>{wish.min_receive}</strong>
           </p>
 
@@ -1287,7 +1287,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
                   className="h-7 w-7"
                 />
               ))}
-              <svg className="h-4 w-4 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+              <svg className="h-4 w-4 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
               {wantItems.map((item) => (
@@ -1309,7 +1309,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
               disabled={isToggling}
               className={`rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
                 wish.active
-                  ? 'text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200'
+                  ? 'text-moss hover:text-ink bg-gray-100 hover:bg-gray-200'
                   : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'
               }`}
               title={wish.active ? 'Deactivate wish' : 'Activate wish'}
@@ -1327,7 +1327,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded"
+                  className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
                   Cancel
                 </button>
@@ -1335,7 +1335,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
             ) : (
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
+                className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
                 Delete
               </button>
@@ -1345,7 +1345,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
       </div>
 
       {!wish.active && (
-        <span className="mt-1.5 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-400">
+        <span className="mt-1.5 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-moss/70">
           Paused
         </span>
       )}
@@ -1385,7 +1385,7 @@ export default function WantListBuilderPage() {
   if (eventError || !event) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
           <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
             Back to events
@@ -1398,7 +1398,7 @@ export default function WantListBuilderPage() {
   if (!event.is_participant && !event.is_organizer) {
     return (
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-yellow-700">
             You must join this event before building your want list.
           </p>
@@ -1426,7 +1426,7 @@ export default function WantListBuilderPage() {
       {/* Back link */}
       <Link
         to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-moss/70 hover:text-indigo-600 transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -1435,16 +1435,16 @@ export default function WantListBuilderPage() {
       </Link>
 
       {/* Header */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-gray-900">Want List Builder</h1>
-        <p className="text-sm text-gray-500 mt-1">
+      <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
+        <h1 className="text-xl font-bold text-ink">Want List Builder</h1>
+        <p className="text-sm text-moss mt-1">
           {event.name}
-          <span className="mx-2 text-gray-300">·</span>
+          <span className="mx-2 text-moss/40">·</span>
           Build offer groups, want groups, and link them into wishes
         </p>
 
         {/* X:Y explained */}
-        <div className="mt-3 rounded-md bg-indigo-50 border border-indigo-100 px-3 py-2.5 text-xs text-gray-600">
+        <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2.5 text-xs text-moss">
           <strong className="text-indigo-700">How it works:</strong> An{' '}
           <span className="font-semibold text-indigo-600">Offer Group</span> is a set of your listings
           with a max-give (X).{' '}
@@ -1464,13 +1464,13 @@ export default function WantListBuilderPage() {
       </div>
 
       {locked && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           This event is locked for matching — want lists can no longer be edited.
         </div>
       )}
 
       {/* Tab bar */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-1 border-b border-ink/15 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1478,14 +1478,14 @@ export default function WantListBuilderPage() {
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               activeTab === tab.id
                 ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-moss hover:text-ink hover:border-ink/20'
             }`}
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 && (
               <span
                 className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${
-                  activeTab === tab.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-500'
+                  activeTab === tab.id ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-moss'
                 }`}
               >
                 {tab.count}
@@ -1500,15 +1500,15 @@ export default function WantListBuilderPage() {
         {activeTab === 'offers' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
+              <h2 className="text-sm font-semibold text-ink">
                 Offer Groups
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-moss/70">
                 {myListings.length} listing{myListings.length !== 1 ? 's' : ''} in this event
               </p>
             </div>
             {myListings.length === 0 && (
-              <div className="rounded-md bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs text-yellow-700">
+              <div className="rounded-xl bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs text-yellow-700">
                 You have no listings in this event yet.{' '}
                 <Link to={`/events/${slug}`} className="underline font-medium">
                   Add copies from the event page.
@@ -1522,10 +1522,10 @@ export default function WantListBuilderPage() {
         {activeTab === 'wants' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
+              <h2 className="text-sm font-semibold text-ink">
                 Want Groups
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-moss/70">
                 Games you'd like to receive
               </p>
             </div>
@@ -1536,15 +1536,15 @@ export default function WantListBuilderPage() {
         {activeTab === 'wishes' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
+              <h2 className="text-sm font-semibold text-ink">
                 Wishes — X:Y links
               </h2>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-moss/70">
                 {offerGroupsData.length} offer · {wantGroupsData.length} want
               </p>
             </div>
             {(offerGroupsData.length === 0 || wantGroupsData.length === 0) && (
-              <div className="rounded-md bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
+              <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
                 Create at least one offer group and one want group first.
               </div>
             )}

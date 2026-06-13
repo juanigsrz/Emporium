@@ -18,17 +18,17 @@ export default function HomePage() {
   })
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-16 sm:py-20">
+    <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
       {/* Hero */}
       <header className="relative">
-        <p className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-indigo-600">
-          <span className="h-px w-8 bg-indigo-300" />
+        <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-sage/60 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-moss">
+          <span className="h-2 w-2 rounded-full bg-coral" />
           The trade almanac
         </p>
-        <h1 className="max-w-3xl text-4xl font-semibold text-gray-900 sm:text-6xl">
+        <h1 className="max-w-3xl text-4xl font-bold text-ink sm:text-6xl">
           Trade board games the way the&nbsp;math&nbsp;intends.
         </h1>
-        <p className="mt-5 max-w-xl text-lg leading-relaxed text-gray-600">
+        <p className="mt-5 max-w-xl text-lg leading-relaxed text-moss">
           List the games you own, build a want list, and let the solver weave the
           longest, fairest chains of trades — cardboard for cardboard, no haggling.
         </p>
@@ -36,16 +36,16 @@ export default function HomePage() {
         <div className="mt-7 flex flex-wrap items-center gap-3">
           <a
             href="/events"
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-indigo-700"
+            className="rounded-2xl border-2 border-ink bg-butter px-6 py-3 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
             Browse events
           </a>
           {/* Status — slim inline strip (live backend health) */}
-          <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium shadow-sm">
+          <span className="inline-flex items-center gap-2 rounded-2xl border-2 border-ink/15 bg-cream px-3.5 py-2.5 text-xs font-semibold shadow-sm">
             {isLoading && (
               <>
                 <span className="h-2 w-2 animate-pulse rounded-full bg-gray-300" />
-                <span className="text-gray-500">Checking backend…</span>
+                <span className="text-moss">Checking backend…</span>
               </>
             )}
             {isError && (
@@ -73,15 +73,19 @@ export default function HomePage() {
       </header>
 
       {/* Feature cards */}
-      <div className="mt-14 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <FeatureCard
           index="01"
+          emoji="🎲"
+          tint="bg-butter/70"
           title="Trade Events"
           description="Join an event, list your copies, and build your want list."
           href="/events"
         />
         <FeatureCard
           index="02"
+          emoji="📦"
+          tint="bg-sage/70"
           title="My Copies"
           description="Add the board games you own, ready to list in trade events."
           href="/my-copies"
@@ -93,11 +97,15 @@ export default function HomePage() {
 
 function FeatureCard({
   index,
+  emoji,
+  tint,
   title,
   description,
   href,
 }: {
   index: string
+  emoji: string
+  tint: string
   title: string
   description: string
   href: string
@@ -105,21 +113,26 @@ function FeatureCard({
   return (
     <a
       href={href}
-      className="group relative block overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+      className="group relative block overflow-hidden rounded-3xl border-2 border-ink bg-cream p-2 shadow-card transition-transform hover:-translate-y-1.5"
     >
-      <span className="pointer-events-none absolute right-4 top-3 font-display text-3xl font-semibold text-gray-200 transition-colors group-hover:text-indigo-200">
-        {index}
-      </span>
-      <h3 className="mb-1 font-display text-lg font-semibold text-gray-900 transition-colors group-hover:text-indigo-700">
-        {title}
-      </h3>
-      <p className="max-w-xs text-sm leading-relaxed text-gray-500">{description}</p>
-      <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600">
-        Open
-        <svg className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
-      </span>
+      <div className={`relative flex h-24 items-center rounded-[1.1rem] border-2 border-ink/15 ${tint} px-5`}>
+        <span className="text-5xl">{emoji}</span>
+        <span className="pointer-events-none absolute right-4 top-2 font-display text-3xl font-bold text-ink/20">
+          {index}
+        </span>
+      </div>
+      <div className="px-4 pb-3 pt-4">
+        <h3 className="mb-1 font-display text-xl font-bold text-ink">
+          {title}
+        </h3>
+        <p className="max-w-xs text-sm leading-relaxed text-moss">{description}</p>
+        <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-ink">
+          Open
+          <svg className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </span>
+      </div>
     </a>
   )
 }

@@ -30,28 +30,28 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
   }
 
   if (!isLoading && !summaryLoading && total === 0 && rollup.length === 0) {
-    return <p className="py-6 text-center text-sm text-gray-400">No settlement payments.</p>
+    return <p className="py-6 text-center text-sm text-moss">No settlement payments.</p>
   }
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2 text-xs">
-        <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-700">Pending {counts.PENDING ?? 0}</span>
-        <span className="rounded-md border border-violet-200 bg-violet-50 px-3 py-1 font-medium text-violet-700">Paid {counts.PAID ?? 0}</span>
-        <span className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-700">Confirmed {counts.CONFIRMED ?? 0}</span>
+        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-semibold text-amber-700">Pending {counts.PENDING ?? 0}</span>
+        <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 font-semibold text-violet-700">Paid {counts.PAID ?? 0}</span>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">Confirmed {counts.CONFIRMED ?? 0}</span>
       </div>
 
       {rollup.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-gray-700">Per-user settlement</h3>
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
+          <h3 className="mb-2 font-display text-sm font-bold text-ink">Per-user settlement</h3>
+          <div className="divide-y-2 divide-ink/10 overflow-hidden rounded-2xl border-2 border-ink/15 bg-cream">
             {rollup.map((u) => {
               const behind = u.owe_paid < u.owe_total || u.due_confirmed < u.due_total
               return (
                 <div key={u.username} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="w-28 truncate font-medium text-gray-800">{u.username}</span>
-                  <span className="text-xs text-gray-500">paying {u.owe_paid}/{u.owe_total}</span>
-                  <span className="text-xs text-gray-500">receiving {u.due_confirmed}/{u.due_total}</span>
+                  <span className="w-28 truncate font-semibold text-ink">{u.username}</span>
+                  <span className="text-xs text-moss">paying {u.owe_paid}/{u.owe_total}</span>
+                  <span className="text-xs text-moss">receiving {u.due_confirmed}/{u.due_total}</span>
                   {behind && <span className="ml-auto text-xs font-medium text-amber-600" title="Behind">⚠ behind</span>}
                 </div>
               )
@@ -62,11 +62,11 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
 
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-700">All payments</h3>
+          <h3 className="font-display text-sm font-bold text-ink">All payments</h3>
           <select
             value={filter}
             onChange={(e) => changeFilter(e.target.value as StatusFilter)}
-            className="ml-auto rounded-md border border-gray-200 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="ml-auto rounded-xl border-2 border-ink/15 bg-cream px-2 py-1 text-xs font-medium text-ink focus:outline-none focus:ring-2 focus:ring-sage"
             aria-label="Filter by status"
           >
             <option value="">All statuses</option>
@@ -77,20 +77,20 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
         </div>
 
         {isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+          <p className="py-6 text-center text-sm text-moss">Loading…</p>
         ) : rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">No payments.</p>
+          <p className="py-6 text-center text-sm text-moss">No payments.</p>
         ) : (
-          <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
+          <div className="divide-y-2 divide-ink/10 overflow-hidden rounded-2xl border-2 border-ink/15 bg-cream">
             {rows.map((p) => (
               <div key={p.id} className="flex items-center gap-3 px-3 py-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-gray-800">
+                  <p className="truncate text-sm text-ink">
                     {p.from_username} → {p.to_username}
                   </p>
                 </div>
-                <span className="text-sm font-semibold text-gray-700">${p.amount}</span>
-                <span className={`shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium ${STATUS_PILL[p.status]}`}>
+                <span className="text-sm font-bold text-ink">${p.amount}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${STATUS_PILL[p.status]}`}>
                   {p.status.charAt(0) + p.status.slice(1).toLowerCase()}
                 </span>
               </div>
@@ -99,12 +99,12 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
         )}
 
         {total > pageSize && (
-          <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <div className="mt-3 flex items-center justify-between text-xs text-moss">
             <button onClick={() => setPage((x) => Math.max(1, x - 1))} disabled={page <= 1}
-              className="rounded border border-gray-200 px-2 py-1 disabled:opacity-40">← Prev</button>
+              className="rounded-xl border-2 border-ink/15 bg-cream px-2 py-1 font-semibold text-moss disabled:opacity-40">← Prev</button>
             <span>Page {page} of {lastPage}</span>
             <button onClick={() => setPage((x) => Math.min(lastPage, x + 1))} disabled={page >= lastPage}
-              className="rounded border border-gray-200 px-2 py-1 disabled:opacity-40">Next →</button>
+              className="rounded-xl border-2 border-ink/15 bg-cream px-2 py-1 font-semibold text-moss disabled:opacity-40">Next →</button>
           </div>
         )}
       </div>

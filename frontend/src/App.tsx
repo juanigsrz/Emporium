@@ -8,11 +8,11 @@ export default function App() {
       <main className="flex-1">
         <Outlet />
       </main>
-      <footer className="mt-8 border-t border-gray-200/70 py-6 text-center text-xs text-gray-500">
-        <span className="font-display text-sm font-semibold tracking-tight text-gray-700">MathTrade</span>
-        <span className="mx-2 text-gray-300">·</span>
+      <footer className="mt-10 border-t-2 border-ink/10 py-6 text-center text-xs text-moss">
+        <span className="font-display text-sm font-bold tracking-tight text-ink">MathTrade</span>
+        <span className="mx-2 text-moss/40">·</span>
         a board-game math-trade almanac
-        <span className="mx-2 text-gray-300">·</span>
+        <span className="mx-2 text-moss/40">·</span>
         &copy; {new Date().getFullYear()}
       </footer>
     </div>

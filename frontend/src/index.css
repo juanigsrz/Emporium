@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 /* ============================================================
-   "Tabletop Almanac" — global atmosphere & typography.
+   "Tabletop Picnic" — global atmosphere & typography.
    Visual-only layer; sits on top of the retuned Tailwind tokens.
    ============================================================ */
 
 @layer base {
   :root {
-    --paper: #ece1cd;        /* page parchment */
-    --paper-hi: #f6efdd;     /* upper light wash */
-    --ink: #1d1810;          /* near-black warm */
-    --teal: #0e615e;         /* signature accent */
+    --paper: #f5f1e8;        /* page parchment */
+    --ink: #283421;          /* near-black warm green */
+    --moss: #526246;         /* signature accent */
+    --dot: #cabd9f;          /* parchment dot-grid */
   }
 
   html {
@@ -23,26 +23,28 @@
   body {
     color: var(--ink);
     background-color: var(--paper);
-    /* layered: fine paper grain + two soft warm light washes */
+    /* layered: a fine parchment dot-grid + three soft pastel light blooms
+       (butter / sage / coral) that give the page a comfy board-game depth. */
     background-image:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E"),
-      radial-gradient(1200px 620px at 82% -12%, rgba(246, 239, 221, 0.85), transparent 60%),
-      radial-gradient(1000px 520px at -12% 112%, rgba(228, 215, 186, 0.7), transparent 55%);
-    background-attachment: fixed, fixed, fixed;
-    background-repeat: repeat, no-repeat, no-repeat;
+      radial-gradient(var(--dot) 1px, transparent 1.4px),
+      radial-gradient(900px 480px at 86% -10%, rgba(244, 216, 159, 0.45), transparent 60%),
+      radial-gradient(820px 460px at -12% 112%, rgba(201, 215, 161, 0.42), transparent 56%),
+      radial-gradient(680px 420px at 42% 124%, rgba(232, 160, 132, 0.24), transparent 56%);
+    background-size: 20px 20px, auto, auto, auto;
+    background-position: 0 0, 0 0, 0 0, 0 0;
+    background-attachment: fixed, fixed, fixed, fixed;
+    background-repeat: repeat, no-repeat, no-repeat, no-repeat;
     font-feature-settings: "kern", "liga", "calt";
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Editorial display serif for the big titles (true headings only). */
+  /* Playful geometric display for the big titles (true headings only). */
   h1, h2 {
     font-family: theme('fontFamily.display');
-    font-optical-sizing: auto;
-    font-variation-settings: "SOFT" 0, "WONK" 0;
-    letter-spacing: -0.014em;
-    line-height: 1.08;
+    letter-spacing: -0.02em;
+    line-height: 1.04;
   }
 
   /* Monospace numerals/codes get tabular alignment for tidy columns. */
@@ -51,14 +53,14 @@
   }
 
   ::selection {
-    background: #95cbc6;      /* teal-200 */
-    color: #062d2c;           /* teal-900 */
+    background: #c9d7a1;      /* sage */
+    color: #283421;           /* ink */
   }
 
   /* Warm, slim scrollbars. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #cabd9f transparent;   /* stone-300 thumb */
+    scrollbar-color: #cabd9f transparent;   /* parchment-stone thumb */
   }
   *::-webkit-scrollbar { width: 11px; height: 11px; }
   *::-webkit-scrollbar-thumb {
@@ -71,9 +73,9 @@
 
   /* Clear, on-brand keyboard focus (offset avoids clashing with ring-* utils). */
   :focus-visible {
-    outline: 2px solid var(--teal);
+    outline: 2px solid var(--moss);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: 6px;
   }
 }
 

@@ -74,26 +74,27 @@ export default function RegisterPage() {
   ]
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Create account</h1>
-        <p className="text-sm text-gray-500 mb-6">
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
+      <div className="w-full max-w-sm rounded-3xl border-2 border-ink bg-cream p-7 shadow-card">
+        <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-sage text-2xl">🎟️</span>
+        <h1 className="mb-1 text-2xl font-bold text-ink">Create account</h1>
+        <p className="mb-6 text-sm text-moss">
           Already have an account?{' '}
-          <Link to="/login" className="text-indigo-600 hover:underline font-medium">
+          <Link to="/login" className="font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2 hover:decoration-butter">
             Sign in
           </Link>
         </p>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           {serverError && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
               {serverError}
             </div>
           )}
 
           {fields.map(({ name, label, type, autoComplete }) => (
             <div key={name}>
-              <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor={name} className="mb-1 block text-sm font-semibold text-ink">
                 {label}
               </label>
               <input
@@ -101,12 +102,12 @@ export default function RegisterPage() {
                 type={type}
                 autoComplete={autoComplete}
                 {...register(name)}
-                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  errors[name] ? 'border-red-400' : 'border-gray-300'
+                className={`w-full rounded-xl border-2 bg-parchment px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage ${
+                  errors[name] ? 'border-red-400' : 'border-ink/15'
                 }`}
               />
               {errors[name] && (
-                <p className="mt-1 text-xs text-red-600">{errors[name]?.message}</p>
+                <p className="mt-1 text-xs font-medium text-red-600">{errors[name]?.message}</p>
               )}
             </div>
           ))}
@@ -114,7 +115,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="w-full rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {isSubmitting ? 'Creating account…' : 'Create account'}
           </button>

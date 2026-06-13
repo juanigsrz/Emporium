@@ -270,7 +270,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <div className="flex items-center gap-1.5">
-        <span className="text-gray-500">My rating</span>
+        <span className="text-moss">My rating</span>
         <input
           type="number"
           min={1}
@@ -283,7 +283,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
           placeholder="—"
-          className="w-14 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="w-14 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
         />
         {rating && (
           <button
@@ -292,7 +292,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
               setRatingInput('')
               delRating.mutate(rating.id)
             }}
-            className="text-gray-300 hover:text-red-500"
+            className="text-moss/40 hover:text-red-500"
             aria-label="Clear rating"
           >
             ×
@@ -303,7 +303,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 
       {moneyEnabled && (
         <div className="flex items-center gap-1.5">
-          <span className="text-gray-500">Price $</span>
+          <span className="text-moss">Price $</span>
           <input
             type="number"
             min={0}
@@ -312,7 +312,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
             onChange={(e) => onPriceChange(e.target.value)}
             placeholder="—"
             title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
-            className="w-20 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            className="w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
           />
         </div>
       )}
@@ -379,9 +379,9 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
   }
 
   return (
-    <div className="space-y-2 border-b border-gray-100 px-3 py-2 text-xs">
+    <div className="space-y-2 border-b border-ink/10 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-gray-500">Add to group</span>
+        <span className="text-moss">Add to group</span>
         <select
           value={groupSel}
           onChange={(e) => {
@@ -393,7 +393,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
               addToExisting(Number(val))
             }
           }}
-          className="rounded border border-gray-300 px-1.5 py-0.5 text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-400"
+          className="rounded border border-ink/20 px-1.5 py-0.5 text-moss focus:outline-none focus:ring-1 focus:ring-purple-400"
         >
           <option value="">Choose…</option>
           {customWantGroups.map((g) => (
@@ -403,7 +403,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
           ))}
           <option value="__new__">+ New group…</option>
         </select>
-        {groupMsg && <span className="text-gray-400">{groupMsg}</span>}
+        {groupMsg && <span className="text-moss/70">{groupMsg}</span>}
       </div>
 
       {showNew && (
@@ -412,7 +412,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="New group name"
-            className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+            className="flex-1 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
           />
           <button
             type="button"
@@ -427,7 +427,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
               setShowNew(false)
               setNewName('')
             }}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-moss/70 hover:text-moss"
           >
             Cancel
           </button>
@@ -507,18 +507,18 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
+    <div className="rounded-xl border border-ink/15 bg-white p-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setPage(1) }}
           placeholder="Search games available in this event…"
-          className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          className="min-w-[12rem] flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
         />
         <select
           value={ordering}
           onChange={(e) => { setOrdering(e.target.value as '-copies_count' | 'name'); setPage(1) }}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-600"
+          className="rounded-xl border border-ink/20 px-2 py-1.5 text-sm text-moss"
           aria-label="Order games"
         >
           <option value="-copies_count">Most available</option>
@@ -527,18 +527,18 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       </div>
 
       {/* Filter bar */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
-        <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-indigo-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700">
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-t border-ink/10 pt-2">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-ink/15 px-2 py-1 text-xs text-moss hover:border-indigo-300 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700">
           <input
             type="checkbox"
             checked={wishlisted}
             onChange={(e) => { setWishlisted(e.target.checked); setPage(1) }}
-            className="h-3 w-3 rounded border-gray-300 text-indigo-600"
+            className="h-3 w-3 rounded border-ink/20 text-indigo-600"
           />
           In my BGG wishlist
         </label>
 
-        <label className="flex items-center gap-1.5 text-xs text-gray-500">
+        <label className="flex items-center gap-1.5 text-xs text-moss">
           <span>Min rating</span>
           <input
             type="number"
@@ -548,7 +548,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             value={minRating}
             onChange={(e) => { setMinRating(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
             placeholder="—"
-            className="w-14 rounded-md border border-gray-300 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+            className="w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
           />
         </label>
 
@@ -558,7 +558,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             setIsExpansion(e.target.value === '' ? undefined : e.target.value === 'true')
             setPage(1)
           }}
-          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600"
+          className="rounded-xl border border-ink/20 px-2 py-1 text-xs text-moss"
           aria-label="Expansion filter"
         >
           <option value="">Base games + expansions</option>
@@ -569,7 +569,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       </div>
 
       {games.length === 0 ? (
-        <p className="px-1 py-6 text-center text-sm text-gray-400">
+        <p className="px-1 py-6 text-center text-sm text-moss/70">
           {isFetching ? 'Loading games…' : 'No games with copies match.'}
         </p>
       ) : (
@@ -580,8 +580,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             return (
               <div
                 key={g.bgg_id}
-                className={`flex flex-col overflow-hidden rounded-lg border ${
-                  wanted ? 'border-purple-300 ring-1 ring-purple-200' : 'border-gray-200'
+                className={`flex flex-col overflow-hidden rounded-2xl border ${
+                  wanted ? 'border-purple-300 ring-1 ring-purple-200' : 'border-ink/15'
                 }`}
               >
                 <div className="flex gap-2 p-2">
@@ -591,11 +591,11 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     ) : null}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold text-gray-800" title={g.name}>
+                    <p className="truncate text-xs font-semibold text-ink" title={g.name}>
                       {g.name}
                     </p>
                     {g.year_published ? (
-                      <p className="text-[11px] text-gray-400">{g.year_published}</p>
+                      <p className="text-[11px] text-moss/70">{g.year_published}</p>
                     ) : null}
                     <button
                       type="button"
@@ -607,7 +607,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     </button>
                   </div>
                 </div>
-                <div className="border-t border-gray-100 px-2 py-1.5">
+                <div className="border-t border-ink/10 px-2 py-1.5">
                   <RatingPriceRow
                     bggId={g.bgg_id}
                     moneyEnabled={moneyEnabled}
@@ -616,7 +616,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                   />
                 </div>
                 {open && (
-                  <div className="border-t border-gray-100 bg-gray-50/60">
+                  <div className="border-t border-ink/10 bg-gray-50/60">
                     <WantGroupControls
                       slug={slug}
                       bggId={g.bgg_id}
@@ -639,7 +639,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                   if (offeringCount === 0) return null
                   const panelOpen = offerOpen === g.bgg_id
                   return (
-                    <div className="border-t border-gray-100 bg-indigo-50/40">
+                    <div className="border-t border-ink/10 bg-indigo-50/40">
                       <button
                         type="button"
                         onClick={() => setOfferOpen(panelOpen ? null : g.bgg_id)}
@@ -660,12 +660,12 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                                     type="checkbox"
                                     checked={on}
                                     onChange={() => toggleGroup(editor, l.id, group)}
-                                    className="h-3 w-3 shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
                                   />
-                                  <span className="truncate text-gray-700" title={l.board_game_name}>
+                                  <span className="truncate text-ink" title={l.board_game_name}>
                                     {l.board_game_name}
                                   </span>
-                                  <span className="ml-auto shrink-0 font-mono text-gray-400">{l.listing_code}</span>
+                                  <span className="ml-auto shrink-0 font-mono text-moss/70">{l.listing_code}</span>
                                 </label>
                               </li>
                             )
@@ -682,7 +682,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                   className={`mt-auto border-t px-2 py-1.5 text-xs font-semibold transition-colors ${
                     wanted
                       ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
-                      : 'border-gray-100 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600'
+                      : 'border-ink/10 text-moss hover:bg-indigo-50 hover:text-indigo-600'
                   }`}
                 >
                   {wanted ? 'Any copy ✓' : '+ Want any copy'}
@@ -694,14 +694,14 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       )}
 
       {count > BROWSE_PAGE_SIZE && (
-        <div className="mt-3 flex items-center justify-between gap-2 text-xs text-gray-500">
+        <div className="mt-3 flex items-center justify-between gap-2 text-xs text-moss">
           <span>{count} games</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || isFetching}
-              className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+              className="rounded border border-ink/15 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
               Prev
             </button>
@@ -710,7 +710,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || isFetching}
-              className="rounded border border-gray-200 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+              className="rounded border border-ink/15 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
               Next
             </button>
@@ -796,16 +796,16 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
     acting.forEach((ml) => editor!.toggle(ml.id, key, next))
   }
 
-  if (isLoading) return <p className="px-3 py-2 text-xs text-gray-400">Loading copies…</p>
+  if (isLoading) return <p className="px-3 py-2 text-xs text-moss/70">Loading copies…</p>
 
   return (
     <div className="px-3 py-2">
       {others.length === 0 ? (
-        <p className="text-xs text-gray-400">No copies from other traders in this event yet.</p>
+        <p className="text-xs text-moss/70">No copies from other traders in this event yet.</p>
       ) : (
         <>
           {canSelect && (
-            <p className="mb-1 text-[11px] font-medium text-gray-400">
+            <p className="mb-1 text-[11px] font-medium text-moss/70">
               Pick the specific copies you'd accept:
             </p>
           )}
@@ -821,10 +821,10 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                   key={l.id}
                   className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
                     tooFar
-                      ? 'border-gray-100 bg-gray-50 opacity-50'
+                      ? 'border-ink/10 bg-gray-50 opacity-50'
                       : wanted
                       ? 'border-purple-300 bg-purple-50'
-                      : 'border-gray-200 bg-white'
+                      : 'border-ink/15 bg-white'
                   }`}
                 >
                   {canSelect && (
@@ -833,7 +833,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                       checked={wanted}
                       disabled={tooFar}
                       onChange={() => toggleCopy(l)}
-                      className="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
+                      className="h-3.5 w-3.5 shrink-0 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
                       aria-label={`Want copy ${l.listing_code}`}
                     />
                   )}
@@ -844,13 +844,13 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                     className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:underline disabled:cursor-default disabled:no-underline"
                     title={tooFar ? 'Owner is too far away' : 'View copy details'}
                   >
-                    <span className="font-mono text-gray-500">{l.listing_code}</span>
-                    <span className="text-gray-300">·</span>
-                    <span className="shrink-0 text-gray-700">{l.copy_owner_username}</span>
+                    <span className="font-mono text-moss">{l.listing_code}</span>
+                    <span className="text-moss/40">·</span>
+                    <span className="shrink-0 text-ink">{l.copy_owner_username}</span>
                     {meta && (
                       <>
-                        <span className="text-gray-300">·</span>
-                        <span className="truncate text-gray-400">{meta}</span>
+                        <span className="text-moss/40">·</span>
+                        <span className="truncate text-moss/70">{meta}</span>
                       </>
                     )}
                     {tooFar && (
@@ -866,7 +866,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
         </>
       )}
       {ownCount > 0 && (
-        <p className="mt-1 text-[11px] text-gray-400">
+        <p className="mt-1 text-[11px] text-moss/70">
           ({ownCount} more {ownCount === 1 ? 'is' : 'are'} your own copy — excluded)
         </p>
       )}
@@ -884,10 +884,10 @@ function CopyDetailRow({ label, value }: { label: string; value?: string | null 
   if (!value) return null
   return (
     <div className="flex gap-2 py-1.5">
-      <span className="w-28 shrink-0 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+      <span className="w-28 shrink-0 text-[11px] font-medium uppercase tracking-wide text-moss/70">
         {label}
       </span>
-      <span className="whitespace-pre-wrap text-sm text-gray-700">{value}</span>
+      <span className="whitespace-pre-wrap text-sm text-ink">{value}</span>
     </div>
   )
 }
@@ -901,17 +901,17 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
       aria-modal="true"
       aria-label="Copy details"
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
       <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
             <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-12 w-12" />
             <div className="min-w-0">
-              <h3 className="truncate text-base font-semibold text-gray-900">
+              <h3 className="truncate text-base font-semibold text-ink">
                 {copy ? copy.board_game_name : 'Copy details'}
               </h3>
               {copy && (
-                <p className="font-mono text-xs text-gray-400">
+                <p className="font-mono text-xs text-moss/70">
                   {copy.listing_code} · {copy.owner_username}
                 </p>
               )}
@@ -919,7 +919,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
           </div>
           <button
             onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:text-gray-600"
+            className="rounded p-1 text-moss/70 hover:text-moss"
             aria-label="Close"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -929,7 +929,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
         </div>
 
         {isLoading || !copy ? (
-          <p className="py-6 text-center text-sm text-gray-400">Loading…</p>
+          <p className="py-6 text-center text-sm text-moss/70">Loading…</p>
         ) : (
           <div className="divide-y divide-gray-50">
             <CopyDetailRow label="Condition" value={CONDITION_LABEL[copy.condition] || copy.condition} />
@@ -947,7 +947,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
             <CopyDetailRow label="Status" value={copy.status !== 'ACTIVE' ? copy.status : ''} />
             {copy.photo_urls?.length > 0 && (
               <div className="py-2">
-                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-moss/70">
                   Photos
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -957,7 +957,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
                       href={url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block h-20 w-20 overflow-hidden rounded border border-gray-200"
+                      className="block h-20 w-20 overflow-hidden rounded border border-ink/15"
                     >
                       <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     </a>
@@ -1114,14 +1114,14 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
         const myWants = groups.filter((g) => groupIsOn(editor, listing.id, g))
         const addable = groups.filter((g) => !groupIsOn(editor, listing.id, g))
         return (
-          <div key={listing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div key={listing.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">
+                  <p className="truncate text-sm font-semibold text-ink">
                     {listing.board_game_name}
                   </p>
-                  <p className="font-mono text-xs text-gray-400">{listing.listing_code}</p>
+                  <p className="font-mono text-xs text-moss/70">{listing.listing_code}</p>
                 </div>
               </div>
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
@@ -1138,7 +1138,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
                   className="h-12 w-12"
                 />
               </div>
-              <svg className="h-5 w-5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+              <svg className="h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
               {myWants.length > 0 ? (
@@ -1153,7 +1153,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
                   ))}
                 </div>
               ) : (
-                <span className="text-xs text-gray-300">nothing yet</span>
+                <span className="text-xs text-moss/40">nothing yet</span>
               )}
             </div>
 
@@ -1181,7 +1181,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
                 )
               })}
               {myWants.length === 0 && (
-                <span className="text-xs text-gray-400">No wants yet — add the games you'd accept.</span>
+                <span className="text-xs text-moss/70">No wants yet — add the games you'd accept.</span>
               )}
             </div>
 
@@ -1189,14 +1189,14 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
               <div className="mt-3">
                 {addable.length > 0 ? (
                   <>
-                    <p className="mb-1 text-xs text-gray-400">Add a want this item would accept:</p>
+                    <p className="mb-1 text-xs text-moss/70">Add a want this item would accept:</p>
                     <div className="flex flex-wrap gap-1.5">
                       {addable.slice(0, 24).map((g) => (
                         <button
                           key={g.gameId}
                           type="button"
                           onClick={() => toggleGroup(editor, listing.id, g)}
-                          className="rounded-full border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:border-purple-300 hover:text-purple-700"
+                          className="rounded-full border border-ink/15 px-2 py-1 text-xs text-moss hover:border-purple-300 hover:text-purple-700"
                         >
                           + {g.gameName}
                         </button>
@@ -1204,14 +1204,14 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
                     </div>
                   </>
                 ) : (
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-moss/70">
                     Every want is already on this item — use “Browse games” above to add more.
                   </p>
                 )}
                 <button
                   type="button"
                   onClick={() => setAddingFor(null)}
-                  className="mt-2 text-xs text-gray-400 hover:text-gray-600"
+                  className="mt-2 text-xs text-moss/70 hover:text-moss"
                 >
                   Done
                 </button>
@@ -1220,7 +1220,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
               <button
                 type="button"
                 onClick={() => setAddingFor(listing.id)}
-                className="mt-3 rounded-md border border-dashed border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 hover:border-purple-300 hover:text-purple-500"
+                className="mt-3 rounded-xl border border-dashed border-ink/15 px-3 py-1.5 text-xs font-medium text-moss/70 hover:border-purple-300 hover:text-purple-500"
               >
                 + Add want
               </button>
@@ -1256,7 +1256,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
 
   if (editor.targets.length === 0) {
     return (
-      <div className="rounded-md bg-gray-50 px-3 py-6 text-center text-sm text-gray-400">
+      <div className="rounded-xl bg-gray-50 px-3 py-6 text-center text-sm text-moss/70">
         No want targets yet. Add one above, then check the items that would accept it.
       </div>
     )
@@ -1269,7 +1269,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-md border px-2 py-1 text-xs"
+          className="rounded-xl border px-2 py-1 text-xs"
           onClick={() => {
             for (const g of groupTargetsByGame(editor.targets)) {
               const wantRating = ratings.get(g.gameId)
@@ -1285,21 +1285,21 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
           Auto-tick by rating (give &le;-rated for &ge;-rated)
         </button>
       </div>
-    <div className="overflow-auto rounded-xl border border-gray-200 bg-white" style={{ maxHeight: '70vh' }}>
+    <div className="overflow-auto rounded-xl border border-ink/15 bg-white" style={{ maxHeight: '70vh' }}>
       <table className="border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
-            <th className="sticky left-0 top-0 z-30 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-gray-500">
+            <th className="sticky left-0 top-0 z-30 border-b border-r border-ink/15 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-moss">
               Want \ My item
             </th>
             {myListings.map((l) => (
               <th
                 key={l.id}
-                className="sticky top-0 z-20 border-b border-r border-gray-200 bg-gray-50 px-1 py-2 align-bottom"
+                className="sticky top-0 z-20 border-b border-r border-ink/15 bg-gray-50 px-1 py-2 align-bottom"
               >
                 <div className="mx-auto h-28 w-8">
                   <div className="flex h-full -rotate-180 items-center justify-center [writing-mode:vertical-rl]">
-                    <span className="truncate text-xs font-medium text-gray-600" title={l.board_game_name}>
+                    <span className="truncate text-xs font-medium text-moss" title={l.board_game_name}>
                       {l.board_game_name}
                     </span>
                   </div>
@@ -1316,12 +1316,12 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
             return (
               <Fragment key={gkey}>
                 <tr className="group">
-                  <th className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-3 py-2 text-left font-normal group-hover:bg-indigo-50/40">
+                  <th className="sticky left-0 z-10 border-b border-r border-ink/15 bg-white px-3 py-2 text-left font-normal group-hover:bg-indigo-50/40">
                     <span className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => toggleExpand(gkey)}
-                        className="shrink-0 text-gray-400 hover:text-indigo-600"
+                        className="shrink-0 text-moss/70 hover:text-indigo-600"
                         title="Show the concrete copies this want resolves to"
                         aria-expanded={isOpen}
                       >
@@ -1335,7 +1335,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
-                      <span className="max-w-[12rem] truncate text-gray-700" title={g.gameName}>
+                      <span className="max-w-[12rem] truncate text-ink" title={g.gameName}>
                         {g.gameName}
                       </span>
                       <span
@@ -1352,15 +1352,15 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                     return (
                       <td
                         key={l.id}
-                        className="border-b border-r border-gray-200 p-0 text-center group-hover:bg-indigo-50/40"
+                        className="border-b border-r border-ink/15 p-0 text-center group-hover:bg-indigo-50/40"
                       >
                         <button
                           type="button"
                           onClick={() => toggleGroup(editor, l.id, g)}
                           className={`m-1 h-5 w-5 rounded border ${
                             on
-                              ? 'border-indigo-600 bg-indigo-600 text-white'
-                              : 'border-gray-300 bg-white text-transparent hover:border-indigo-400'
+                              ? 'border-ink bg-butter text-ink'
+                              : 'border-ink/20 bg-white text-transparent hover:border-indigo-400'
                           }`}
                           title={`${g.gameName}  ↕  ${l.board_game_name}`}
                           aria-pressed={on}
@@ -1375,9 +1375,9 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                 </tr>
                 {isOpen && (
                   <tr>
-                    <td colSpan={colCount} className="sticky left-0 border-b border-gray-200 bg-indigo-50/30">
+                    <td colSpan={colCount} className="sticky left-0 border-b border-ink/15 bg-indigo-50/30">
                       <div className="text-xs">
-                        <span className="px-3 py-1 font-medium text-gray-500">
+                        <span className="px-3 py-1 font-medium text-moss">
                           {specific
                             ? 'Specific copies you selected (refine in “Browse games” above):'
                             : "Copies you'd be matched to receive:"}
@@ -1546,7 +1546,7 @@ export default function MyWantsPage() {
   if (eventError || !event) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
           <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
             Back to events
@@ -1559,7 +1559,7 @@ export default function MyWantsPage() {
   if (!event.is_participant && !event.is_organizer) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
+        <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-yellow-700">
             You must join this event before building your want list.
           </p>
@@ -1575,7 +1575,7 @@ export default function MyWantsPage() {
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-8 sm:px-6">
       <Link
         to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-gray-400 transition-colors hover:text-indigo-600"
+        className="inline-flex items-center gap-1 text-xs text-moss/70 transition-colors hover:text-indigo-600"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -1583,19 +1583,19 @@ export default function MyWantsPage() {
         Back to {event.name}
       </Link>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">My Wants</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-xl font-bold text-ink">My Wants</h1>
+            <p className="mt-1 text-sm text-moss">
               {event.name}
-              <span className="mx-2 text-gray-300">·</span>
+              <span className="mx-2 text-moss/40">·</span>
               For each item you offer, pick the games you'd accept in return.
             </p>
           </div>
           <Link
             to={`/events/${slug}/builder`}
-            className="text-xs text-gray-400 underline hover:text-indigo-600"
+            className="text-xs text-moss/70 underline hover:text-indigo-600"
           >
             Advanced (X-to-Y) builder
           </Link>
@@ -1603,13 +1603,13 @@ export default function MyWantsPage() {
       </div>
 
       {event.inputs_locked && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           This event is locked for matching — want lists can no longer be edited.
         </div>
       )}
 
       {myListings.length === 0 ? (
-        <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
           You have no items in this event yet.{' '}
           <Link to={`/events/${slug}`} className="font-medium underline">
             Add copies from the event page
@@ -1620,20 +1620,20 @@ export default function MyWantsPage() {
         <>
           {/* Mode tabs */}
           <div className="flex items-center justify-between gap-2">
-            <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+            <div className="inline-flex rounded-2xl border border-ink/15 bg-white p-0.5">
               {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setView(m)}
-                  className={`rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
-                    view === m ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:text-gray-700'
+                  className={`rounded-xl px-4 py-1.5 text-sm font-medium capitalize transition-colors ${
+                    view === m ? 'bg-butter text-ink shadow-pop-sm' : 'text-moss hover:text-ink'
                   }`}
                 >
                   {m}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-moss/70">
               {myListings.length} item{myListings.length !== 1 ? 's' : ''} · {wantGameCount} game
               {wantGameCount !== 1 ? 's' : ''} wanted
             </p>
@@ -1658,22 +1658,22 @@ export default function MyWantsPage() {
 
       {/* Sticky save bar */}
       {editor.dirtyCount > 0 && !event.inputs_locked && (
-        <div className="sticky bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-gray-300 bg-white px-5 py-2.5 shadow-lg">
-          <span className="text-sm text-gray-600">
+        <div className="sticky bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-ink/20 bg-white px-5 py-2.5 shadow-lg">
+          <span className="text-sm text-moss">
             {editor.dirtyCount} unsaved change{editor.dirtyCount !== 1 ? 's' : ''}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => editor.reset()}
               disabled={saving}
-              className="rounded-full px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-50"
+              className="rounded-full px-3 py-1.5 text-sm text-moss hover:text-ink disabled:opacity-50"
             >
               Discard
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded-full bg-indigo-600 px-5 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+              className="rounded-full border-2 border-ink bg-butter px-5 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
@@ -1681,7 +1681,7 @@ export default function MyWantsPage() {
         </div>
       )}
       {saveError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {saveError}
         </div>
       )}

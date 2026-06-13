@@ -72,15 +72,15 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
       aria-modal="true"
       aria-label="Edit copy"
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Edit copy</h2>
-            <p className="text-xs text-gray-400 mt-0.5 font-mono">#{copy.listing_code}</p>
+            <h2 className="font-display text-lg font-bold text-ink">Edit copy</h2>
+            <p className="text-xs text-moss mt-0.5 font-mono">#{copy.listing_code}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded" aria-label="Close">
+          <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label="Close">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -112,11 +112,11 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
           />
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+        <div className="flex gap-3 px-5 py-4 border-t-2 border-ink/10">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Cancel
           </button>
@@ -124,7 +124,7 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
             type="submit"
             form="edit-copy-form"
             disabled={patchCopy.isPending}
-            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {patchCopy.isPending ? 'Saving…' : 'Save changes'}
           </button>
@@ -146,26 +146,26 @@ interface WithdrawDialogProps {
 function WithdrawDialog({ copy, onConfirm, onCancel, isPending }: WithdrawDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden="true" />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-2">Withdraw copy?</h2>
-        <p className="text-sm text-gray-500 mb-1">
-          This will mark copy <span className="font-mono font-medium">#{copy.listing_code}</span> as withdrawn.
+      <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
+      <div className="relative bg-cream border-2 border-ink rounded-3xl shadow-card w-full max-w-sm p-6">
+        <h2 className="font-display text-lg font-bold text-ink mb-2">Withdraw copy?</h2>
+        <p className="text-sm text-moss mb-1">
+          This will mark copy <span className="font-mono font-semibold text-ink">#{copy.listing_code}</span> as withdrawn.
         </p>
-        <p className="text-xs text-gray-400 mb-5">
+        <p className="text-xs text-moss/70 mb-5">
           The copy will no longer appear in game listings. You can still see it here.
         </p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={isPending}
-            className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-red-300 px-4 py-2.5 text-sm font-bold text-red-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {isPending ? 'Withdrawing…' : 'Withdraw'}
           </button>
@@ -189,7 +189,7 @@ function RatingInput({ bggId, currentRating }: { bggId: number; currentRating?: 
   }
 
   return (
-    <label className="flex items-center gap-1 text-xs text-gray-400">
+    <label className="flex items-center gap-1 text-xs text-moss">
       My rating:
       <input
         type="number"
@@ -200,10 +200,10 @@ function RatingInput({ bggId, currentRating }: { bggId: number; currentRating?: 
         onChange={(e) => setDraft(e.target.value)}
         onBlur={handleBlur}
         placeholder="—"
-        className="w-14 rounded border border-gray-200 px-1.5 py-0.5 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+        className="w-14 rounded-lg border-2 border-ink/15 bg-cream px-1.5 py-0.5 text-xs focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage"
         aria-label="My rating (1–10)"
       />
-      {setRating.isPending && <span className="text-indigo-400">…</span>}
+      {setRating.isPending && <span className="text-moss">…</span>}
     </label>
   )
 }
@@ -241,10 +241,10 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
         />
       )}
 
-      <div className={`p-4 border-b border-gray-100 last:border-0 ${isWithdrawn ? 'opacity-60' : ''}`}>
+      <div className={`p-4 border-b-2 border-ink/10 last:border-0 ${isWithdrawn ? 'opacity-60' : ''}`}>
         {/* Pending banner */}
         {isPendingCopy && (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <svg className="w-3.5 h-3.5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -255,7 +255,7 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
             </div>
             <button
               onClick={() => setEditOpen(true)}
-              className="shrink-0 rounded border border-amber-300 bg-white px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+              className="shrink-0 rounded-lg border-2 border-amber-300 bg-cream px-2.5 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
             >
               Complete
             </button>
@@ -265,34 +265,34 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
         {/* Top: thumbnail + listing code + status + game link */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <GameThumb src={copy.board_game_thumbnail} alt={copy.board_game_name} className="h-8 w-8" />
-          <span className="font-mono text-xs text-gray-400 border border-gray-100 rounded px-1.5 py-0.5">
+          <span className="font-mono text-xs text-moss border border-ink/10 rounded-full px-2 py-0.5">
             #{copy.listing_code}
           </span>
-          <span className={`text-xs border rounded px-1.5 py-0.5 font-medium ${statusClass}`}>
+          <span className={`text-xs border rounded-full px-2 py-0.5 font-semibold ${statusClass}`}>
             {copy.status.charAt(0) + copy.status.slice(1).toLowerCase()}
           </span>
-          <span className="ml-auto max-w-[60%] truncate text-sm font-semibold text-gray-800">
+          <span className="ml-auto max-w-[60%] truncate text-sm font-bold text-ink">
             {copy.board_game_name}
           </span>
         </div>
 
         {/* Condition + language + edition */}
         <div className="flex flex-wrap gap-1.5 mb-2">
-          <span className={`text-xs border rounded px-1.5 py-0.5 font-medium ${conditionClass}`}>
+          <span className={`text-xs border rounded-full px-2 py-0.5 font-semibold ${conditionClass}`}>
             {CONDITION_LABELS[copy.condition] ?? copy.condition}
           </span>
           {copy.language && (
-            <span className="text-xs border border-gray-200 rounded px-1.5 py-0.5 text-gray-600">
+            <span className="text-xs border border-ink/15 rounded-full px-2 py-0.5 text-moss">
               {copy.language}
             </span>
           )}
           {copy.version_name && copy.version_name !== 'Unknown' && (
-            <span className="text-xs border border-gray-100 rounded px-1.5 py-0.5 text-gray-400">
+            <span className="text-xs border border-ink/10 rounded-full px-2 py-0.5 text-moss/70">
               {copy.version_name}
             </span>
           )}
           {copy.pickup_available && (
-            <span className="text-xs border border-green-200 rounded px-1.5 py-0.5 text-green-600 bg-green-50">
+            <span className="text-xs border border-green-200 rounded-full px-2 py-0.5 text-green-700 bg-green-50">
               Pickup
             </span>
           )}
@@ -300,7 +300,7 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
 
         {/* Notes */}
         {copy.owner_notes && (
-          <p className="text-xs text-gray-500 line-clamp-2 mb-2">{copy.owner_notes}</p>
+          <p className="text-xs text-moss line-clamp-2 mb-2">{copy.owner_notes}</p>
         )}
 
         {/* Actions + rating */}
@@ -309,20 +309,20 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
             <>
               <button
                 onClick={() => setEditOpen(true)}
-                className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
               >
                 Edit
               </button>
               <button
                 onClick={() => setWithdrawOpen(true)}
-                className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                className="rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
               >
                 Withdraw
               </button>
               {isPendingCopy && (
                 <span
                   title="Complete details before adding to an event."
-                  className="rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-400 cursor-not-allowed select-none"
+                  className="rounded-xl border-2 border-ink/10 px-3 py-1.5 text-xs font-semibold text-moss/50 cursor-not-allowed select-none"
                   aria-disabled="true"
                 >
                   Add to event
@@ -343,18 +343,18 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
 
 function CopiesSkeleton() {
   return (
-    <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+    <div className="rounded-3xl border-2 border-ink/15 bg-cream divide-y-2 divide-ink/10 overflow-hidden">
       {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className="p-4 animate-pulse space-y-2">
           <div className="flex gap-2">
-            <div className="h-5 w-20 bg-gray-100 rounded" />
-            <div className="h-5 w-14 bg-gray-100 rounded" />
+            <div className="h-5 w-20 bg-gray-200 rounded-full" />
+            <div className="h-5 w-14 bg-gray-200 rounded-full" />
           </div>
           <div className="flex gap-1.5">
-            <div className="h-4 w-16 bg-gray-100 rounded" />
-            <div className="h-4 w-12 bg-gray-100 rounded" />
+            <div className="h-4 w-16 bg-gray-200 rounded-full" />
+            <div className="h-4 w-12 bg-gray-200 rounded-full" />
           </div>
-          <div className="h-3 w-2/3 bg-gray-100 rounded" />
+          <div className="h-3 w-2/3 bg-gray-200 rounded-full" />
         </div>
       ))}
     </div>
@@ -429,16 +429,16 @@ function BggImportPanel() {
   }
 
   return (
-    <div className="mb-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4">
-      <h2 className="text-sm font-semibold text-gray-800 mb-3">Import from BGG</h2>
+    <div className="mb-4 rounded-3xl border-2 border-ink/15 bg-teal-50/60 p-4">
+      <h2 className="font-display text-base font-bold text-ink mb-3">Import from BGG</h2>
 
       {/* Skip duplicates checkbox */}
-      <label className="flex items-center gap-2 text-xs text-gray-600 mb-3">
+      <label className="flex items-center gap-2 text-xs font-medium text-moss mb-3">
         <input
           type="checkbox"
           checked={skipDuplicates}
           onChange={(e) => setSkipDuplicates(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+          className="h-3.5 w-3.5 rounded border-2 border-ink/30 accent-teal-600 focus:ring-teal-400"
         />
         Skip existing duplicates
       </label>
@@ -449,7 +449,7 @@ function BggImportPanel() {
           {!hasBggUsername && (
             <p className="text-xs text-amber-600">
               Set your{' '}
-              <a href="/profile" className="underline hover:text-amber-800">
+              <a href="/profile" className="font-semibold underline hover:text-amber-800">
                 BGG username
               </a>{' '}
               first.
@@ -459,7 +459,7 @@ function BggImportPanel() {
             onClick={handleOwnedImport}
             disabled={!hasBggUsername || isRunning || startImport.isPending}
             title={!hasBggUsername ? 'Set your BGG username in your profile first.' : undefined}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 transition-colors"
+            className="rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             {isRunning ? 'Importing…' : 'Import owned from BGG'}
           </button>
@@ -467,19 +467,19 @@ function BggImportPanel() {
 
         {/* Geeklist import */}
         <div className="flex items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-gray-500">
+          <label className="flex flex-col gap-1 text-xs font-medium text-moss">
             Geeklist ID
             <input
               value={geeklistId}
               onChange={(e) => setGeeklistId(e.target.value)}
               placeholder="e.g. 123456"
-              className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-200"
+              className="w-28 rounded-xl border-2 border-ink/15 bg-parchment px-2 py-1.5 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-teal-300"
             />
           </label>
           <button
             onClick={handleGeeklistImport}
             disabled={isRunning || startImport.isPending}
-            className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-50 transition-colors"
+            className="rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             {isRunning ? 'Importing…' : 'Import from geeklist'}
           </button>
@@ -544,12 +544,12 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
       aria-modal="true"
       aria-label="Add a copy"
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-xl shadow-2xl max-h-[92vh] flex flex-col">
+      <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Add a copy</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded" aria-label="Close">
+        <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
+          <h2 className="font-display text-lg font-bold text-ink">Add a copy</h2>
+          <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label="Close">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -565,19 +565,19 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search the catalog for a game you own…"
-                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                className="w-full rounded-xl border-2 border-ink/15 bg-parchment px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-sage"
               />
               {results.length > 0 && (
-                <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-xl border-2 border-ink/15 bg-cream shadow-card">
                   {results.map((g) => (
                     <li key={g.bgg_id}>
                       <button
                         type="button"
                         onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name })}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-sage/30"
                       >
-                        <span className="truncate text-gray-800">{g.name}</span>
-                        <span className="shrink-0 text-xs text-gray-400">{g.year_published ?? ''}</span>
+                        <span className="truncate text-ink">{g.name}</span>
+                        <span className="shrink-0 text-xs text-moss/70">{g.year_published ?? ''}</span>
                       </button>
                     </li>
                   ))}
@@ -586,12 +586,12 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <>
-              <div className="mb-4 flex items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50/40 px-3 py-2">
-                <span className="text-sm font-medium text-gray-800">{picked.name}</span>
+              <div className="mb-4 flex items-center gap-2 rounded-xl border-2 border-ink/15 bg-sage/30 px-3 py-2">
+                <span className="text-sm font-semibold text-ink">{picked.name}</span>
                 <button
                   type="button"
                   onClick={() => setPicked(null)}
-                  className="ml-auto text-xs text-indigo-500 hover:underline"
+                  className="ml-auto text-xs font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
                 >
                   Change game
                 </button>
@@ -606,11 +606,11 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="flex gap-3 px-5 py-4 border-t border-gray-100">
+        <div className="flex gap-3 px-5 py-4 border-t-2 border-ink/10">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Cancel
           </button>
@@ -618,7 +618,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
             type="submit"
             form="add-copy-form"
             disabled={create.isPending || !picked}
-            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+            className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
             {create.isPending ? 'Adding…' : 'Add copy'}
           </button>
@@ -649,18 +649,18 @@ export default function MyCopiesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Copies</h1>
+          <h1 className="text-3xl font-bold text-ink tracking-tight">My Copies</h1>
           {!isLoading && !isError && (
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-moss mt-1">
               {activeCopies} active{copies.length !== activeCopies ? ` · ${copies.length} total` : ''}
             </p>
           )}
         </div>
         <button
           onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 transition-colors shadow-sm self-start"
+          className="inline-flex items-center gap-1.5 rounded-2xl border-2 border-ink bg-butter px-5 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 self-start"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           Add a copy
@@ -677,7 +677,7 @@ export default function MyCopiesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="py-1.5 pl-2.5 pr-7 text-xs border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="py-2 pl-2.5 pr-7 text-xs border-2 border-ink/15 rounded-xl bg-cream font-medium text-ink focus:outline-none focus:ring-2 focus:ring-sage"
             aria-label="Filter by status"
           >
             {STATUS_OPTIONS.map((o) => (
@@ -687,7 +687,7 @@ export default function MyCopiesPage() {
           {statusFilter && (
             <button
               onClick={() => setStatusFilter('')}
-              className="text-xs text-indigo-600 hover:underline px-1"
+              className="text-xs font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2 px-1"
             >
               Clear
             </button>
@@ -697,39 +697,39 @@ export default function MyCopiesPage() {
 
       {/* Content */}
       {isError ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-8 text-center text-sm text-red-600">
+        <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-4 py-8 text-center text-sm font-medium text-red-600">
           Could not load your copies. Please try again.
         </div>
       ) : isLoading ? (
         <CopiesSkeleton />
       ) : copies.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-200 px-6 py-12 text-center">
-          <svg className="mx-auto w-12 h-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="rounded-3xl border-2 border-dashed border-ink/20 px-6 py-12 text-center">
+          <svg className="mx-auto w-12 h-12 text-moss/40 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
-          <p className="text-sm font-medium text-gray-500">No copies yet</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-sm font-bold text-ink">No copies yet</p>
+          <p className="text-xs text-moss mt-1">
             Add the board games you own so you can list them in trade events.
           </p>
           <button
             onClick={() => setAddOpen(true)}
-            className="mt-4 inline-block text-sm text-indigo-600 hover:underline font-medium"
+            className="mt-4 inline-block text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
           >
             Add a copy
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-200 px-6 py-10 text-center">
-          <p className="text-sm text-gray-500">No copies with status "{statusFilter.toLowerCase()}".</p>
+        <div className="rounded-3xl border-2 border-dashed border-ink/20 px-6 py-10 text-center">
+          <p className="text-sm text-moss">No copies with status "{statusFilter.toLowerCase()}".</p>
           <button
             onClick={() => setStatusFilter('')}
-            className="mt-2 text-xs text-indigo-600 hover:underline"
+            className="mt-2 text-xs font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
           >
             Clear filter
           </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 overflow-hidden">
+        <div className="rounded-3xl border-2 border-ink bg-cream overflow-hidden shadow-card">
           {filtered.map((copy) => (
             <MyCopyCard key={copy.id} copy={copy} rmap={rmap} />
           ))}
