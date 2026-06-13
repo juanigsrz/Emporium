@@ -141,7 +141,7 @@ def build_wants(event) -> str:
         _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs)
         if event.money_enabled else ""
     )
-    body = _build_xtoy(wishes, by_game, by_id, block_pairs)
+    body = _build_xtoy(wishes, by_game, by_id, by_code, block_pairs)
     return money_block + body
 
 
@@ -227,15 +227,45 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
-    """gurobi: one `username [DUP-PROTECT] : (NforM) give -> take` line per active wish.
+def _dup_protect_take(take, want_group_id, by_code):
+    """Collapse same-game copies behind dummy nodes for duplicate protection.
 
-    DUP-PROTECT appears after the username when the wish's want group is flagged
-    against receiving duplicate copies of the same game.
+    Groups `take` codes by board game. A game with >=2 acceptable copies is
+    replaced in the take set by a single `__DUMMY_<wantgroup>_<boardgame>` token,
+    and its real copies move onto a dummy leg (dummy -> copies). A single-copy
+    game passes through unchanged. Returns (take_tokens, dummy_legs), where
+    take_tokens is sorted and dummy_legs maps dummy_code -> sorted copy codes.
+    """
+    by_bg = defaultdict(list)
+    for code in take:
+        by_bg[by_code[code].copy.board_game_id].append(code)
+    take_tokens = []
+    dummy_legs = {}
+    for bg_id, codes in by_bg.items():
+        if len(codes) >= 2:
+            dummy = f"__DUMMY_{want_group_id}_{bg_id}"
+            take_tokens.append(dummy)
+            dummy_legs[dummy] = sorted(codes)
+        else:
+            take_tokens.append(codes[0])
+    return sorted(take_tokens), dummy_legs
+
+
+def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
+    """gurobi: one `username : (NforM) give -> take` line per active wish.
+
+    A duplicate-protected want group routes each game that has >=2 acceptable
+    copies through a single `__DUMMY_<wantgroup>_<boardgame>` node — the wish's
+    take side points at the dummy, and a `(1for1) dummy -> copies` leg points at
+    the real copies. Because a dummy is one node, at most one copy of that game
+    can flow through any single trade chain. Dummy legs are emitted once (after
+    all wish lines, sorted by code), so a want group shared across wishes
+    collapses to one leg.
     """
     blocked_cache = {}
     coords = _load_coords()
     lines = []
+    dummy_legs = {}  # dummy_code -> (username, [copy codes])
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -252,8 +282,17 @@ def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
             continue
         n = w.offer_group.max_give
         m = w.want_group.min_receive
-        dup = " DUP-PROTECT" if w.want_group.duplicate_protection else ""
-        lines.append(f"{w.user.username}{dup} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
+        if w.want_group.duplicate_protection:
+            take, legs = _dup_protect_take(take, w.want_group_id, by_code)
+            for dummy, codes in legs.items():
+                # Last write wins. Safe because every wish sharing a want_group is
+                # the same user (enforced on the wish serializer), and _expand keys
+                # only on user_id/blocked — so the copy set is identical each time.
+                dummy_legs[dummy] = (w.user.username, codes)
+        lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
+    for dummy in sorted(dummy_legs):
+        username, codes = dummy_legs[dummy]
+        lines.append(f"{username} : (1for1) {dummy} -> {' '.join(codes)}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 
