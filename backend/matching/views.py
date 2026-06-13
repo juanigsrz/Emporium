@@ -505,3 +505,78 @@ class PaymentDetailView(APIView):
         return Response(
             SettlementPaymentSerializer(payment, context={"request": request}).data
         )
+
+
+class PaymentsOverviewView(APIView):
+    """GET /api/events/{slug}/payments/overview/ — organizer-only, paginated."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the payments overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"count": 0, "next": None, "previous": None, "results": []})
+        ensure_payments(run)
+        qs = (
+            SettlementPayment.objects.filter(match_run=run)
+            .select_related("from_user", "to_user")
+            .order_by("id")
+        )
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        paginator = MatchPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(
+            SettlementPaymentSerializer(page, many=True, context={"request": request}).data
+        )
+
+
+class PaymentsOverviewSummaryView(APIView):
+    """GET /api/events/{slug}/payments/overview/summary/ — organizer counts + rollup."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the payments overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"counts": {}, "users": []})
+        ensure_payments(run)
+        base = SettlementPayment.objects.filter(match_run=run)
+        counts = {
+            row["status"]: row["c"]
+            for row in base.values("status").annotate(c=Count("id"))
+        }
+        users: dict[str, dict] = {}
+
+        def slot(username):
+            return users.setdefault(username, {
+                "username": username, "owe_total": 0, "owe_paid": 0,
+                "due_total": 0, "due_confirmed": 0,
+            })
+
+        for row in base.values("from_user__username").annotate(
+            owe_total=Count("id"),
+            owe_paid=Count("id", filter=Q(status__in=["PAID", "CONFIRMED"])),
+        ):
+            s = slot(row["from_user__username"])
+            s["owe_total"] = row["owe_total"]
+            s["owe_paid"] = row["owe_paid"]
+        for row in base.values("to_user__username").annotate(
+            due_total=Count("id"),
+            due_confirmed=Count("id", filter=Q(status="CONFIRMED")),
+        ):
+            s = slot(row["to_user__username"])
+            s["due_total"] = row["due_total"]
+            s["due_confirmed"] = row["due_confirmed"]
+
+        return Response({
+            "counts": counts,
+            "users": sorted(users.values(), key=lambda u: u["username"]),
+        })
