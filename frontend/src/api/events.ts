@@ -36,24 +36,6 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   ARCHIVED: 'Archived',
 }
 
-// ---- Matching mode (solver selection) ----
-
-export type MatchingMode = 'ONETOONE' | 'XTOY'
-
-export const MATCHING_MODE_LABELS: Record<MatchingMode, string> = {
-  ONETOONE: 'Old-school 1-to-1 (online solver)',
-  XTOY: 'X-to-Y (local solver, upload)',
-}
-
-// Statuses at/after which matching_mode is frozen (matching has begun).
-export const MATCHING_MODE_FROZEN_STATUSES: EventStatus[] = [
-  'MATCHING',
-  'MATCH_REVIEW',
-  'FINALIZATION',
-  'SHIPPING',
-  'ARCHIVED',
-]
-
 // ---- Types ----
 
 export interface TradeEvent {
@@ -64,7 +46,6 @@ export interface TradeEvent {
   organizer: number
   organizer_username: string
   status: EventStatus
-  matching_mode: MatchingMode
   // Money trading (decimal as string, null when no cap)
   money_enabled: boolean
   max_money_per_user: string | null
@@ -125,9 +106,7 @@ export interface EventCreatePayload {
   max_distance_km?: number | null
 }
 
-export type EventPatchPayload = Partial<EventCreatePayload> & {
-  matching_mode?: MatchingMode
-}
+export type EventPatchPayload = Partial<EventCreatePayload>
 
 export interface EventParticipant {
   user: number

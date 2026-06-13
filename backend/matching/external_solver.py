@@ -1,26 +1,19 @@
 """
 matching/external_solver.py
 
-Bridge to the external FastTradeMaximizer solver (both variants).
+Bridge to the external FastTradeMaximizer (gurobi) solver.
 
   build_wants(event) -> str
-      Export the event's active wishes as a wants file in the format the event's
-      matching_mode expects:
-        ONETOONE -> OLWLG format for the hosted C++ `ftm` solver.
-        XTOY     -> `(NforM) give -> take` format for the local gurobi solver.
-
-  call_online_solver(wants_text) -> str
-      POST a wants file to the hosted modal endpoint, return solver stdout.
-      (ONETOONE / production only — see settings.MATCHING_USE_ONLINE_SOLVER.)
+      Export the event's active wishes as a wants file in `(NforM) give -> take`
+      format for the local gurobi solver.
 
   load_solution(match_run, raw_output) -> (result, summary, log)
       Parse solver stdout into the standard result JSON and create the
       TradeAssignment rows on the MatchRun. Mirrors FakeMatcher.run()'s return.
 
 The item token in every file AND in the parsed result is Copy.listing_code; it
-round-trips unchanged through both solvers. giver/receiver are always derived
-from listing ownership — never from usernames in the file (the C++ solver
-upper-cases them).
+round-trips unchanged. giver/receiver are always derived from listing ownership
+— never from usernames in the file.
 """
 
 from __future__ import annotations
@@ -32,7 +25,6 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 
-from events.models import TradeEvent
 from trades.models import WantGroupItem
 
 
@@ -145,63 +137,21 @@ def build_wants(event) -> str:
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
 
-    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
-        money_block = _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs) if event.money_enabled else ""
-        body = _build_xtoy(wishes, by_game, by_id, block_pairs)
-        header = _build_placeholder_header(event, wishes, by_id)
-        return money_block + header + body if (money_block or header) else body
-    else:
-        body = _build_onetoone(listings, wishes, by_game, by_id, block_pairs)
-        header = _build_placeholder_header(event, wishes, by_id)
-        return header + body if header else body
+    money_block = (
+        _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs)
+        if event.money_enabled else ""
+    )
+    body = _build_xtoy(wishes, by_game, by_id, block_pairs)
+    header = _build_placeholder_header(wishes)
+    return money_block + header + body if (money_block or header) else body
 
 
-def _build_placeholder_header(event, wishes, by_id) -> str:
-    """Duplicate-protection comments and (for ONETOONE) money comment lines.
-
-    For XTOY events with money_enabled, real solver directives are emitted by
-    _build_xtoy_money_directives instead; only #! DUP-PROTECT lines appear here.
-    Comment lines (`#! ...`) are ignored by both parse_ftm and parse_gurobi.
-    """
-    from trades.pricing import resolve_ask, resolve_bid
-    lines = []
-    is_xtoy = event.matching_mode == TradeEvent.MatchingMode.XTOY
-
-    if event.money_enabled and not is_xtoy:
-        cap = event.max_money_per_user
-        lines.append(
-            f"#! MONEY-ENABLED max_per_user={f'{cap:.2f}' if cap is not None else 'none'}"
-        )
-        for p in event.participations.select_related("user").all():
-            if p.max_spend and p.max_spend > 0:
-                lines.append(f"#! BUDGET ({p.user.username}) {p.max_spend}")
-
-    for w in wishes:
-        if w.want_group.duplicate_protection:
-            lines.append(f"#! DUP-PROTECT ({w.user.username}) wish={w.id}")
-        if not event.money_enabled or is_xtoy:
-            continue
-        # Buy side (P): max the user pays to receive a wanted game.
-        for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, event, it)
-            if bid is None:
-                continue
-            if it.target_type == WantGroupItem.TargetType.BOARD_GAME:
-                token = f"game={it.board_game_id}"
-            else:
-                el = by_id.get(it.event_listing_id)
-                token = f"listing={el.copy.listing_code}" if el else f"listing_id={it.event_listing_id}"
-            lines.append(f"#! MONEY-WANT ({w.user.username}) {token} max={bid:.2f}")
-        # Sell side (Q): min the user accepts to give one of their listings.
-        for ogi in w.offer_group.items.all():
-            ask = resolve_ask(ogi.event_listing)
-            if ask is None:
-                continue
-            lines.append(
-                f"#! MONEY-OFFER ({w.user.username}) "
-                f"listing={ogi.event_listing.copy.listing_code} min={ask:.2f}"
-            )
-
+def _build_placeholder_header(wishes) -> str:
+    """Duplicate-protection comment lines (#! DUP-PROTECT). Ignored by parse_gurobi."""
+    lines = [
+        f"#! DUP-PROTECT ({w.user.username}) wish={w.id}"
+        for w in wishes if w.want_group.duplicate_protection
+    ]
     return ("\n".join(lines) + "\n") if lines else ""
 
 
@@ -287,32 +237,6 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _build_onetoone(listings, wishes, by_game, by_id, block_pairs) -> str:
-    """OLWLG: one `(user) CODE : wishlist` line per active listing."""
-    blocked_cache = {}
-    coords = _load_coords()
-    wishlist_map = defaultdict(set)  # listing_id -> set(codes)
-    for w in wishes:
-        blocked = blocked_cache.setdefault(
-            w.user_id,
-            _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
-        )
-        exp = set(_expand(w.want_group.items.all(), w.user_id, by_game, by_id, blocked))
-        for ogi in w.offer_group.items.all():
-            el = ogi.event_listing
-            if el.active:
-                wishlist_map[el.id] |= exp
-
-    lines = ["#! REQUIRE-COLONS REQUIRE-USERNAMES"]
-    for el in listings:
-        code = el.copy.listing_code
-        user = el.copy.owner.username
-        wl = [c for c in sorted(wishlist_map.get(el.id, ())) if c != code]
-        suffix = (" " + " ".join(wl)) if wl else ""
-        lines.append(f"({user}) {code} :{suffix}")
-    return "\n".join(lines) + "\n"
-
-
 def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
     """gurobi: one `(NforM) give -> take` line per active wish."""
     blocked_cache = {}
@@ -339,75 +263,8 @@ def _build_xtoy(wishes, by_game, by_id, block_pairs) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Online solver call (ONETOONE / production)
-# ---------------------------------------------------------------------------
-
-def call_online_solver(wants_text: str) -> str:
-    """POST the wants file to the hosted modal endpoint; return solver stdout."""
-    import requests
-    from django.conf import settings
-
-    base = getattr(
-        settings, "SOLVER_URL",
-        "https://juanigsrz--fasttrademaximizer-web.modal.run",
-    ).rstrip("/")
-    timeout = getattr(settings, "SOLVER_TIMEOUT", 250)
-
-    resp = requests.post(
-        base + "/solve",
-        data=wants_text.encode("utf-8"),
-        headers={"Content-Type": "text/plain"},
-        timeout=timeout,
-    )
-    if resp.status_code != 200:
-        try:
-            detail = str(resp.json())[:2000]
-        except ValueError:
-            detail = resp.text[:2000]
-        raise RuntimeError(f"Solver returned HTTP {resp.status_code}: {detail}")
-    return resp.json().get("output", "")
-
-
-# ---------------------------------------------------------------------------
 # Parsers — solver stdout -> edges (moved_code, receiver_anchor_code, group)
 # ---------------------------------------------------------------------------
-
-_FTM_LINE = re.compile(
-    r"^\(([^)]*)\)\s+(\S+)\s+receives\s+\(([^)]*)\)\s+(\S+)\s*$"
-)
-
-
-def parse_ftm(output: str):
-    """ftm OLWLG output -> edges. `(recv) RT receives (give) GT`:
-    moved listing = GT (the given item), received by the owner of RT.
-    Blank lines delimit trade loops -> one group index per loop.
-    """
-    edges = []
-    lines = output.splitlines()
-    i, n = 0, len(lines)
-    while i < n and not lines[i].lstrip().startswith("TRADE LOOPS"):
-        i += 1
-    i += 1  # skip the header line itself
-    group = -1
-    in_block = False
-    while i < n:
-        line = lines[i].strip()
-        i += 1
-        if line.startswith("ITEM SUMMARY"):
-            break
-        if not line:
-            in_block = False
-            continue
-        m = _FTM_LINE.match(line)
-        if not m:
-            continue
-        if not in_block:
-            group += 1
-            in_block = True
-        recv_tag, give_tag = m.group(2), m.group(4)
-        edges.append((give_tag, recv_tag, group))
-    return edges
-
 
 def parse_gurobi(output: str):
     """gurobi output -> edges. `G... -> T...`: the wisher = owner(G[0]) receives
@@ -561,10 +418,7 @@ def load_solution(match_run, raw_output: str):
     event = match_run.event
     listings, by_code, by_game, by_id = _listing_index(event)
 
-    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
-        parsed = parse_gurobi(raw_output)
-    else:
-        parsed = parse_ftm(raw_output)
+    parsed = parse_gurobi(raw_output)
 
     # Resolve tokens -> [moved_el, giver_user, receiver_user, group]
     resolved = []
@@ -577,29 +431,28 @@ def load_solution(match_run, raw_output: str):
             raise ValueError(f"Unknown listing code in solution: {recv_code!r}")
         resolved.append([moved_el, moved_el.copy.owner, recv_el.copy.owner, group])
 
-    # Cash purchases (XTOY money mode): the buyer (receiver) is named only by
+    # Cash purchases (money mode): the buyer (receiver) is named only by
     # username in the `Cash Purchases:` section, so it can't be resolved via a
     # listing-code anchor like a swap. Resolve the buyer directly.
     cash_by_listing = {}  # event_listing.id -> Decimal dollars
-    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
-        cash_moves = parse_gurobi_cash(raw_output)
-        if cash_moves:
-            from django.contrib.auth import get_user_model
+    cash_moves = parse_gurobi_cash(raw_output)
+    if cash_moves:
+        from django.contrib.auth import get_user_model
 
-            names = {bn for _, bn, _ in cash_moves}
-            users_by_name = {
-                u.username: u
-                for u in get_user_model().objects.filter(username__in=names)
-            }
-            for moved_code, buyer_username, amount_cents in cash_moves:
-                moved_el = by_code.get(moved_code)
-                if moved_el is None:
-                    raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
-                buyer = users_by_name.get(buyer_username)
-                if buyer is None:
-                    raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
-                cash_by_listing[moved_el.id] = Decimal(amount_cents) / 100
-                resolved.append([moved_el, moved_el.copy.owner, buyer, None])
+        names = {bn for _, bn, _ in cash_moves}
+        users_by_name = {
+            u.username: u
+            for u in get_user_model().objects.filter(username__in=names)
+        }
+        for moved_code, buyer_username, amount_cents in cash_moves:
+            moved_el = by_code.get(moved_code)
+            if moved_el is None:
+                raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
+            buyer = users_by_name.get(buyer_username)
+            if buyer is None:
+                raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
+            cash_by_listing[moved_el.id] = Decimal(amount_cents) / 100
+            resolved.append([moved_el, moved_el.copy.owner, buyer, None])
 
     # XTOY came back without groups -> recover connected components.
     if resolved and resolved[0][3] is None:
@@ -634,32 +487,31 @@ def load_solution(match_run, raw_output: str):
         for cid, steps in sorted(cycles.items())
     ]
 
-    # Money cross-check + settlement plan (XTOY money mode only). Reconstruct each
+    # Money cross-check + settlement plan (money mode only). Reconstruct each
     # user's net from item_value (received - given) and require it to equal the
     # solver's Cash Summary net; a mismatch means stale prices or a parse error, so
     # fail loudly rather than ship wrong money.
     settlement = []
-    if event.matching_mode == TradeEvent.MatchingMode.XTOY:
-        summary_net = parse_gurobi_cash_summary(raw_output)
-        if summary_net:
-            recon = defaultdict(int)  # username -> net cents (received - given)
-            for moved_el, giver, receiver, cid, wid, amt, val in rows:
-                if val:
-                    cents = _to_cents(val)
-                    recon[receiver.username] += cents
-                    recon[giver.username] -= cents
-            for username, net_cents in summary_net.items():
-                if recon.get(username, 0) != net_cents:
-                    raise ValueError(
-                        f"Money reconstruction mismatch for {username!r}: "
-                        f"reconstructed {recon.get(username, 0)}c != solver {net_cents}c"
-                    )
-        for from_u, to_u, cents in parse_gurobi_settlement(raw_output):
-            settlement.append({
-                "from_user": from_u,
-                "to_user": to_u,
-                "amount": str((Decimal(cents) / 100).quantize(Decimal("0.01"))),
-            })
+    summary_net = parse_gurobi_cash_summary(raw_output)
+    if summary_net:
+        recon = defaultdict(int)  # username -> net cents (received - given)
+        for moved_el, giver, receiver, cid, wid, amt, val in rows:
+            if val:
+                cents = _to_cents(val)
+                recon[receiver.username] += cents
+                recon[giver.username] -= cents
+        for username, net_cents in summary_net.items():
+            if recon.get(username, 0) != net_cents:
+                raise ValueError(
+                    f"Money reconstruction mismatch for {username!r}: "
+                    f"reconstructed {recon.get(username, 0)}c != solver {net_cents}c"
+                )
+    for from_u, to_u, cents in parse_gurobi_settlement(raw_output):
+        settlement.append({
+            "from_user": from_u,
+            "to_user": to_u,
+            "amount": str((Decimal(cents) / 100).quantize(Decimal("0.01"))),
+        })
 
     active_wishes = _active_wishes(event)
     received_user_ids = {r[2].id for r in rows}

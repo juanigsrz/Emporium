@@ -228,19 +228,6 @@ CACHES = {
 GAME_CACHE_TIMEOUT = 60  # seconds
 
 # ---------------------------------------------------------------------------
-# External matching solver (FastTradeMaximizer)
-# ---------------------------------------------------------------------------
-# Hosted C++ ftm solver for old-school 1-to-1 events. When the online solver is
-# enabled, ONETOONE match runs POST the exported wants file here and parse the
-# returned stdout. X-to-Y events are solved locally and uploaded — they never
-# call out. Default OFF so dev/CI use the offline FakeMatcher placeholder.
-SOLVER_URL = os.environ.get(
-    "SOLVER_URL", "https://juanigsrz--fasttrademaximizer-web.modal.run"
-)
-SOLVER_TIMEOUT = int(os.environ.get("SOLVER_TIMEOUT", "250"))
-MATCHING_USE_ONLINE_SOLVER = os.environ.get("MATCHING_USE_ONLINE_SOLVER", "") == "1"
-
-# ---------------------------------------------------------------------------
 # BGG scraping + geocoding
 # ---------------------------------------------------------------------------
 BGG_BASE_URL = os.environ.get("BGG_BASE_URL", "https://boardgamegeek.com")

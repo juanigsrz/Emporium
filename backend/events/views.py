@@ -417,10 +417,8 @@ class TradeEventViewSet(
 
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
-        """Organizer-only export of the active wishes as a solver wants file.
-
-        Format follows the event's matching_mode (ONETOONE -> OLWLG for the
-        hosted ftm solver; XTOY -> `(NforM) give -> take` for the local solver).
+        """Organizer-only export of the active wishes as a solver wants file
+        in `(NforM) give -> take` format for the local gurobi solver.
         """
         from django.http import HttpResponse
         from matching.external_solver import build_wants

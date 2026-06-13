@@ -9,7 +9,7 @@ from DRAFT → ARCHIVED and exercises the features added on top:
     (resolve_ask), event cap + per-user budget;
   - duplicate-protection flag on want groups;
   - canonical board_game_id on want items (FE grouping);
-  - solver wants-export placeholder header (MONEY-*/DUP-PROTECT) round-trip;
+  - solver wants-export money directives (user/item/bid) + DUP-PROTECT header;
   - matching run (offline FakeMatcher) → assignments → result/mine;
   - lifecycle transitions + organizer-only / invalid-transition guards.
 
@@ -130,7 +130,6 @@ class EventCycleQA(APITestCase):
         self.assertEqual(e["status"], "DRAFT")
         self.assertTrue(e["money_enabled"])
         self.assertEqual(e["max_money_per_user"], "50.00")
-        self.assertEqual(e["matching_mode"], "ONETOONE")
 
         # invalid transition rejected (DRAFT -> MATCHING)
         bad = self.client.post(transition(slug), {"to": "MATCHING"}, format="json")
@@ -205,12 +204,11 @@ class EventCycleQA(APITestCase):
         exp = self.client.get(wants_export(slug))
         self.assertEqual(exp.status_code, status.HTTP_200_OK)
         text = exp.content.decode()
-        self.assertIn("#! MONEY-ENABLED max_per_user=50.00", text)
-        self.assertIn(f"#! BUDGET ({self.t1.username}) 30.00", text)
+        self.assertIn(f"user {self.t1.username} budget 3000", text)
         self.assertIn("#! DUP-PROTECT", text)
-        self.assertIn(f"#! MONEY-WANT ({self.t1.username}) game={self.terra.bgg_id} max=20.00", text)
-        self.assertIn(f"#! MONEY-OFFER ({self.t2.username}) listing={self.c2_terra.listing_code} min=10.00", text)
-        # body still valid OLWLG: at least one "(user) CODE : ..." line
+        self.assertIn(f"bid {self.t1.username} {self.c2_terra.listing_code} 2000", text)
+        self.assertIn(f"item {self.c2_terra.listing_code} owner {self.t2.username} ask 1000", text)
+        # body still valid NforM: at least one "user : (NforM) give -> take" line
         self.assertTrue(any(" : " in l for l in text.splitlines() if not l.startswith("#")))
 
         # 8. RUN MATCHING -------------------------------------------------
