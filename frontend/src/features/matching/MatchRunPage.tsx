@@ -12,10 +12,13 @@ import {
   useUploadSolution,
   fetchWantsExport,
 } from '../../api/matching'
-import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment, SettlementTransfer } from '../../api/matching'
+import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
 import { useShipments, useUpdateShipment } from '../../api/shipping'
 import { ShippingOverviewTab } from './ShippingOverviewTab'
 import type { Shipment } from '../../api/shipping'
+import { useMyPayments, useUpdatePayment } from '../../api/payments'
+import type { SettlementPayment } from '../../api/payments'
+import { PaymentsOverviewTab } from './PaymentsOverviewTab'
 import { GameThumb } from '../../components/GameThumb'
 
 // ---- helpers ----
@@ -314,11 +317,9 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 function MyTradesSection({
   assignments,
   currentUsername,
-  settlement,
 }: {
   assignments: TradeAssignment[]
   currentUsername: string
-  settlement: SettlementTransfer[]
 }) {
   const giveList = assignments.filter((a) => a.giver_username === currentUsername)
   const receiveList = assignments.filter((a) => a.receiver_username === currentUsername)
@@ -409,10 +410,7 @@ function MyTradesSection({
         const sold = assignments.filter(
           (a) => a.item_value != null && a.giver_username === currentUsername
         )
-        const myTransfers = settlement.filter(
-          (t) => t.from_user === currentUsername || t.to_user === currentUsername
-        )
-        if (bought.length === 0 && sold.length === 0 && myTransfers.length === 0) return null
+        if (bought.length === 0 && sold.length === 0) return null
 
         const boughtTotal = bought.reduce((s, a) => s + Number(a.item_value), 0)
         const soldTotal = sold.reduce((s, a) => s + Number(a.item_value), 0)
@@ -461,34 +459,6 @@ function MyTradesSection({
               )}
             </div>
 
-            {/* Settlement — what to actually do */}
-            {myTransfers.length > 0 && (
-              <>
-                <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide pt-1">
-                  Settlement
-                </p>
-                {myTransfers.map((t, i) => (
-                  <div key={`pay-${i}`} className="rounded-lg border border-gray-200 bg-white p-4">
-                    {t.from_user === currentUsername ? (
-                      <p className="text-sm text-gray-900">
-                        Pay{' '}
-                        <Link to={`/u/${t.to_user}`} className="font-semibold text-indigo-500 hover:underline">
-                          {t.to_user}
-                        </Link>{' '}
-                        <span className="font-semibold">${t.amount}</span>
-                      </p>
-                    ) : (
-                      <p className="text-sm text-gray-900">
-                        Receive <span className="font-semibold">${t.amount}</span> from{' '}
-                        <Link to={`/u/${t.from_user}`} className="font-semibold text-indigo-500 hover:underline">
-                          {t.from_user}
-                        </Link>
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </>
-            )}
           </div>
         )
       })()}
@@ -826,6 +796,38 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
   )
 }
 
+function ShippingPaymentsTab({
+  slug, readOnly, moneyEnabled,
+}: {
+  slug: string
+  readOnly: boolean
+  moneyEnabled: boolean
+}) {
+  return (
+    <div className="space-y-8">
+      <ShippingTab slug={slug} readOnly={readOnly} />
+      {moneyEnabled && <PaymentsSections slug={slug} readOnly={readOnly} />}
+    </div>
+  )
+}
+
+function OverviewTab({ slug, moneyEnabled }: { slug: string; moneyEnabled: boolean }) {
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-gray-800">Shipping</h2>
+        <ShippingOverviewTab slug={slug} />
+      </div>
+      {moneyEnabled && (
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-gray-800">Settlement payments</h2>
+          <PaymentsOverviewTab slug={slug} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ShipmentSenderCard({
   shipment: s,
   readOnly,
@@ -956,9 +958,165 @@ function ShipmentReceiverCard({
   )
 }
 
+// ---- Payment cards ----
+
+const PAYMENT_STATUS_PILL: Record<SettlementPayment['status'], string> = {
+  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
+  PAID: 'bg-violet-50 text-violet-700 border-violet-200',
+  CONFIRMED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+
+function PaymentStatusBadge({ status }: { status: SettlementPayment['status'] }) {
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_PILL[status]}`}>
+      {status}
+    </span>
+  )
+}
+
+function PaymentPayerCard({
+  payment: p, readOnly, onUpdate,
+}: {
+  payment: SettlementPayment
+  readOnly: boolean
+  onUpdate: ReturnType<typeof useUpdatePayment>
+}) {
+  const [note, setNote] = useState(p.note)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleMarkPaid() {
+    setError(null)
+    try {
+      await onUpdate.mutateAsync({ id: p.id, body: { status: 'PAID', note } })
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <p className="text-sm text-gray-900">
+          Pay{' '}
+          <Link to={`/u/${p.to_username}`} className="font-semibold text-indigo-500 hover:underline">
+            {p.to_username}
+          </Link>{' '}
+          <span className="font-semibold">${p.amount}</span>
+        </p>
+        <PaymentStatusBadge status={p.status} />
+      </div>
+
+      {!readOnly && p.status === 'PENDING' && (
+        <div className="space-y-2 pt-1">
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Payment reference or notes…"
+            className="w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button
+            onClick={handleMarkPaid}
+            disabled={onUpdate.isPending}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          >
+            {onUpdate.isPending ? 'Saving…' : 'Mark paid'}
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+
+      {p.status !== 'PENDING' && p.note && (
+        <p className="text-xs text-gray-500"><span className="font-medium">Reference:</span> {p.note}</p>
+      )}
+    </div>
+  )
+}
+
+function PaymentPayeeCard({
+  payment: p, readOnly, onUpdate,
+}: {
+  payment: SettlementPayment
+  readOnly: boolean
+  onUpdate: ReturnType<typeof useUpdatePayment>
+}) {
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleConfirm() {
+    setError(null)
+    try {
+      await onUpdate.mutateAsync({ id: p.id, body: { status: 'CONFIRMED' } })
+    } catch (err) {
+      setError(extractErrorMsg(err))
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <p className="text-sm text-gray-900">
+          Receive <span className="font-semibold">${p.amount}</span> from{' '}
+          <Link to={`/u/${p.from_username}`} className="font-semibold text-indigo-500 hover:underline">
+            {p.from_username}
+          </Link>
+        </p>
+        <PaymentStatusBadge status={p.status} />
+      </div>
+
+      {p.note && (
+        <p className="text-xs text-gray-500"><span className="font-medium">Reference:</span> {p.note}</p>
+      )}
+
+      {!readOnly && p.status === 'PAID' && (
+        <div className="pt-1">
+          <button
+            onClick={handleConfirm}
+            disabled={onUpdate.isPending}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+          >
+            {onUpdate.isPending ? 'Saving…' : 'Confirm received'}
+          </button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean }) {
+  const { data: payments = [], isLoading } = useMyPayments(slug, true)
+  const update = useUpdatePayment(slug)
+  const paying = payments.filter((p) => p.my_role === 'payer')
+  const receiving = payments.filter((p) => p.my_role === 'payee')
+
+  if (isLoading) return <div className="h-16 rounded-lg bg-gray-100 animate-pulse" />
+  if (payments.length === 0) return null
+
+  return (
+    <>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
+          Payments to send ({paying.length})
+        </p>
+        {paying.length === 0
+          ? <p className="text-sm text-gray-400">Nothing to pay.</p>
+          : paying.map((p) => <PaymentPayerCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+          Payments to receive ({receiving.length})
+        </p>
+        {receiving.length === 0
+          ? <p className="text-sm text-gray-400">Nothing to receive.</p>
+          : receiving.map((p) => <PaymentPayeeCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
+      </div>
+    </>
+  )
+}
+
 // ---- Run result view ----
 
-function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus; isOrganizer: boolean }) {
+function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus; isOrganizer: boolean; moneyEnabled: boolean }) {
   const isDone = run.status === 'DONE'
   const { data: result, isLoading: resultLoading, isError: resultError } = useMatchResult(slug, run.id, isDone)
   const { data: mineData, isLoading: mineLoading } = useMyAssignments(slug, run.id, isDone)
@@ -966,7 +1124,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; 
   const currentUsername = user?.username ?? ''
 
   const showShipping = eventStatus === 'SHIPPING' || eventStatus === 'ARCHIVED'
-  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping' | 'shipping-overview'>('my-trades')
+  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping-payments' | 'overview'>('my-trades')
 
   if (!isDone) {
     return <LiveRunView slug={slug} runId={run.id} />
@@ -976,8 +1134,8 @@ function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; 
     { id: 'my-trades', label: 'My Trades' },
     { id: 'cycles', label: 'All Cycles' },
     { id: 'stats', label: 'Stats & Unmatched' },
-    ...(showShipping ? [{ id: 'shipping' as const, label: 'Shipping' }] : []),
-    ...(showShipping && isOrganizer ? [{ id: 'shipping-overview' as const, label: 'Shipping Overview' }] : []),
+    ...(showShipping ? [{ id: 'shipping-payments' as const, label: 'Shipping & Payments' }] : []),
+    ...(showShipping && isOrganizer ? [{ id: 'overview' as const, label: 'Overview' }] : []),
   ]
 
   return (
@@ -1015,7 +1173,6 @@ function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; 
               <MyTradesSection
                 assignments={mineData?.results ?? []}
                 currentUsername={currentUsername}
-                settlement={result?.settlement ?? []}
               />
             )}
           </div>
@@ -1056,11 +1213,17 @@ function RunResultView({ slug, run, eventStatus, isOrganizer }: { slug: string; 
           </div>
         )}
 
-        {activeTab === 'shipping' && (
-          <ShippingTab slug={slug} readOnly={eventStatus === 'ARCHIVED'} />
+        {activeTab === 'shipping-payments' && (
+          <ShippingPaymentsTab
+            slug={slug}
+            readOnly={eventStatus === 'ARCHIVED'}
+            moneyEnabled={moneyEnabled}
+          />
         )}
 
-        {activeTab === 'shipping-overview' && <ShippingOverviewTab slug={slug} />}
+        {activeTab === 'overview' && (
+          <OverviewTab slug={slug} moneyEnabled={moneyEnabled} />
+        )}
       </div>
     </div>
   )
@@ -1215,7 +1378,7 @@ export default function MatchRunPage() {
               <p className="text-sm text-gray-400">Select a run to view details.</p>
             </div>
           ) : activeRun ? (
-            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} />
+            <RunResultView slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} moneyEnabled={!!event.money_enabled} />
           ) : (
             <div className="space-y-3 animate-pulse">
               <div className="h-8 w-1/3 bg-gray-100 rounded" />
