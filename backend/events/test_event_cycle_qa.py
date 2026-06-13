@@ -205,7 +205,16 @@ class EventCycleQA(APITestCase):
         self.assertEqual(exp.status_code, status.HTTP_200_OK)
         text = exp.content.decode()
         self.assertIn(f"user {self.t1.username} budget 3000", text)
-        self.assertIn("DUP-PROTECT : (", text)
+        # dup protection no longer emits a tag; t1's single terra copy passes
+        # through with no dummy node (t2's brass wish with 2 copies will get one).
+        self.assertNotIn("DUP-PROTECT", text)
+        self.assertFalse(
+            any(
+                tok.startswith("__DUMMY_") and tok.endswith(f"_{self.terra.pk}")
+                for l in text.splitlines() for tok in l.split()
+            ),
+            "expected no dummy node for terra (single active copy)"
+        )
         self.assertIn(f"bid {self.t1.username} {self.c2_terra.listing_code} 2000", text)
         self.assertIn(f"item {self.c2_terra.listing_code} owner {self.t2.username} ask 1000", text)
         # body still valid NforM: at least one "user : (NforM) give -> take" line
