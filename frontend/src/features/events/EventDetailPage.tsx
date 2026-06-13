@@ -23,6 +23,7 @@ import {
 import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
 import { useCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
+import { useMyRatings, ratingMap } from '../../api/ratings'
 import { useAuthStore } from '../../store/auth'
 import { StatusBadge } from './StatusBadge'
 import { STATUS_BADGE_CLASSES } from './eventUtils'
@@ -205,12 +206,14 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
   const transition = useTransitionEvent()
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<EventStatus | null>(null)
+  const [confirmTo, setConfirmTo] = useState<EventStatus | null>(null)
 
   if (!event.is_organizer || event.allowed_transitions.length === 0) return null
 
   async function handleTransition(to: EventStatus) {
     setError(null)
     setPending(to)
+    setConfirmTo(null)
     try {
       await transition.mutateAsync({ slug: event.slug, to })
     } catch (err: unknown) {
@@ -223,6 +226,15 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
 
   return (
     <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+      {confirmTo && (
+        <TransitionConfirmDialog
+          from={event.status}
+          to={confirmTo}
+          isPending={transition.isPending}
+          onConfirm={() => handleTransition(confirmTo)}
+          onCancel={() => setConfirmTo(null)}
+        />
+      )}
       <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-3">
         Organizer — Advance lifecycle
       </p>
@@ -233,7 +245,7 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
         {event.allowed_transitions.map((to) => (
           <button
             key={to}
-            onClick={() => handleTransition(to)}
+            onClick={() => setConfirmTo(to)}
             disabled={transition.isPending}
             className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60 ${
               STATUS_BADGE_CLASSES[to] ?? 'bg-white border-gray-300 text-gray-700'
@@ -244,6 +256,55 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
               : `Advance to ${TRANSITION_LABEL[to] ?? EVENT_STATUS_LABELS[to]}`}
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function TransitionConfirmDialog({
+  from,
+  to,
+  isPending,
+  onConfirm,
+  onCancel,
+}: {
+  from: EventStatus
+  to: EventStatus
+  isPending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} aria-hidden="true" />
+      <div className="relative w-full sm:max-w-sm bg-white rounded-xl shadow-2xl p-5">
+        <h3 className="text-base font-semibold text-gray-900 mb-2">Advance event status?</h3>
+        <p className="text-sm text-gray-600 mb-1">
+          Move this event from{' '}
+          <span className="font-medium text-gray-800">{EVENT_STATUS_LABELS[from]}</span> to{' '}
+          <span className="font-medium text-gray-800">{EVENT_STATUS_LABELS[to]}</span>?
+        </p>
+        <p className="text-xs text-gray-400 mb-4">
+          All participants see the new phase immediately, and it may lock submissions or want lists.
+        </p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isPending}
+            className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isPending}
+            className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60 transition-colors"
+          >
+            {isPending ? 'Advancing…' : 'Confirm'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -664,6 +725,8 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
     page_size: 100,
   })
   const removeListing = useRemoveEventListing()
+  const { data: ratings = [] } = useMyRatings()
+  const myRatings = ratingMap(ratings)
   const [removeError, setRemoveError] = useState<string | null>(null)
   const [sellPriceError, setSellPriceError] = useState<string | null>(null)
 
@@ -686,6 +749,13 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
     <section className="rounded-xl border border-gray-200 bg-white p-5">
       <h3 className="text-sm font-semibold text-gray-800 mb-4">My Listings in This Event</h3>
 
+      {event.money_enabled && (
+        <p className="mb-3 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          The <strong>Min. ask</strong> is the lowest price you're willing to sell each game for —
+          you won't be matched below it. Leave it blank to use your copy's default price.
+        </p>
+      )}
+
       {/* Add form */}
       <div className="mb-4">
         <p className="text-xs text-gray-500 mb-2">Add one of your active copies:</p>
@@ -705,62 +775,79 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
         <div className="space-y-2">
           {removeError && <p className="text-xs text-red-600">{removeError}</p>}
           {sellPriceError && <p className="text-xs text-red-600">{sellPriceError}</p>}
-          {myListings.map((listing) => (
-            <div
-              key={listing.id}
-              className="flex items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="h-9 w-9 shrink-0 overflow-hidden rounded bg-gray-100">
-                  {listing.board_game_thumbnail ? (
-                    <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
-                  ) : null}
-                </div>
-                <div className="min-w-0">
-                  <span className="text-sm font-medium text-gray-800 truncate block">
-                    {listing.board_game_name}
-                  </span>
-                  <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
-                </div>
-              </div>
-              {event.money_enabled && (
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-xs text-gray-400">$</span>
-                  <input
-                    key={`sp-${listing.id}-${listing.ask_is_override ? (listing.resolved_ask ?? '') : 'def'}`}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue={listing.ask_is_override ? (listing.resolved_ask ?? '') : ''}
-                    placeholder={
-                      listing.resolved_ask && !listing.ask_is_override
-                        ? `default ${listing.resolved_ask}`
-                        : 'price'
-                    }
-                    onBlur={async (e) => {
-                      setSellPriceError(null)
-                      const v = e.target.value.trim()
-                      try {
-                        await setListingSellPrice(event.slug, listing.id, v === '' ? null : v)
-                        qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
-                      } catch (err: unknown) {
-                        setSellPriceError(extractErrorMsg(err) ?? 'Failed to save price.')
-                      }
-                    }}
-                    className="w-24 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                </div>
-              )}
-              <button
-                onClick={() => handleRemove(listing.id)}
-                disabled={removeListing.isPending}
-                className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
-                aria-label="Remove listing"
+          {myListings.map((listing) => {
+            const myRating = myRatings.get(listing.board_game_id)
+            return (
+              <div
+                key={listing.id}
+                className="flex items-center gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
               >
-                Remove
-              </button>
-            </div>
-          ))}
+                {/* Game */}
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className="h-9 w-9 shrink-0 overflow-hidden rounded bg-gray-100">
+                    {listing.board_game_thumbnail ? (
+                      <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium text-gray-800 truncate block">
+                      {listing.board_game_name}
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono">{listing.listing_code}</span>
+                  </div>
+                </div>
+
+                {/* My rating — read-only, set in your profile */}
+                <div className="w-14 shrink-0 text-center" title="Your rating for this game (set in your profile)">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400">My rating</p>
+                  <p className="text-sm font-medium text-gray-700">{myRating != null ? myRating : '—'}</p>
+                </div>
+
+                {/* Minimum asking price */}
+                {event.money_enabled && (
+                  <div className="w-28 shrink-0">
+                    <label className="block text-[10px] uppercase tracking-wide text-gray-400">Min. ask</label>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400">$</span>
+                      <input
+                        key={`sp-${listing.id}-${listing.ask_is_override ? (listing.resolved_ask ?? '') : 'def'}`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        defaultValue={listing.ask_is_override ? (listing.resolved_ask ?? '') : ''}
+                        placeholder={
+                          listing.resolved_ask && !listing.ask_is_override
+                            ? `default ${listing.resolved_ask}`
+                            : 'price'
+                        }
+                        onBlur={async (e) => {
+                          setSellPriceError(null)
+                          const v = e.target.value.trim()
+                          try {
+                            await setListingSellPrice(event.slug, listing.id, v === '' ? null : v)
+                            qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
+                          } catch (err: unknown) {
+                            setSellPriceError(extractErrorMsg(err) ?? 'Failed to save price.')
+                          }
+                        }}
+                        className="w-20 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Remove */}
+                <button
+                  onClick={() => handleRemove(listing.id)}
+                  disabled={removeListing.isPending}
+                  className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
+                  aria-label="Remove listing"
+                >
+                  Remove
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
     </section>
@@ -880,6 +967,20 @@ export default function EventDetailPage() {
                 {event.participants_count} participant{event.participants_count !== 1 ? 's' : ''}
               </span>
             </p>
+            {/* Key trade settings — surfaced so every member is aware */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                {event.money_enabled
+                  ? `💵 Money trades${event.max_money_per_user ? ` · cap $${event.max_money_per_user}` : ''}`
+                  : '🔄 Items-only (no money)'}
+              </span>
+              {event.require_location && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 ring-1 ring-inset ring-sky-200">
+                  📍 Location required
+                  {event.max_distance_km ? ` · within ${event.max_distance_km} km` : ''}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
