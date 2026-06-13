@@ -92,3 +92,29 @@ class KickServiceTests(AdminDashboardBase):
         self.assertTrue(WantGroupItem.objects.filter(pk=self.o_game_item.pk).exists())
         self.assertTrue(WantGroup.objects.filter(pk=self.o_want.pk).exists())
         self.assertTrue(EventListing.objects.filter(pk=self.other_listing.pk).exists())
+
+
+class AdminSubmissionsTests(AdminDashboardBase):
+    URL = "/api/events/manage-test/admin/submissions/"
+
+    def test_non_organizer_gets_403(self):
+        self.client.force_authenticate(self.other)
+        r = self.client.get(self.URL, {"user": "victim"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_organizer_sees_victim_listings_and_wishes(self):
+        self.client.force_authenticate(self.organizer)
+        r = self.client.get(self.URL, {"user": "victim"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["username"], "victim")
+        self.assertEqual(len(r.data["listings"]), 1)
+        self.assertEqual(len(r.data["wishes"]), 1)
+        self.assertEqual(r.data["offer_groups"][0]["max_give"], 1)
+        self.assertEqual(r.data["want_groups"][0]["min_receive"], 1)
+
+    def test_archived_event_blocks_admin(self):
+        self.event.status = TradeEvent.Status.ARCHIVED
+        self.event.save(update_fields=["status"])
+        self.client.force_authenticate(self.organizer)
+        r = self.client.get(self.URL, {"user": "victim"})
+        self.assertEqual(r.status_code, 403)
