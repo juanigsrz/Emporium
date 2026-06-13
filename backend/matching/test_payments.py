@@ -155,3 +155,41 @@ class PaymentPatchTests(PaymentEndpointBase):
             self.client.patch(self._detail(p.id), {"status": "PAID"}, format="json").status_code,
             403,
         )
+
+
+class PaymentOverviewTests(PaymentEndpointBase):
+    def _overview(self):
+        return f"/api/events/{self.slug}/payments/overview/"
+
+    def _summary(self):
+        return f"/api/events/{self.slug}/payments/overview/summary/"
+
+    def test_overview_organizer_only(self):
+        self.client.force_authenticate(self.user_b)  # not organizer
+        self.assertEqual(self.client.get(self._overview()).status_code, 403)
+
+    def test_overview_paginated(self):
+        self.client.force_authenticate(self.user_a)  # organizer
+        r = self.client.get(self._overview())
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["count"], 1)
+        self.assertEqual(len(r.data["results"]), 1)
+
+    def test_overview_status_filter(self):
+        self.client.force_authenticate(self.user_a)
+        self.client.get(self._overview())  # create payment rows
+        SettlementPayment.objects.filter(match_run=self.run).update(status="PAID")
+        self.assertEqual(self.client.get(self._overview() + "?status=PAID").data["count"], 1)
+        self.assertEqual(self.client.get(self._overview() + "?status=PENDING").data["count"], 0)
+
+    def test_summary_counts_and_rollup(self):
+        self.client.force_authenticate(self.user_a)
+        self.client.get(self._overview())  # create payment rows
+        r = self.client.get(self._summary())
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["counts"].get("PENDING"), 1)
+        bob = next(u for u in r.data["users"] if u["username"] == "bob")
+        self.assertEqual(bob["owe_total"], 1)
+        self.assertEqual(bob["owe_paid"], 0)
+        alice = next(u for u in r.data["users"] if u["username"] == "alice")
+        self.assertEqual(alice["due_total"], 1)
