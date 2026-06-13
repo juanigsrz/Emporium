@@ -121,3 +121,47 @@ class Shipment(models.Model):
 
     def __str__(self):
         return f"Shipment(assignment={self.assignment_id}, {self.status})"
+
+
+class SettlementPayment(models.Model):
+    """A netted money transfer between two users for a match run.
+
+    Derived from MatchRun.result["settlement"] (minimal-transfer plan).
+    Keyed per (run, from_user, to_user) — NOT per assignment.
+    """
+
+    class Status(models.TextChoices):
+        PENDING   = "PENDING",   "Pending"
+        PAID      = "PAID",      "Paid"
+        CONFIRMED = "CONFIRMED", "Confirmed"
+
+    match_run = models.ForeignKey(
+        MatchRun, on_delete=models.CASCADE, related_name="payments"
+    )
+    from_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="payments_owed",
+    )
+    to_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="payments_due",
+    )
+    amount       = models.DecimalField(max_digits=10, decimal_places=2)
+    status       = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.PENDING
+    )
+    note         = models.TextField(blank=True)
+    paid_at      = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created      = models.DateTimeField(auto_now_add=True)
+    updated      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("match_run", "from_user", "to_user")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return (
+            f"SettlementPayment(run={self.match_run_id}, "
+            f"{self.from_user_id}->{self.to_user_id}, {self.status})"
+        )
