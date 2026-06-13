@@ -19,7 +19,7 @@ No WebSocket in v1 — the FE should poll GET /matches/{id}/ every 2 s while
 status is PENDING or RUNNING; when DONE it fetches /result/ once.
 """
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -340,6 +340,54 @@ class ShippingOverviewView(APIView):
         return paginator.get_paginated_response(
             ShipmentSerializer(page, many=True, context={"request": request}).data
         )
+
+
+class ShippingOverviewSummaryView(APIView):
+    """GET /api/events/{slug}/shipping/overview/summary/ — organizer-only.
+    Global status counts + per-trader rollup (independent of pagination)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        if event.organizer_id != request.user.id:
+            raise PermissionDenied("Only the organizer can view the shipping overview.")
+        run = _latest_done_run(event)
+        if run is None:
+            return Response({"counts": {}, "traders": []})
+        ensure_shipments(run)
+        base = Shipment.objects.filter(assignment__match_run=run)
+        counts = {
+            row["status"]: row["c"]
+            for row in base.values("status").annotate(c=Count("id"))
+        }
+        traders: dict[str, dict] = {}
+
+        def slot(username):
+            return traders.setdefault(username, {
+                "username": username, "out_total": 0, "out_sent": 0,
+                "in_total": 0, "in_received": 0,
+            })
+
+        for row in base.values("assignment__giver__username").annotate(
+            out_total=Count("id"),
+            out_sent=Count("id", filter=Q(status__in=["SENT", "RECEIVED"])),
+        ):
+            s = slot(row["assignment__giver__username"])
+            s["out_total"] = row["out_total"]
+            s["out_sent"] = row["out_sent"]
+        for row in base.values("assignment__receiver__username").annotate(
+            in_total=Count("id"),
+            in_received=Count("id", filter=Q(status="RECEIVED")),
+        ):
+            s = slot(row["assignment__receiver__username"])
+            s["in_total"] = row["in_total"]
+            s["in_received"] = row["in_received"]
+
+        return Response({
+            "counts": counts,
+            "traders": sorted(traders.values(), key=lambda t: t["username"]),
+        })
 
 
 class ShipmentDetailView(APIView):

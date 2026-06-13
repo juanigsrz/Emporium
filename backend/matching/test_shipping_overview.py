@@ -84,3 +84,30 @@ class ShippingOverviewQueryTests(ShippingOverviewTests):
             len(large.captured_queries), len(small.captured_queries),
             "shipping overview query count must be constant w.r.t. shipment count",
         )
+
+
+class ShippingOverviewSummaryTests(ShippingOverviewTests):
+    def _summary_url(self):
+        return f"/api/events/{self.slug}/shipping/overview/summary/"
+
+    def test_summary_counts_and_rollup(self):
+        run = self._setup_run()  # a1: alice→bob, b1: bob→alice
+        self.client.force_authenticate(user=self.user_a)
+        self.client.get(self._url())  # create shipments
+        Shipment.objects.filter(
+            assignment__match_run=run, assignment__giver=self.user_a
+        ).update(status="SENT")
+        r = self.client.get(self._summary_url())
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["counts"].get("SENT"), 1)
+        self.assertEqual(r.data["counts"].get("PENDING"), 1)
+        alice = next(t for t in r.data["traders"] if t["username"] == "alice")
+        self.assertEqual(alice["out_total"], 1)
+        self.assertEqual(alice["out_sent"], 1)
+        self.assertEqual(alice["in_total"], 1)
+        self.assertEqual(alice["in_received"], 0)
+
+    def test_summary_non_organizer_forbidden(self):
+        self._setup_run()
+        self.client.force_authenticate(user=self.user_b)
+        self.assertEqual(self.client.get(self._summary_url()).status_code, 403)
