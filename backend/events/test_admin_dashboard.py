@@ -165,3 +165,26 @@ class AdminEditTests(AdminDashboardBase):
         url = f"/api/events/manage-test/admin/wishes/{self.wish.id}/"
         r = self.client.patch(url, {"active": False}, format="json")
         self.assertEqual(r.status_code, 403)
+
+
+class AdminKickEndpointTests(AdminDashboardBase):
+    URL = "/api/events/manage-test/admin/kick/"
+
+    def test_organizer_kicks_user(self):
+        self.client.force_authenticate(self.organizer)
+        r = self.client.post(self.URL, {"username": "victim"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["removed_listings"], 1)
+        self.assertFalse(
+            EventParticipation.objects.filter(event=self.event, user=self.victim).exists()
+        )
+
+    def test_cannot_kick_self(self):
+        self.client.force_authenticate(self.organizer)
+        r = self.client.post(self.URL, {"username": "org"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_non_organizer_cannot_kick(self):
+        self.client.force_authenticate(self.other)
+        r = self.client.post(self.URL, {"username": "victim"}, format="json")
+        self.assertEqual(r.status_code, 403)

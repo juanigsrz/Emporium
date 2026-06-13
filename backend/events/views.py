@@ -519,6 +519,16 @@ class TradeEventViewSet(
         listing.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=["post"], url_path="admin/kick")
+    def admin_kick(self, request, slug=None):
+        event = self.get_object()
+        self._check_admin(event)
+        user = self._resolve_target_user(request.data.get("username"))
+        if user == request.user:
+            raise ValidationError({"username": "You can't kick yourself."})
+        summary = kick_participant(event, user)
+        return Response(summary)
+
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
         """Organizer-only export of the active wishes as a solver wants file
