@@ -19,10 +19,8 @@ import {
   EVENTS_KEYS,
   EVENT_STATUSES,
   EVENT_STATUS_LABELS,
-  MATCHING_MODE_LABELS,
-  MATCHING_MODE_FROZEN_STATUSES,
 } from '../../api/events'
-import type { TradeEvent, EventListing, EventStatus, MatchingMode } from '../../api/events'
+import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
 import { useCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
@@ -247,50 +245,6 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-// ---- Organizer: matching mode selector ----
-
-function MatchingModeCard({ event }: { event: TradeEvent }) {
-  const patchEvent = usePatchEvent()
-  const [error, setError] = useState<string | null>(null)
-  const frozen = MATCHING_MODE_FROZEN_STATUSES.includes(event.status)
-
-  async function handleChange(mode: MatchingMode) {
-    if (mode === event.matching_mode) return
-    setError(null)
-    try {
-      await patchEvent.mutateAsync({ slug: event.slug, payload: { matching_mode: mode } })
-    } catch (err: unknown) {
-      setError(extractErrorMsg(err) ?? 'Failed to update matching mode.')
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        Matching mode
-      </p>
-      <select
-        value={event.matching_mode}
-        onChange={(e) => handleChange(e.target.value as MatchingMode)}
-        disabled={frozen || patchEvent.isPending}
-        className="w-full sm:w-auto py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
-        aria-label="Matching mode"
-      >
-        {(['ONETOONE', 'XTOY'] as MatchingMode[]).map((m) => (
-          <option key={m} value={m}>{MATCHING_MODE_LABELS[m]}</option>
-        ))}
-      </select>
-      <p className="text-xs text-gray-400 mt-2">
-        {event.matching_mode === 'ONETOONE'
-          ? 'Classic 1-to-1 trades, solved by the hosted solver — click Run on the matching page.'
-          : 'X-to-Y trades: export wants.txt, run the solver locally, upload the result on the matching page.'}
-      </p>
-      {frozen && <p className="text-xs text-gray-400 mt-1">Locked — matching has started.</p>}
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
   )
 }
@@ -958,9 +912,6 @@ export default function EventDetailPage() {
       {event.is_organizer && event.allowed_transitions.length > 0 && (
         <OrganizerLifecycleControls event={event} />
       )}
-
-      {/* Organizer matching mode */}
-      {event.is_organizer && <MatchingModeCard event={event} />}
 
       {/* Deadlines + Policies row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

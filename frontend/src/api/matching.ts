@@ -133,7 +133,7 @@ async function fetchMyAssignments(slug: string, id: number): Promise<PaginatedRe
   return data
 }
 
-/** GET the solver wants file (text) for the event's matching_mode. Organizer-only. */
+/** GET the gurobi solver wants file (text) for the event. Organizer-only. */
 export async function fetchWantsExport(slug: string): Promise<string> {
   const { data } = await apiClient.get<string>(`/events/${slug}/wants-export/`, {
     responseType: 'text',
