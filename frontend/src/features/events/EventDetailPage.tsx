@@ -985,6 +985,14 @@ export default function EventDetailPage() {
 
           <div className="flex items-center gap-2 shrink-0">
             {event.is_organizer && (
+              <Link
+                to={`/events/${event.slug}/manage`}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Manage
+              </Link>
+            )}
+            {event.is_organizer && (
               <button
                 onClick={() => setEditOpen(true)}
                 className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"

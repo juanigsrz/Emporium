@@ -12,6 +12,7 @@ import RequireAuth from '../components/RequireAuth'
 import WantListBuilderPage from '../features/trades/WantListBuilderPage'
 import MyWantsPage from '../features/trades/MyWantsPage'
 import MatchRunPage from '../features/matching/MatchRunPage'
+import ManageEventPage from '../features/events/ManageEventPage'
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +39,14 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'events/:slug/matches', element: <MatchRunPage /> },
+      {
+        path: 'events/:slug/manage',
+        element: (
+          <RequireAuth>
+            <ManageEventPage />
+          </RequireAuth>
+        ),
+      },
       { path: 'login', element: <LoginPage /> },
       { path: 'register', element: <RegisterPage /> },
       {
