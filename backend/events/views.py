@@ -26,7 +26,7 @@ Permissions:
 
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-from rest_framework import mixins, permissions, status, viewsets
+from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
@@ -485,7 +485,11 @@ class TradeEventViewSet(
         event = self.get_object()
         self._check_admin(event)
         wish = get_object_or_404(TradeWish, pk=wish_id, event=event)
-        wish.active = bool(request.data.get("active", wish.active))
+        # Coerce via BooleanField so non-JSON payloads (e.g. the string "false")
+        # don't truthily flip to True; invalid values raise 400.
+        wish.active = serializers.BooleanField().to_internal_value(
+            request.data.get("active", wish.active)
+        )
         wish.save(update_fields=["active", "updated"])
         return Response({"id": wish.id, "active": wish.active})
 
