@@ -209,7 +209,7 @@ function buildModel(
 // global 177k catalog.
 // ============================================================
 
-const BROWSE_PAGE_SIZE = 24
+const BROWSE_PAGE_SIZE = 12
 
 interface GameBrowseProps {
   slug: string
@@ -220,38 +220,36 @@ interface GameBrowseProps {
   moneyEnabled: boolean
 }
 
-interface GameCardControlsProps {
-  slug: string
+interface RatingPriceRowProps {
   bggId: number
   moneyEnabled: boolean
   priceValue: string
   onPriceChange: (value: string) => void
-  customWantGroups: WantGroup[]
 }
 
-function GameCardControls({
-  slug,
-  bggId,
-  moneyEnabled,
-  priceValue,
-  onPriceChange,
-  customWantGroups,
-}: GameCardControlsProps) {
-  const qc = useQueryClient()
+/** Always-visible rating + per-game price shown on the face of a browse card. */
+function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: RatingPriceRowProps) {
   const { data: ratings = [] } = useMyRatings()
   const setRating = useSetRating()
   const delRating = useDeleteRating()
   const rating = ratings.find((r) => r.board_game === bggId)
 
   const [ratingInput, setRatingInput] = useState<string>(rating ? String(Number(rating.value)) : '')
-  const [groupSel, setGroupSel] = useState('')
-  const [showNew, setShowNew] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [groupMsg, setGroupMsg] = useState<string | null>(null)
 
   useEffect(() => {
     setRatingInput(rating ? String(Number(rating.value)) : '')
   }, [rating])
+
+  // Browser step-arrow clicks fire onChange but never blur, so an onBlur-only
+  // save misses them. Debounce a commit on any value change (fast typing keeps
+  // resetting the timer, so multi-digit entry still commits the final value).
+  useEffect(() => {
+    const persisted = rating ? String(Number(rating.value)) : ''
+    if (ratingInput === persisted) return
+    const t = setTimeout(commitRating, 600)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ratingInput])
 
   function commitRating() {
     const raw = ratingInput.trim()
@@ -268,6 +266,72 @@ function GameCardControls({
       setRatingInput(rating ? String(Number(rating.value)) : '')
     }
   }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <div className="flex items-center gap-1.5">
+        <span className="text-gray-500">My rating</span>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          step={0.5}
+          value={ratingInput}
+          onChange={(e) => setRatingInput(e.target.value)}
+          onBlur={commitRating}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          placeholder="—"
+          className="w-14 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+        />
+        {rating && (
+          <button
+            type="button"
+            onClick={() => {
+              setRatingInput('')
+              delRating.mutate(rating.id)
+            }}
+            className="text-gray-300 hover:text-red-500"
+            aria-label="Clear rating"
+          >
+            ×
+          </button>
+        )}
+        {(setRating.isSuccess || delRating.isSuccess) && <span className="text-green-600">✓</span>}
+      </div>
+
+      {moneyEnabled && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-gray-500">Price $</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={priceValue}
+            onChange={(e) => onPriceChange(e.target.value)}
+            placeholder="—"
+            title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
+            className="w-20 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface WantGroupControlsProps {
+  slug: string
+  bggId: number
+  customWantGroups: WantGroup[]
+}
+
+function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsProps) {
+  const qc = useQueryClient()
+  const [groupSel, setGroupSel] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [groupMsg, setGroupMsg] = useState<string | null>(null)
 
   async function addToExisting(groupId: number) {
     setGroupMsg(null)
@@ -316,59 +380,6 @@ function GameCardControls({
 
   return (
     <div className="space-y-2 border-b border-gray-100 px-3 py-2 text-xs">
-      <div className="flex items-center gap-2">
-        <span className="text-gray-500">My rating</span>
-        <input
-          type="number"
-          min={1}
-          max={10}
-          step={0.5}
-          value={ratingInput}
-          onChange={(e) => setRatingInput(e.target.value)}
-          onBlur={commitRating}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          }}
-          placeholder="—"
-          className="w-16 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-        />
-        {rating && (
-          <button
-            type="button"
-            onClick={() => {
-              setRatingInput('')
-              delRating.mutate(rating.id)
-            }}
-            className="text-gray-300 hover:text-red-500"
-            aria-label="Clear rating"
-          >
-            ×
-          </button>
-        )}
-        {(setRating.isSuccess || delRating.isSuccess) && <span className="text-green-600">✓</span>}
-      </div>
-
-      {moneyEnabled && (
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500">Price $</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={priceValue}
-              onChange={(e) => onPriceChange(e.target.value)}
-              placeholder="—"
-              title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
-              className="w-24 rounded border border-gray-300 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-            />
-          </div>
-          <span className="text-[10px] text-gray-400">
-            Applied to every copy — sell default for ones you own, your bid if you want it.
-          </span>
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-gray-500">Add to group</span>
         <select
@@ -562,7 +573,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
           {isFetching ? 'Loading games…' : 'No games with copies match.'}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {games.map((g) => {
             const wanted = isWanted(g.bgg_id)
             const open = expanded === g.bgg_id
@@ -596,14 +607,19 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     </button>
                   </div>
                 </div>
+                <div className="border-t border-gray-100 px-2 py-1.5">
+                  <RatingPriceRow
+                    bggId={g.bgg_id}
+                    moneyEnabled={moneyEnabled}
+                    priceValue={editor.priceForGame(g.bgg_id)}
+                    onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
+                  />
+                </div>
                 {open && (
                   <div className="border-t border-gray-100 bg-gray-50/60">
-                    <GameCardControls
+                    <WantGroupControls
                       slug={slug}
                       bggId={g.bgg_id}
-                      moneyEnabled={moneyEnabled}
-                      priceValue={editor.priceForGame(g.bgg_id)}
-                      onPriceChange={(v) => editor.setMoney(g.bgg_id, v)}
                       customWantGroups={customWantGroups}
                     />
                     <GameCopies
@@ -925,6 +941,9 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
             <CopyDetailRow label="Upgraded" value={copy.upgraded_components} />
             <CopyDetailRow label="Component notes" value={copy.component_notes} />
             <CopyDetailRow label="Owner notes" value={copy.owner_notes} />
+            <CopyDetailRow label="Trade value" value={copy.trade_value_hint} />
+            <CopyDetailRow label="Shipping" value={copy.shipping_constraints} />
+            <CopyDetailRow label="Pickup" value={copy.pickup_available ? 'Available' : ''} />
             <CopyDetailRow label="Status" value={copy.status !== 'ACTIVE' ? copy.status : ''} />
             {copy.photo_urls?.length > 0 && (
               <div className="py-2">
