@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { fetchPublicProfile } from '../../api/profiles'
 
 export default function PublicProfilePage() {
   const { username } = useParams<{ username: string }>()
+  const navigate = useNavigate()
 
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['profile', username],
@@ -104,9 +105,12 @@ export default function PublicProfilePage() {
         </div>
       )}
 
-      <Link to="/" className="mt-6 inline-block text-sm text-indigo-600 hover:underline">
+      <button
+        onClick={() => navigate(-1)}
+        className="mt-6 inline-block text-sm text-indigo-600 hover:underline"
+      >
         ← Back
-      </Link>
+      </button>
     </div>
   )
 }
