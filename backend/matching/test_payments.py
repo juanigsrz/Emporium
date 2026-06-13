@@ -55,3 +55,103 @@ class PaymentSerializerTests(MatchingTestBase):
             "id", "status", "amount", "note", "from_username",
             "to_username", "my_role", "paid_at", "confirmed_at",
         }.issubset(fields))
+
+
+class PaymentEndpointBase(MatchingTestBase):
+    def setUp(self):
+        super().setUp()
+        self.event.status = "SHIPPING"
+        self.event.save(update_fields=["status"])
+        self.run = MatchRun.objects.create(
+            event=self.event, status=MatchRun.Status.DONE,
+            result={"settlement": [
+                {"from_user": "bob", "to_user": "alice", "amount": "5.00"},
+            ]},
+        )
+
+    def _mine(self):
+        return f"/api/events/{self.slug}/payments/"
+
+    def _detail(self, pk):
+        return f"/api/events/{self.slug}/payments/{pk}/"
+
+
+class PaymentMineTests(PaymentEndpointBase):
+    def test_payer_sees_pending_payment(self):
+        self.client.force_authenticate(self.user_b)  # bob = payer
+        r = self.client.get(self._mine())
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(len(r.data), 1)
+        self.assertEqual(r.data[0]["my_role"], "payer")
+        self.assertEqual(r.data[0]["status"], "PENDING")
+
+    def test_payee_sees_payment(self):
+        self.client.force_authenticate(self.user_a)  # alice = payee
+        r = self.client.get(self._mine())
+        self.assertEqual(r.data[0]["my_role"], "payee")
+
+    def test_uninvolved_user_sees_none(self):
+        self.client.force_authenticate(self.user_c)  # carol
+        r = self.client.get(self._mine())
+        self.assertEqual(r.data, [])
+
+
+class PaymentPatchTests(PaymentEndpointBase):
+    def _payment(self):
+        ensure_payments(self.run)
+        return SettlementPayment.objects.get(match_run=self.run)
+
+    def test_payer_marks_paid_with_note(self):
+        p = self._payment()
+        self.client.force_authenticate(self.user_b)
+        r = self.client.patch(self._detail(p.id),
+                              {"status": "PAID", "note": "venmo #42"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        p.refresh_from_db()
+        self.assertEqual(p.status, "PAID")
+        self.assertEqual(p.note, "venmo #42")
+        self.assertIsNotNone(p.paid_at)
+
+    def test_payee_cannot_mark_paid(self):
+        p = self._payment()
+        self.client.force_authenticate(self.user_a)
+        self.assertEqual(
+            self.client.patch(self._detail(p.id), {"status": "PAID"}, format="json").status_code,
+            403,
+        )
+
+    def test_payee_confirms_after_paid(self):
+        p = self._payment()
+        p.status = "PAID"; p.save(update_fields=["status"])
+        self.client.force_authenticate(self.user_a)
+        r = self.client.patch(self._detail(p.id), {"status": "CONFIRMED"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        p.refresh_from_db()
+        self.assertEqual(p.status, "CONFIRMED")
+        self.assertIsNotNone(p.confirmed_at)
+
+    def test_confirm_requires_paid_first(self):
+        p = self._payment()
+        self.client.force_authenticate(self.user_a)
+        self.assertEqual(
+            self.client.patch(self._detail(p.id), {"status": "CONFIRMED"}, format="json").status_code,
+            400,
+        )
+
+    def test_payer_cannot_confirm(self):
+        p = self._payment()
+        p.status = "PAID"; p.save(update_fields=["status"])
+        self.client.force_authenticate(self.user_b)
+        self.assertEqual(
+            self.client.patch(self._detail(p.id), {"status": "CONFIRMED"}, format="json").status_code,
+            403,
+        )
+
+    def test_patch_blocked_when_not_shipping(self):
+        p = self._payment()
+        self.event.status = "ARCHIVED"; self.event.save(update_fields=["status"])
+        self.client.force_authenticate(self.user_b)
+        self.assertEqual(
+            self.client.patch(self._detail(p.id), {"status": "PAID"}, format="json").status_code,
+            403,
+        )

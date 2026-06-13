@@ -29,11 +29,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import MatchRun, TradeAssignment, Shipment
-from .services import ensure_shipments
+from .models import MatchRun, TradeAssignment, Shipment, SettlementPayment
+from .services import ensure_shipments, ensure_payments
 from .serializers import (
     MatchRunDetailSerializer,
     MatchRunListSerializer,
+    SettlementPaymentSerializer,
     ShipmentSerializer,
     TradeAssignmentSerializer,
 )
@@ -433,3 +434,74 @@ class ShipmentDetailView(APIView):
 
         shipment.save()
         return Response(ShipmentSerializer(shipment, context={"request": request}).data)
+
+
+# ---------------------------------------------------------------------------
+# Settlement payments
+# ---------------------------------------------------------------------------
+
+class PaymentsView(APIView):
+    """GET /api/events/{slug}/payments/ — current user's payments (payer or payee)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        event = _get_event(slug)
+        run = _latest_done_run(event)
+        if run is None:
+            return Response([])
+        ensure_payments(run)
+        qs = (
+            SettlementPayment.objects.filter(match_run=run)
+            .filter(Q(from_user=request.user) | Q(to_user=request.user))
+            .select_related("from_user", "to_user")
+            .order_by("id")
+        )
+        return Response(
+            SettlementPaymentSerializer(qs, many=True, context={"request": request}).data
+        )
+
+
+class PaymentDetailView(APIView):
+    """PATCH /api/events/{slug}/payments/{pk}/ — payer marks PAID; payee CONFIRMS.
+    Only while event.status == SHIPPING."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, slug, pk):
+        event = _get_event(slug)
+        if event.status != "SHIPPING":
+            raise PermissionDenied("Payment updates are only allowed while the event is shipping.")
+        try:
+            payment = (
+                SettlementPayment.objects
+                .select_related("from_user", "to_user", "match_run")
+                .get(pk=pk, match_run__event=event)
+            )
+        except SettlementPayment.DoesNotExist:
+            raise NotFound("Payment not found.")
+
+        target = request.data.get("status")
+        if target == "PAID":
+            if request.user != payment.from_user:
+                raise PermissionDenied("Only the payer can mark a payment paid.")
+            payment.status = SettlementPayment.Status.PAID
+            payment.paid_at = timezone.now()
+            if "note" in request.data:
+                payment.note = request.data["note"]
+        elif target == "CONFIRMED":
+            if request.user != payment.to_user:
+                raise PermissionDenied("Only the payee can confirm a payment.")
+            if payment.status != SettlementPayment.Status.PAID:
+                raise ValidationError(
+                    {"status": "Payment must be marked paid before it can be confirmed."}
+                )
+            payment.status = SettlementPayment.Status.CONFIRMED
+            payment.confirmed_at = timezone.now()
+        else:
+            raise ValidationError({"status": "Must be 'PAID' (payer) or 'CONFIRMED' (payee)."})
+
+        payment.save()
+        return Response(
+            SettlementPaymentSerializer(payment, context={"request": request}).data
+        )
