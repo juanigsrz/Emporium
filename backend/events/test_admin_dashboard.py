@@ -118,3 +118,50 @@ class AdminSubmissionsTests(AdminDashboardBase):
         self.client.force_authenticate(self.organizer)
         r = self.client.get(self.URL, {"user": "victim"})
         self.assertEqual(r.status_code, 403)
+
+
+class AdminEditTests(AdminDashboardBase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.organizer)
+        self.wish = TradeWish.objects.get(event=self.event, user=self.victim)
+
+    def test_toggle_wish_active(self):
+        url = f"/api/events/manage-test/admin/wishes/{self.wish.id}/"
+        r = self.client.patch(url, {"active": False}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.wish.refresh_from_db()
+        self.assertFalse(self.wish.active)
+
+    def test_edit_offer_max_give(self):
+        url = f"/api/events/manage-test/admin/offer-groups/{self.v_offer.id}/"
+        r = self.client.patch(url, {"max_give": 3}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.v_offer.refresh_from_db()
+        self.assertEqual(self.v_offer.max_give, 3)
+
+    def test_edit_offer_max_give_rejects_zero(self):
+        url = f"/api/events/manage-test/admin/offer-groups/{self.v_offer.id}/"
+        r = self.client.patch(url, {"max_give": 0}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_edit_want_min_receive(self):
+        url = f"/api/events/manage-test/admin/want-groups/{self.v_want.id}/"
+        r = self.client.patch(url, {"min_receive": 2}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.v_want.refresh_from_db()
+        self.assertEqual(self.v_want.min_receive, 2)
+
+    def test_unlist_listing_cascades(self):
+        url = f"/api/events/manage-test/admin/listings/{self.victim_listing.id}/"
+        r = self.client.delete(url)
+        self.assertEqual(r.status_code, 204)
+        self.assertFalse(EventListing.objects.filter(pk=self.victim_listing.pk).exists())
+        # other's LISTING want at that listing is cascade-removed
+        self.assertFalse(WantGroupItem.objects.filter(pk=self.o_listing_item.pk).exists())
+
+    def test_non_organizer_cannot_edit(self):
+        self.client.force_authenticate(self.other)
+        url = f"/api/events/manage-test/admin/wishes/{self.wish.id}/"
+        r = self.client.patch(url, {"active": False}, format="json")
+        self.assertEqual(r.status_code, 403)
