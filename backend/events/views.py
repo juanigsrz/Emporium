@@ -551,6 +551,25 @@ class TradeEventViewSet(
         summary = kick_participant(event, user)
         return Response(summary)
 
+    ALLOWED_KPIS = ("trades", "users", "distance")
+
+    def _parse_kpi(self, raw):
+        """Comma-separated objectives in priority order. Validates tokens,
+        rejects duplicates, defaults to ['trades']."""
+        if not raw:
+            return ["trades"]
+        out = []
+        for tok in raw.split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if tok not in self.ALLOWED_KPIS:
+                raise ValidationError({"kpi": f"invalid objective '{tok}'"})
+            if tok in out:
+                raise ValidationError({"kpi": f"duplicate objective '{tok}'"})
+            out.append(tok)
+        return out or ["trades"]
+
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
         """Organizer-only export of the active wishes as a solver wants file
@@ -562,7 +581,8 @@ class TradeEventViewSet(
         event = self.get_object()
         self._check_organizer(event)
 
-        text = build_wants(event)
+        kpi = self._parse_kpi(request.query_params.get("kpi"))
+        text = build_wants(event, include_locations=("distance" in kpi))
         resp = HttpResponse(text, content_type="text/plain; charset=utf-8")
         resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.txt"'
         return resp

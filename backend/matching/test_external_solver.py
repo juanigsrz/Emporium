@@ -67,6 +67,41 @@ class ExportXToYTests(MatchingTestBase):
         self.assertIn(self.copy_b1.listing_code, take)  # bob terra
         self.assertIn(self.copy_c2.listing_code, take)  # carol terra
 
+    def test_export_kpi_distance_includes_locations(self):
+        from accounts.models import Profile
+        Profile.objects.filter(user=self.user_a).update(latitude=40.7128, longitude=-74.006)
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(export_url(self.slug), {"kpi": "trades,distance"})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn(f"location {self.user_a.username} 40.7128 -74.006",
+                      resp.content.decode())
+
+    def test_export_kpi_without_distance_has_no_locations(self):
+        from accounts.models import Profile
+        Profile.objects.filter(user=self.user_a).update(latitude=40.7128, longitude=-74.006)
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(export_url(self.slug), {"kpi": "trades,users"})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertNotIn("location ", resp.content.decode())
+
+    def test_export_default_kpi_has_no_locations(self):
+        from accounts.models import Profile
+        Profile.objects.filter(user=self.user_a).update(latitude=40.7128, longitude=-74.006)
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(export_url(self.slug))  # no kpi param
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertNotIn("location ", resp.content.decode())
+
+    def test_export_invalid_kpi_400(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(export_url(self.slug), {"kpi": "trades,foo"})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_export_duplicate_kpi_400(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(export_url(self.slug), {"kpi": "trades,trades"})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_xtoy_money_directives(self):
         """XTOY with money_enabled emits real user/item/bid lines, not #! MONEY-* comments."""
         from events.models import EventParticipation
