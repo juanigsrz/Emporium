@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import BackButton from '../../components/BackButton'
 import { useEvent } from '../../api/events'
 import type { EventStatus } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
@@ -1336,7 +1337,7 @@ export default function MatchRunPage() {
 
   if (eventLoading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
         <div className="h-8 w-1/3 bg-gray-100 rounded" />
         <div className="h-24 bg-gray-100 rounded-xl" />
         <div className="h-48 bg-gray-100 rounded-xl" />
@@ -1346,12 +1347,10 @@ export default function MatchRunPage() {
 
   if (!event) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm text-red-700">Event not found.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <BackButton to="/events" className="mt-3">Back to events</BackButton>
         </div>
       </div>
     )
@@ -1359,7 +1358,7 @@ export default function MatchRunPage() {
 
   if (!showMatchingSection) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-ink/15 bg-gray-50 px-5 py-10 text-center">
           <p className="text-sm text-moss">
             Matching is not yet available for this event.
@@ -1367,19 +1366,14 @@ export default function MatchRunPage() {
           <p className="text-xs text-moss/70 mt-1">
             The event must be in MATCHING state or later.
           </p>
-          <Link
-            to={`/events/${slug}`}
-            className="mt-4 inline-block text-sm text-indigo-600 hover:underline"
-          >
-            Back to event
-          </Link>
+          <BackButton to={`/events/${slug}`} className="mt-4">Back to event</BackButton>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-moss/70">
         <Link to="/events" className="hover:text-indigo-600 transition-colors">Events</Link>

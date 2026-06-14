@@ -5,6 +5,7 @@ import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing, EventGame } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
 import { GameThumb } from '../../components/GameThumb'
+import BackButton from '../../components/BackButton'
 
 import {
   useOfferGroups,
@@ -1374,7 +1375,7 @@ export default function WantListBuilderPage() {
 
   if (eventLoading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
         <div className="h-8 w-2/3 bg-gray-100 rounded" />
         <div className="h-4 w-1/3 bg-gray-100 rounded" />
         <div className="h-64 bg-gray-100 rounded-xl" />
@@ -1384,12 +1385,10 @@ export default function WantListBuilderPage() {
 
   if (eventError || !event) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <BackButton to="/events" className="mt-3">Back to events</BackButton>
         </div>
       </div>
     )
@@ -1397,7 +1396,7 @@ export default function WantListBuilderPage() {
 
   if (!event.is_participant && !event.is_organizer) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-yellow-700">
             You must join this event before building your want list.
@@ -1422,17 +1421,9 @@ export default function WantListBuilderPage() {
   const locked = event.inputs_locked
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
       {/* Back link */}
-      <Link
-        to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-moss/70 hover:text-indigo-600 transition-colors"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to {event.name}
-      </Link>
+      <BackButton to={`/events/${slug}`}>Back to {event.name}</BackButton>
 
       {/* Header */}
       <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
