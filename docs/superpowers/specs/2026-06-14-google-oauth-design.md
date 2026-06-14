@@ -11,6 +11,19 @@
 The app advertises OAuth-readiness but Google login is only a `501` stub. Users
 should be able to sign in with Google.
 
+## Correction (2026-06-14, post-implementation)
+
+The ID-token approach below **did not work**: dj-rest-auth 7.2's
+`SocialLoginSerializer.validate()` requires `access_token` or `code` and only uses
+`id_token` as a *supplement* to an access token (the Apple path) — an `id_token`-only
+POST returns `400 "Incorrect input. access_token or code is required."`. The flow was
+switched to the GIS **OAuth2 token-client (access_token)** flow: the frontend obtains
+an access token via `google.accounts.oauth2.initTokenClient` and POSTs
+`{ access_token }`; allauth's Google adapter fetches userinfo with it. The backend
+`GoogleLogin` view is unchanged (it already supports access_token). Covered by
+`backend/accounts/test_google_oauth.py`. The original (incorrect) ID-token design is
+preserved below for history.
+
 ## Approach
 
 Google Identity Services (GIS) **ID-token** flow:

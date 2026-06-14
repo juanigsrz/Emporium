@@ -3,12 +3,12 @@
 interface Window {
   google?: {
     accounts: {
-      id: {
-        initialize: (config: {
+      oauth2: {
+        initTokenClient: (config: {
           client_id: string
-          callback: (resp: { credential: string }) => void
-        }) => void
-        renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void
+          scope: string
+          callback: (resp: { access_token?: string; error?: string }) => void
+        }) => { requestAccessToken: () => void }
       }
     }
   }
