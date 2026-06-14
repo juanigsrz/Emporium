@@ -2,6 +2,8 @@
 URL configuration for bgtrade project.
 """
 
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from dj_rest_auth.registration.views import SocialLoginView
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
@@ -9,20 +11,16 @@ from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
 )
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
 
 
 def health(request):
     return JsonResponse({"status": "ok"})
 
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def oauth_google_stub(request):
-    """Stub for OAuth Google flow — full implementation deferred to a later feature."""
-    return Response({"detail": "Google OAuth not yet configured."}, status=501)
+class GoogleLogin(SocialLoginView):
+    """GIS ID-token sign-in: POST {id_token} → allauth verifies → dj-rest-auth token."""
+
+    adapter_class = GoogleOAuth2Adapter
 
 
 urlpatterns = [
@@ -44,8 +42,8 @@ urlpatterns = [
     path("api/auth/", include("dj_rest_auth.urls")),
     path("api/auth/registration/", include("dj_rest_auth.registration.urls")),
 
-    # OAuth Google stub
-    path("api/auth/oauth/google/", oauth_google_stub, name="oauth-google-stub"),
+    # Google OAuth (GIS ID-token)
+    path("api/auth/google/", GoogleLogin.as_view(), name="google-login"),
 
     # Accounts: profiles, blocks, wishlists, ratings
     path("api/", include("accounts.urls")),

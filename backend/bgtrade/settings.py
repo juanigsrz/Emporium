@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     "corsheaders",
     "django_filters",
     "drf_spectacular",
@@ -183,6 +184,24 @@ REST_AUTH = {
     "USE_JWT": False,
     "TOKEN_MODEL": "rest_framework.authtoken.models.Token",
     "SESSION_LOGIN": False,
+}
+
+# ---------------------------------------------------------------------------
+# Google OAuth (GIS ID-token flow via dj-rest-auth GoogleLogin)
+# ---------------------------------------------------------------------------
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": GOOGLE_OAUTH_CLIENT_ID,
+            "secret": GOOGLE_OAUTH_CLIENT_SECRET,
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
 }
 
 # ---------------------------------------------------------------------------
