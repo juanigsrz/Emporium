@@ -27,7 +27,7 @@ export default function ManageEventPage() {
   if (!event) return <p className="p-6 text-sm text-moss">Event not found.</p>
   if (!event.is_organizer) {
     return (
-      <div className="mx-auto max-w-2xl p-6">
+      <div className="mx-auto max-w-7xl p-6">
         <p className="text-sm text-red-600">Only the organizer can manage this event.</p>
         <BackButton to={`/events/${slug}`}>Back</BackButton>
       </div>
@@ -49,7 +49,7 @@ export default function ManageEventPage() {
   const rows = participants?.results ?? []
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
+    <div className="mx-auto max-w-7xl space-y-4 p-4">
       <Link to={`/events/${slug}`} className="text-xs font-medium text-moss hover:text-ink">← {event.name}</Link>
       <h1 className="text-2xl font-bold text-ink">Manage event</h1>
 

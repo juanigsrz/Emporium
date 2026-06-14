@@ -645,7 +645,7 @@ export default function MyCopiesPage() {
   const activeCopies = copies.filter((c) => c.status === 'ACTIVE').length
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div>

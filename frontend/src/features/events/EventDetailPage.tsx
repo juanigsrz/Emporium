@@ -913,7 +913,7 @@ export default function EventDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
         <div className="h-8 w-2/3 bg-gray-200 rounded-full" />
         <div className="h-4 w-1/3 bg-gray-200 rounded-full" />
         <div className="h-24 bg-gray-200 rounded-3xl" />
@@ -924,7 +924,7 @@ export default function EventDetailPage() {
 
   if (isError || !event) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-red-700">Event not found or failed to load.</p>
           <BackButton to="/events" className="mt-3">Back to events</BackButton>
@@ -942,7 +942,7 @@ export default function EventDetailPage() {
     event.shipping_rules || event.regional_restrictions || event.trade_policies
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
       {editOpen && <EditEventModal event={event} onClose={() => setEditOpen(false)} />}
 
       {/* Back link */}
