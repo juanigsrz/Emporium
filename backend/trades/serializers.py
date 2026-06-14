@@ -51,8 +51,8 @@ class UserGamePriceSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "board_game_name", "updated"]
 
     def validate_price(self, value):
-        if value < 0:
-            raise serializers.ValidationError("price cannot be negative.")
+        if value <= 0:
+            raise serializers.ValidationError("price must be greater than 0.")
         return value
 
 

@@ -134,6 +134,10 @@ class GamePriceEndpointTests(MatchingTestBase):
         r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "-5"}, format="json")
         self.assertEqual(r.status_code, 400)
 
+    def test_zero_price_rejected(self):
+        r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "0"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
     def test_requires_auth(self):
         self.client.force_authenticate(user=None)
         r = self.client.put(self.url, {"board_game": self.game_brass.bgg_id, "price": "40"}, format="json")
@@ -234,6 +238,11 @@ class SellPricePatchTests(MatchingTestBase):
     def test_negative_sell_price_rejected(self):
         self.client.force_authenticate(user=self.user_a)
         r = self.client.patch(self.url, {"sell_price": "-1"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_zero_sell_price_rejected(self):
+        self.client.force_authenticate(user=self.user_a)
+        r = self.client.patch(self.url, {"sell_price": "0"}, format="json")
         self.assertEqual(r.status_code, 400)
 
     def test_patch_cannot_change_active_or_copy(self):
