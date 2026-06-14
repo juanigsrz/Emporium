@@ -81,6 +81,12 @@ export interface TradeEventListItem {
   organizer: number
   organizer_username: string
   status: EventStatus
+  money_enabled: boolean
+  max_money_per_user: string | null
+  require_location: boolean
+  center_latitude: number | null
+  center_longitude: number | null
+  max_distance_km: number | null
   participants_count: number
   submissions_open_at: string | null
   submissions_close_at: string | null
