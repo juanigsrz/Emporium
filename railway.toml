@@ -1,0 +1,11 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "gunicorn bgtrade.wsgi --chdir backend --bind 0.0.0.0:$PORT"
+preDeployCommand = "python backend/manage.py migrate --noinput"
+healthcheckPath = "/api/health/"
+healthcheckTimeout = 100
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
