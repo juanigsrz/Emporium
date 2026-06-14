@@ -106,6 +106,48 @@ class ExportXToYTests(MatchingTestBase):
 
 
 # ---------------------------------------------------------------------------
+# Location export (distance objective)
+# ---------------------------------------------------------------------------
+
+class LocationExportTests(MatchingTestBase):
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.wish_a = cls._make_wish(cls.user_a, cls.el_a1, want_game=cls.game_terra)
+        cls.wish_b = cls._make_wish(cls.user_b, cls.el_b1, want_game=cls.game_brass)
+
+    @classmethod
+    def _set_coords(cls, user, lat, lng):
+        from accounts.models import Profile
+        Profile.objects.filter(user=user).update(latitude=lat, longitude=lng)
+
+    def test_no_location_lines_by_default(self):
+        text = external_solver.build_wants(self.event)
+        self.assertNotIn("location ", text)
+
+    def test_locations_included_for_users_with_coords(self):
+        self._set_coords(self.user_a, 40.7128, -74.006)
+        self._set_coords(self.user_b, 34.0522, -118.2437)
+        text = external_solver.build_wants(self.event, include_locations=True)
+        self.assertIn(f"location {self.user_a.username} 40.7128 -74.006", text)
+        self.assertIn(f"location {self.user_b.username} 34.0522 -118.2437", text)
+
+    def test_user_without_coords_skipped(self):
+        self._set_coords(self.user_a, 40.7128, -74.006)
+        # user_b has no coords (Profile lat/lng null) -> no line
+        text = external_solver.build_wants(self.event, include_locations=True)
+        self.assertIn(f"location {self.user_a.username} ", text)
+        self.assertNotIn(f"location {self.user_b.username} ", text)
+
+    def test_location_lines_do_not_break_gurobi_parser(self):
+        self._set_coords(self.user_a, 40.7128, -74.006)
+        text = external_solver.build_wants(self.event, include_locations=True)
+        # location lines have no '->', so the swap parser ignores them
+        self.assertEqual(external_solver.parse_gurobi(text), [])
+
+
+# ---------------------------------------------------------------------------
 # Parsers
 # ---------------------------------------------------------------------------
 
