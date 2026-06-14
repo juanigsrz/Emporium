@@ -2,9 +2,10 @@
 URL configuration for bgtrade project.
 """
 
+from django.conf import settings
 from django.contrib import admin
-from django.http import JsonResponse
-from django.urls import include, path
+from django.http import Http404, HttpResponse, JsonResponse
+from django.urls import include, path, re_path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -16,6 +17,14 @@ from rest_framework.response import Response
 
 def health(request):
     return JsonResponse({"status": "ok"})
+
+
+def spa_index(request):
+    """Serve the built SPA index for client-side routes. 404 before a build."""
+    index_path = settings.STATIC_ROOT / "index.html"
+    if not index_path.exists():
+        raise Http404("SPA build not found")
+    return HttpResponse(index_path.read_text(encoding="utf-8"), content_type="text/html")
 
 
 @api_view(["GET"])
@@ -70,4 +79,8 @@ urlpatterns = [
 
     # Notifications: list, mark-read, mark-all-read
     path("api/", include("notifications.urls")),
+
+    # SPA catch-all — anything not under api/, admin/, static/, media/ serves the
+    # built index.html so client-side routing works on deep links. Must be last.
+    re_path(r"^(?!api/|admin/|static/|media/).*$", spa_index, name="spa"),
 ]
