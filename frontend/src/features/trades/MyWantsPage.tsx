@@ -24,6 +24,7 @@ import {
 import type { OfferGroup, WantGroup, WantGroupItemPayload, GamePrice } from '../../api/trades'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GameThumb } from '../../components/GameThumb'
+import BackButton from '../../components/BackButton'
 
 // ============================================================
 // Model: a "want target" is one row in the matrix.
@@ -1548,9 +1549,7 @@ export default function MyWantsPage() {
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <BackButton to="/events" className="mt-3">Back to events</BackButton>
         </div>
       </div>
     )
@@ -1573,15 +1572,7 @@ export default function MyWantsPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-8 sm:px-6">
-      <Link
-        to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-moss/70 transition-colors hover:text-indigo-600"
-      >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to {event.name}
-      </Link>
+      <BackButton to={`/events/${slug}`}>Back to {event.name}</BackButton>
 
       <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">

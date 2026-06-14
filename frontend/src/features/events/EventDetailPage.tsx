@@ -25,6 +25,7 @@ import { useCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
 import { useMyRatings, ratingMap } from '../../api/ratings'
 import { useAuthStore } from '../../store/auth'
+import BackButton from '../../components/BackButton'
 import { StatusBadge } from './StatusBadge'
 import { STATUS_BADGE_CLASSES } from './eventUtils'
 
@@ -926,9 +927,7 @@ export default function EventDetailPage() {
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
         <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm font-semibold text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2">
-            Back to events
-          </Link>
+          <BackButton to="/events" className="mt-3">Back to events</BackButton>
         </div>
       </div>
     )
@@ -947,15 +946,7 @@ export default function EventDetailPage() {
       {editOpen && <EditEventModal event={event} onClose={() => setEditOpen(false)} />}
 
       {/* Back link */}
-      <Link
-        to="/events"
-        className="inline-flex items-center gap-1 text-xs font-medium text-moss hover:text-ink transition-colors"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        All events
-      </Link>
+      <BackButton to="/events">All events</BackButton>
 
       {/* Header card */}
       <div className="rounded-3xl border-2 border-ink bg-cream p-5 sm:p-6 shadow-card">

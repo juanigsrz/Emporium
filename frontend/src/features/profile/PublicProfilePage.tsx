@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { fetchPublicProfile } from '../../api/profiles'
+import BackButton from '../../components/BackButton'
 
 export default function PublicProfilePage() {
   const { username } = useParams<{ username: string }>()
@@ -26,9 +27,7 @@ export default function PublicProfilePage() {
         <p className="text-red-600 text-sm">
           {error ? 'User not found or an error occurred.' : 'Profile unavailable.'}
         </p>
-        <Link to="/" className="mt-4 inline-block text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2">
-          ← Back to home
-        </Link>
+        <BackButton to="/" className="mt-4">Back to home</BackButton>
       </div>
     )
   }
@@ -105,12 +104,7 @@ export default function PublicProfilePage() {
         </div>
       )}
 
-      <button
-        onClick={() => navigate(-1)}
-        className="mt-6 inline-block text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
-      >
-        ← Back
-      </button>
+      <BackButton onClick={() => navigate(-1)} className="mt-6">Back</BackButton>
     </div>
   )
 }

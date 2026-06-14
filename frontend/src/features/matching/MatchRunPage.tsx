@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import BackButton from '../../components/BackButton'
 import { useEvent } from '../../api/events'
 import type { EventStatus } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
@@ -1349,9 +1350,7 @@ export default function MatchRunPage() {
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
           <p className="text-sm text-red-700">Event not found.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <BackButton to="/events" className="mt-3">Back to events</BackButton>
         </div>
       </div>
     )
@@ -1367,12 +1366,7 @@ export default function MatchRunPage() {
           <p className="text-xs text-moss/70 mt-1">
             The event must be in MATCHING state or later.
           </p>
-          <Link
-            to={`/events/${slug}`}
-            className="mt-4 inline-block text-sm text-indigo-600 hover:underline"
-          >
-            Back to event
-          </Link>
+          <BackButton to={`/events/${slug}`} className="mt-4">Back to event</BackButton>
         </div>
       </div>
     )

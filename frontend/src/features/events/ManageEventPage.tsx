@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import BackButton from '../../components/BackButton'
 import { useEvent, useEventParticipants } from '../../api/events'
 import {
   useAdminSubmissions, useToggleWish, useEditOfferBound, useEditWantBound,
@@ -28,7 +29,7 @@ export default function ManageEventPage() {
     return (
       <div className="mx-auto max-w-2xl p-6">
         <p className="text-sm text-red-600">Only the organizer can manage this event.</p>
-        <Link to={`/events/${slug}`} className="text-sm font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2">← Back</Link>
+        <BackButton to={`/events/${slug}`}>Back</BackButton>
       </div>
     )
   }
