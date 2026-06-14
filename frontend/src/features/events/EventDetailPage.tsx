@@ -745,6 +745,11 @@ function MyListingCard({
 
   async function handleSave() {
     setErr(null)
+    const trimmed = draft.trim()
+    if (trimmed !== '' && Number(trimmed) <= 0) {
+      setErr('Price must be greater than $0.')
+      return
+    }
     setSaving(true)
     try {
       const v = draft.trim()
@@ -804,7 +809,7 @@ function MyListingCard({
               <input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={
@@ -812,7 +817,7 @@ function MyListingCard({
                     ? `default ${listing.resolved_ask}`
                     : 'price'
                 }
-                className="w-20 rounded-lg border-2 border-ink/15 bg-cream px-2 py-1 text-xs text-ink placeholder-moss/40 focus:outline-none focus:ring-2 focus:ring-sage"
+                className="no-spinner w-20 rounded-lg border-2 border-ink/15 bg-cream px-2 py-1 text-xs text-ink placeholder-moss/40 focus:outline-none focus:ring-2 focus:ring-sage"
               />
             </div>
           </div>

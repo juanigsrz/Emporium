@@ -162,8 +162,8 @@ class EventListingSerializer(serializers.ModelSerializer):
         return obj.sell_price is not None
 
     def validate_sell_price(self, value):
-        if value is not None and value < 0:
-            raise serializers.ValidationError("sell_price cannot be negative.")
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("sell_price must be greater than 0.")
         return value
 
     class Meta:

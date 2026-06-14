@@ -284,7 +284,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
           placeholder="—"
-          className="w-14 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="no-spinner w-14 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
         />
         {rating && (
           <button
@@ -307,13 +307,13 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
           <span className="text-moss">Price $</span>
           <input
             type="number"
-            min={0}
+            min="0.01"
             step="0.01"
             value={priceValue}
             onChange={(e) => onPriceChange(e.target.value)}
             placeholder="—"
             title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
-            className="w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
           />
         </div>
       )}
@@ -549,7 +549,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             value={minRating}
             onChange={(e) => { setMinRating(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
             placeholder="—"
-            className="w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+            className="no-spinner w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
           />
         </label>
 
@@ -1243,9 +1243,10 @@ interface GridModeProps {
   editor: Editor
   username?: string
   ratings: Map<number, number>
+  moneyEnabled: boolean
 }
 
-function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps) {
+function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }: GridModeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -1347,6 +1348,20 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                         {groupBadge(g)}
                       </span>
                     </span>
+                    {moneyEnabled && g.gameId >= 0 && (
+                      <div className="mt-1 flex items-center gap-1 text-xs">
+                        <span className="text-moss">$</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={editor.priceForGame(g.gameId)}
+                          onChange={(e) => editor.setMoney(g.gameId, e.target.value)}
+                          placeholder="price"
+                          className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        />
+                      </div>
+                    )}
                   </th>
                   {myListings.map((l) => {
                     const on = groupIsOn(editor, l.id, g)
@@ -1519,8 +1534,15 @@ export default function MyWantsPage() {
 
   const handleSave = useCallback(async () => {
     if (!slug) return
-    setSaving(true)
     setSaveError(null)
+    for (const [, value] of editor.changedGamePrices) {
+      const raw = (value ?? '').trim()
+      if (raw !== '' && Number(raw) <= 0) {
+        setSaveError('Price must be greater than $0.')
+        return
+      }
+    }
+    setSaving(true)
     try {
       await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
       invalidateTrades(qc, slug)
@@ -1642,7 +1664,7 @@ export default function MyWantsPage() {
           )}
           {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
           {view === 'grid' && (
-            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} />
+            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} />
           )}
         </>
       )}
