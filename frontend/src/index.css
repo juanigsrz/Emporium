@@ -80,6 +80,17 @@
 }
 
 @layer utilities {
+  /* Hide native number-input step arrows on rating/price fields. */
+  .no-spinner::-webkit-outer-spin-button,
+  .no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .no-spinner {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   /* Gentle per-route entrance. Opacity-only so it never creates a containing
      block (keeps `position: fixed` modals/overlays anchored to the viewport). */
   @keyframes page-enter {
