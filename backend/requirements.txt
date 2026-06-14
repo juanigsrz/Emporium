@@ -1,3 +1,7 @@
+# Database
+dj-database-url==2.3.0
+psycopg[binary]==3.2.10
+
 # Core framework
 Django==5.2.15
 asgiref==3.11.1

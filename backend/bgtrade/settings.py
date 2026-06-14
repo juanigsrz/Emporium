@@ -5,6 +5,8 @@ Django settings for bgtrade project.
 import os
 from pathlib import Path
 
+import dj_database_url
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -27,28 +29,15 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()] or [
 ]
 
 # ---------------------------------------------------------------------------
-# Database (DATABASE_URL → sqlite default)
+# Database (DATABASE_URL → Postgres in prod; SQLite fallback for tests/local)
 # ---------------------------------------------------------------------------
-_database_url = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
-
-# Minimal DATABASE_URL parser — supports sqlite:///path and postgres://...
-# (no native deps; psycopg2 not installed; SQLite only for v1)
-if _database_url.startswith("sqlite:///"):
-    _db_path = _database_url[len("sqlite:///"):]
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": _db_path,
-        }
-    }
-else:
-    # Fallback to SQLite if an unsupported URL is supplied in dev
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
+DATABASES = {
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+}
 
 # ---------------------------------------------------------------------------
 # Application definition
