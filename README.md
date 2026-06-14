@@ -69,6 +69,25 @@ npm run dev
 The Vite dev server proxies to the Django API. Point it at your backend via the
 configured API base URL.
 
+## Deployment (Railway)
+
+The repo deploys as a single Docker image (multi-stage: builds the Vite SPA, then
+runs Django via gunicorn with WhiteNoise serving the SPA and static assets).
+
+Create two services from this repo + two plugins:
+
+| Service  | How                                                                 |
+|----------|---------------------------------------------------------------------|
+| web      | Dockerfile build; start `gunicorn bgtrade.wsgi --chdir backend --bind 0.0.0.0:$PORT` |
+| worker   | same image; start `celery -A bgtrade worker -l info --workdir backend` |
+| Postgres | Railway Postgres plugin (injects `DATABASE_URL`)                    |
+| Redis    | Railway Redis plugin (set `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND`) |
+
+Required env vars (see `.env.example`): `SECRET_KEY`, `DEBUG=False`,
+`CELERY_TASK_ALWAYS_EAGER=False`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`.
+`RAILWAY_PUBLIC_DOMAIN` is auto-trusted for `ALLOWED_HOSTS` + CSRF. Migrations run
+via the `preDeployCommand` in `railway.toml`.
+
 ## Layout
 
 ```
