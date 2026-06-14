@@ -28,6 +28,24 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()] or [
     "127.0.0.1",
 ]
 
+# Railway provides RAILWAY_PUBLIC_DOMAIN; trust it for hosts + CSRF.
+_railway_domain = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+if _railway_domain:
+    ALLOWED_HOSTS.append(_railway_domain)
+
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()
+]
+if _railway_domain:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_railway_domain}")
+
+# Railway terminates TLS at its proxy.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 # ---------------------------------------------------------------------------
 # Database (DATABASE_URL → Postgres in prod; SQLite fallback for tests/local)
 # ---------------------------------------------------------------------------
@@ -36,6 +54,8 @@ DATABASES = {
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
         conn_health_checks=True,
+        # TLS only for a real (Postgres) DATABASE_URL in production; never sqlite.
+        ssl_require=(not DEBUG) and bool(os.environ.get("DATABASE_URL")),
     )
 }
 
@@ -76,6 +96,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # must be before CommonMiddleware
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -123,9 +144,22 @@ USE_I18N = True
 USE_TZ = True
 
 # ---------------------------------------------------------------------------
-# Static files
+# Static files (WhiteNoise serves collected static + the built SPA assets)
 # ---------------------------------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The built Vite SPA (frontend/dist) is collected into STATIC_ROOT so WhiteNoise
+# serves its hashed assets. Only added when present (absent in dev/test).
+_spa_dist = BASE_DIR.parent / "frontend" / "dist"
+STATICFILES_DIRS = [_spa_dist] if _spa_dist.exists() else []
+
+# Compressed (NOT Manifest): Vite already content-hashes assets; Manifest would
+# re-hash them and break the SPA index.html references.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 # ---------------------------------------------------------------------------
 # Default PK
@@ -196,7 +230,9 @@ CORS_ALLOW_CREDENTIALS = True
 # ---------------------------------------------------------------------------
 # Celery (no broker required in dev — ALWAYS_EAGER mode)
 # ---------------------------------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_ALWAYS_EAGER = os.environ.get(
+    "CELERY_TASK_ALWAYS_EAGER", "True"
+).lower() not in ("false", "0", "no")
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache")
