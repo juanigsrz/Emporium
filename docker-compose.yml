@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: emporium
+      POSTGRES_USER: emporium
+      POSTGRES_PASSWORD: emporium
+    ports:
+      - "5432:5432"
+    volumes:
+      - emporium_pgdata:/var/lib/postgresql/data
+
+volumes:
+  emporium_pgdata:

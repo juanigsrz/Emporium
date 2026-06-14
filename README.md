@@ -45,6 +45,19 @@ Run the tests:
 python manage.py test
 ```
 
+### Database
+
+By default the backend uses SQLite — no setup required. To run Postgres locally
+(matches production):
+
+```bash
+docker compose up -d db
+export DATABASE_URL=postgres://emporium:emporium@localhost:5432/emporium
+cd backend && python manage.py migrate
+```
+
+Unset `DATABASE_URL` (or open a new shell) to fall back to SQLite.
+
 ### Frontend
 
 ```bash
