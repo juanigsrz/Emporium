@@ -241,7 +241,7 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
         />
       )}
 
-      <div className={`p-4 border-b-2 border-ink/10 last:border-0 ${isWithdrawn ? 'opacity-60' : ''}`}>
+      <div className={`flex flex-col rounded-2xl border-2 border-ink/15 bg-cream p-4 shadow-sm ${isWithdrawn ? 'opacity-60' : ''}`}>
         {/* Pending banner */}
         {isPendingCopy && (
           <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border-2 border-amber-300 bg-amber-50 px-3 py-2">
@@ -343,9 +343,9 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
 
 function CopiesSkeleton() {
   return (
-    <div className="rounded-3xl border-2 border-ink/15 bg-cream divide-y-2 divide-ink/10 overflow-hidden">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
       {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="p-4 animate-pulse space-y-2">
+        <div key={i} className="rounded-2xl border-2 border-ink/15 bg-cream p-4 animate-pulse space-y-2">
           <div className="flex gap-2">
             <div className="h-5 w-20 bg-gray-200 rounded-full" />
             <div className="h-5 w-14 bg-gray-200 rounded-full" />
@@ -443,9 +443,10 @@ function BggImportPanel() {
         Skip existing duplicates
       </label>
 
-      <div className="flex flex-wrap gap-3 items-end">
-        {/* Owned import */}
-        <div className="flex flex-col gap-1">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {/* From your collection */}
+        <div className="flex flex-col gap-2 rounded-2xl border-2 border-ink/10 bg-cream/70 p-3">
+          <h3 className="text-xs font-bold text-ink">From your collection</h3>
           {!hasBggUsername && (
             <p className="text-xs text-amber-600">
               Set your{' '}
@@ -459,27 +460,28 @@ function BggImportPanel() {
             onClick={handleOwnedImport}
             disabled={!hasBggUsername || isRunning || startImport.isPending}
             title={!hasBggUsername ? 'Set your BGG username in your profile first.' : undefined}
-            className="rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+            className="self-start rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             {isRunning ? 'Importing…' : 'Import owned from BGG'}
           </button>
         </div>
 
-        {/* Geeklist import */}
-        <div className="flex items-end gap-2">
+        {/* From a geeklist */}
+        <div className="flex flex-col gap-2 rounded-2xl border-2 border-ink/10 bg-cream/70 p-3">
+          <h3 className="text-xs font-bold text-ink">From a geeklist</h3>
           <label className="flex flex-col gap-1 text-xs font-medium text-moss">
             Geeklist ID
             <input
               value={geeklistId}
               onChange={(e) => setGeeklistId(e.target.value)}
               placeholder="e.g. 123456"
-              className="w-28 rounded-xl border-2 border-ink/15 bg-parchment px-2 py-1.5 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-teal-300"
+              className="w-full rounded-xl border-2 border-ink/15 bg-parchment px-2 py-1.5 text-sm focus:border-ink focus:outline-none focus:ring-2 focus:ring-teal-300"
             />
           </label>
           <button
             onClick={handleGeeklistImport}
             disabled={isRunning || startImport.isPending}
-            className="rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
+            className="self-start rounded-2xl border-2 border-ink bg-teal-300 px-3 py-1.5 text-xs font-bold text-teal-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
           >
             {isRunning ? 'Importing…' : 'Import from geeklist'}
           </button>
@@ -517,7 +519,7 @@ function BggImportPanel() {
 
 function AddCopyModal({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('')
-  const [picked, setPicked] = useState<{ bgg_id: number; name: string } | null>(null)
+  const [picked, setPicked] = useState<{ bgg_id: number; name: string; thumbnail: string } | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
 
   // Global catalog typeahead: you can own ANY game (offering), so this is the
@@ -573,10 +575,11 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
                     <li key={g.bgg_id}>
                       <button
                         type="button"
-                        onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name })}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-sage/30"
+                        onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name, thumbnail: g.thumbnail })}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-sage/30"
                       >
-                        <span className="truncate text-ink">{g.name}</span>
+                        <GameThumb src={g.thumbnail} alt={g.name} className="h-8 w-8" />
+                        <span className="flex-1 truncate text-ink">{g.name}</span>
                         <span className="shrink-0 text-xs text-moss/70">{g.year_published ?? ''}</span>
                       </button>
                     </li>
@@ -587,6 +590,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <div className="mb-4 flex items-center gap-2 rounded-xl border-2 border-ink/15 bg-sage/30 px-3 py-2">
+                <GameThumb src={picked.thumbnail} alt={picked.name} className="h-8 w-8" />
                 <span className="text-sm font-semibold text-ink">{picked.name}</span>
                 <button
                   type="button"
@@ -729,7 +733,7 @@ export default function MyCopiesPage() {
           </button>
         </div>
       ) : (
-        <div className="rounded-3xl border-2 border-ink bg-cream overflow-hidden shadow-card">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((copy) => (
             <MyCopyCard key={copy.id} copy={copy} rmap={rmap} />
           ))}
