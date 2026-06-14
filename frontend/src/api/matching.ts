@@ -133,10 +133,13 @@ async function fetchMyAssignments(slug: string, id: number): Promise<PaginatedRe
   return data
 }
 
-/** GET the gurobi solver wants file (text) for the event. Organizer-only. */
-export async function fetchWantsExport(slug: string): Promise<string> {
+/** GET the gurobi solver wants file (text) for the event. Organizer-only.
+ *  `kpi` is the selected objectives in priority order; when it contains
+ *  'distance' the backend appends user location lines. */
+export async function fetchWantsExport(slug: string, kpi: string[] = []): Promise<string> {
   const { data } = await apiClient.get<string>(`/events/${slug}/wants-export/`, {
     responseType: 'text',
+    params: kpi.length ? { kpi: kpi.join(',') } : undefined,
   })
   return data
 }

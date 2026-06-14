@@ -89,6 +89,33 @@ def _load_coords():
     }
 
 
+def _location_lines(listings, wishes) -> str:
+    """`location <username> <lat> <lng>` for every user who owns an active
+    listing or has an active wish AND has Profile coordinates. Sorted, '' if none.
+
+    Covers both ends of every possible move (owner + receiver) so the solver's
+    distance objective can price each shipment. Users without coordinates are
+    skipped; the solver tolerates moves with a missing location on either end.
+    """
+    coords = _load_coords()  # user_id -> (lat, lng, max_km)
+    names = {}               # user_id -> username
+    for el in listings:
+        names[el.copy.owner_id] = el.copy.owner.username
+    for w in wishes:
+        names[w.user_id] = w.user.username
+
+    lines = []
+    for uid, username in names.items():
+        c = coords.get(uid)
+        if not c:
+            continue
+        lat, lng, _max = c
+        if lat is None or lng is None:
+            continue
+        lines.append(f"location {username} {lat} {lng}")
+    return ("\n".join(sorted(lines)) + "\n") if lines else ""
+
+
 def _distance_blocked(user_id, coords):
     """Owner ids too far from this wisher (per the wisher's max_trade_distance_km)."""
     from accounts.geo import haversine_km
@@ -132,7 +159,7 @@ def _expand(want_items, user_id, by_game, by_id, blocked):
 # Export — build_wants
 # ---------------------------------------------------------------------------
 
-def build_wants(event) -> str:
+def build_wants(event, include_locations: bool = False) -> str:
     listings, by_code, by_game, by_id = _listing_index(event)
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
@@ -142,7 +169,8 @@ def build_wants(event) -> str:
         if event.money_enabled else ""
     )
     body = _build_xtoy(wishes, by_game, by_id, by_code, block_pairs)
-    return money_block + body
+    location_block = _location_lines(listings, wishes) if include_locations else ""
+    return money_block + body + location_block
 
 
 def _to_cents(amount) -> int:

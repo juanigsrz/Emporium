@@ -145,18 +145,52 @@ function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (i
 
 // ---- X-to-Y solve panel (organizer, MATCHING) — export wants + upload solution ----
 
+type ObjectiveKey = 'trades' | 'users' | 'distance'
+
+interface ObjectiveRow {
+  key: ObjectiveKey
+  label: string
+  checked: boolean
+}
+
+// Default: only 'trades' on (matches solver default; distance off => no locations
+// emitted until opted in). List order = solver priority (topmost optimized first).
+const DEFAULT_OBJECTIVES: ObjectiveRow[] = [
+  { key: 'trades', label: 'Trades', checked: true },
+  { key: 'users', label: 'Users', checked: false },
+  { key: 'distance', label: 'Distance', checked: false },
+]
+
 function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: number) => void }) {
   const upload = useUploadSolution()
   const [output, setOutput] = useState('')
   const [open, setOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [objectives, setObjectives] = useState<ObjectiveRow[]>(DEFAULT_OBJECTIVES)
+  const kpi = objectives.filter((o) => o.checked).map((o) => o.key)
+
+  function toggleObjective(i: number) {
+    setObjectives((os) =>
+      os.map((o, idx) => (idx === i ? { ...o, checked: !o.checked } : o)),
+    )
+  }
+
+  function moveObjective(i: number, dir: -1 | 1) {
+    setObjectives((os) => {
+      const j = i + dir
+      if (j < 0 || j >= os.length) return os
+      const next = os.slice()
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
 
   async function handleDownload() {
     setError(null)
     setDownloading(true)
     try {
-      const text = await fetchWantsExport(slug)
+      const text = await fetchWantsExport(slug, kpi)
       const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
       const a = document.createElement('a')
       a.href = url
@@ -195,16 +229,57 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
 
   return (
     <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 space-y-2 w-full sm:w-80">
+      <div className="space-y-1">
+        <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
+          Objectives (priority order)
+        </p>
+        {objectives.map((o, i) => (
+          <div key={o.key} className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              checked={o.checked}
+              onChange={() => toggleObjective(i)}
+              className="rounded border-ink/30 text-violet-500 focus:ring-violet-500"
+            />
+            <span className="w-5 text-xs text-violet-600">{i + 1}.</span>
+            <span className="flex-1">{o.label}</span>
+            <button
+              type="button"
+              onClick={() => moveObjective(i, -1)}
+              disabled={i === 0}
+              aria-label={`Move ${o.label} up`}
+              className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => moveObjective(i, 1)}
+              disabled={i === objectives.length - 1}
+              aria-label={`Move ${o.label} down`}
+              className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
+            >
+              ↓
+            </button>
+          </div>
+        ))}
+      </div>
       <button
         onClick={handleDownload}
-        disabled={downloading}
+        disabled={downloading || kpi.length === 0}
         className="w-full rounded-2xl border-2 border-ink bg-violet-400 px-4 py-2 text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
       >
         {downloading ? 'Preparing…' : 'Download wants.txt'}
       </button>
-      <p className="text-xs text-violet-600">
-        Run the solver locally (Gurobi), then upload its output.
-      </p>
+      {kpi.length === 0 ? (
+        <p className="text-xs text-red-600">Select at least one objective.</p>
+      ) : (
+        <p className="text-xs text-violet-600">
+          Objectives: <code className="font-mono">--kpi {kpi.join(',')}</code>
+          <br />
+          Pass this flag when running the solver locally (Gurobi), then upload its output.
+        </p>
+      )}
       {open ? (
         <div className="space-y-2">
           <textarea
