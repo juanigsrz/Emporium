@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { registerApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
+import GoogleSignInButton from '../../components/GoogleSignInButton'
 
 const schema = z
   .object({
@@ -120,6 +121,16 @@ export default function RegisterPage() {
             {isSubmitting ? 'Creating account…' : 'Create account'}
           </button>
         </form>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-moss/60">
+          <span className="h-px flex-1 bg-ink/10" />
+          or
+          <span className="h-px flex-1 bg-ink/10" />
+        </div>
+        <GoogleSignInButton
+          onSuccess={() => navigate('/', { replace: true })}
+          onError={setServerError}
+        />
       </div>
     </div>
   )

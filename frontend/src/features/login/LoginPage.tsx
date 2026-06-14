@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { loginApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
+import GoogleSignInButton from '../../components/GoogleSignInButton'
 
 const schema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -118,6 +119,16 @@ export default function LoginPage() {
             {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-moss/60">
+          <span className="h-px flex-1 bg-ink/10" />
+          or
+          <span className="h-px flex-1 bg-ink/10" />
+        </div>
+        <GoogleSignInButton
+          onSuccess={() => navigate(from, { replace: true })}
+          onError={setServerError}
+        />
       </div>
     </div>
   )
