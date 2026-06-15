@@ -385,16 +385,13 @@ interface WantGroupsPanelProps {
 interface DraftWantItem {
   // Unique local key for DnD (not the backend id)
   localId: string
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
   board_game_name: string | null
-  event_listing: number | null
+  event_listing: number
   listing_code: string | null
   bid: string  // '' = none
 }
 
 function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
-  if (item.target_type === 'BOARD_GAME') return `bg-${item.board_game}`
   return `listing-${item.event_listing}`
 }
 
@@ -574,20 +571,11 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
           {group.items.map((item) => (
             <span
               key={item.id}
-              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${
-                item.target_type === 'BOARD_GAME'
-                  ? 'bg-purple-50 text-purple-700'
-                  : 'bg-blue-50 text-blue-700'
-              }`}
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700"
             >
               <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              {item.target_type === 'LISTING' && (
-                <span className="font-mono text-moss/70">{item.listing_code}</span>
-              )}
+              <span className="font-mono text-moss/70">{item.listing_code}</span>
               {item.board_game_name}
-              {item.target_type === 'BOARD_GAME' && (
-                <span className="text-moss/70">(any copy)</span>
-              )}
               {item.resolved_bid != null && (
                 <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
                   pay ≤${item.resolved_bid}
@@ -620,7 +608,7 @@ interface GameCopyPickerProps {
   game: EventGame
   username: string
   existingItemIds: Set<string>
-  onCommit: (selections: { anycopy: boolean; listings: EventListing[] }) => void
+  onCommit: (listings: EventListing[]) => void
   onCancel: () => void
 }
 
@@ -642,10 +630,7 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
     })
   }
 
-  const bgKey = `bg-${game.bgg_id}`
-  const anyCopyAlreadyAdded = existingItemIds.has(bgKey)
-
-  const hasSelection = (anyCopy && !anyCopyAlreadyAdded) || checkedIds.size > 0
+  const hasSelection = anyCopy || checkedIds.size > 0
 
   return (
     <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 space-y-2">
@@ -655,22 +640,18 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
         {' '}— choose what to add:
       </p>
       <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
-        anyCopyAlreadyAdded
-          ? 'border-ink/15 bg-white text-moss/40 cursor-not-allowed'
-          : anyCopy
+        anyCopy
           ? 'border-purple-400 bg-white text-purple-800'
           : 'border-ink/15 bg-white text-ink hover:border-purple-200'
       }`}>
         <input
           type="checkbox"
           checked={anyCopy}
-          disabled={anyCopyAlreadyAdded}
           onChange={(e) => setAnyCopy(e.target.checked)}
           className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
         <span className="font-medium">Any copy</span>
-        <span className="text-xs text-purple-500 ml-1">(accept any trader's copy)</span>
-        {anyCopyAlreadyAdded && <span className="ml-auto text-xs text-moss/70">already added</span>}
+        <span className="text-xs text-purple-500 ml-1">(accept every trader's copy)</span>
       </label>
       {otherCopies.length > 0 && (
         <div className="space-y-1">
@@ -720,7 +701,7 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
         </button>
         <button
           type="button"
-          onClick={() => onCommit({ anycopy: anyCopy && !anyCopyAlreadyAdded, listings: otherCopies.filter((l) => checkedIds.has(l.id)) })}
+          onClick={() => onCommit(anyCopy ? otherCopies : otherCopies.filter((l) => checkedIds.has(l.id)))}
           disabled={!hasSelection}
           className="flex-1 rounded-xl border-2 border-ink bg-purple-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
@@ -740,8 +721,6 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   const [items, setItems] = useState<DraftWantItem[]>(() =>
     (group?.items ?? []).map((i) => ({
       localId: makeDraftKey(i),
-      target_type: i.target_type,
-      board_game: i.board_game,
       board_game_name: i.board_game_name,
       event_listing: i.event_listing,
       listing_code: i.listing_code,
@@ -762,51 +741,24 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
 
   const existingItemIds = new Set(items.map((i) => i.localId))
 
-  function addBoardGame(game: EventGame) {
-    const key = `bg-${game.bgg_id}`
-    if (items.some((i) => i.localId === key)) {
-      setDuplicateWarn(`"${game.name}" is already in this want group.`)
-      setTimeout(() => setDuplicateWarn(null), 3000)
-      return
-    }
-    setItems((prev) => [
-      ...prev,
-      {
-        localId: key,
-        target_type: 'BOARD_GAME',
-        board_game: game.bgg_id,
-        board_game_name: game.name,
-        event_listing: null,
-        listing_code: null,
-        bid: '',
-      },
-    ])
-  }
-
-  function addListing(listing: EventListing) {
-    const key = `listing-${listing.id}`
-    if (items.some((i) => i.localId === key)) {
-      setDuplicateWarn(`Listing "${listing.board_game_name} (${listing.listing_code})" is already in this want group.`)
-      setTimeout(() => setDuplicateWarn(null), 3000)
-      return
-    }
-    setItems((prev) => [
-      ...prev,
-      {
-        localId: key,
-        target_type: 'LISTING',
-        board_game: null,
-        board_game_name: listing.board_game_name,
-        event_listing: listing.id,
-        listing_code: listing.listing_code,
-        bid: '',
-      },
-    ])
-  }
-
-  function handlePickerCommit(game: EventGame, sel: { anycopy: boolean; listings: EventListing[] }) {
-    if (sel.anycopy) addBoardGame(game)
-    for (const listing of sel.listings) addListing(listing)
+  function handlePickerCommit(listings: EventListing[]) {
+    setItems((prev) => {
+      const have = new Set(prev.map((i) => i.localId))
+      const additions: DraftWantItem[] = []
+      for (const listing of listings) {
+        const localId = `listing-${listing.id}`
+        if (have.has(localId)) continue
+        have.add(localId)
+        additions.push({
+          localId,
+          board_game_name: listing.board_game_name,
+          event_listing: listing.id,
+          listing_code: listing.listing_code,
+          bid: '',
+        })
+      }
+      return [...prev, ...additions]
+    })
     setActiveGame(null)
     setGameSearch('')
   }
@@ -820,34 +772,18 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   }
 
   function buildPayloadItems(): WantGroupItemPayload[] {
-    return items.map((item) => {
-      const base: WantGroupItemPayload = { target_type: item.target_type }
-      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-        base.board_game = item.board_game
-      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-        base.event_listing = item.event_listing
-      }
-      return base
-    })
+    return items.map((item) => ({ event_listing: item.event_listing }))
   }
 
-  // Persist per-target buy bids as WantBid overrides (decoupled from the want item).
+  // Persist per-listing buy bids as WantBid overrides (decoupled from the want item).
   async function saveWantBids() {
     if (!moneyEnabled) return
     for (const item of items) {
       const trimmed = item.bid.trim()
-      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-        if (trimmed === '') {
-          await deleteWantBid(slug, { board_game: item.board_game })
-        } else {
-          await setWantBid(slug, { target_type: 'BOARD_GAME', board_game: item.board_game, amount: trimmed })
-        }
-      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-        if (trimmed === '') {
-          await deleteWantBid(slug, { event_listing: item.event_listing })
-        } else {
-          await setWantBid(slug, { target_type: 'LISTING', event_listing: item.event_listing, amount: trimmed })
-        }
+      if (trimmed === '') {
+        await deleteWantBid(slug, { event_listing: item.event_listing })
+      } else {
+        await setWantBid(slug, { event_listing: item.event_listing, amount: trimmed })
       }
     }
   }
@@ -951,11 +887,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                   <span className="text-sm text-ink font-medium truncate block">
                     {item.board_game_name}
                   </span>
-                  {item.target_type === 'LISTING' ? (
-                    <span className="text-xs text-blue-600 font-mono">{item.listing_code} (specific)</span>
-                  ) : (
-                    <span className="text-xs text-purple-500">any copy</span>
-                  )}
+                  <span className="text-xs text-blue-600 font-mono">{item.listing_code}</span>
                 </div>
                 {moneyEnabled && (
                   <div className="flex shrink-0 items-center gap-1">
@@ -1023,7 +955,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
             game={activeGame}
             username={username}
             existingItemIds={existingItemIds}
-            onCommit={(sel) => handlePickerCommit(activeGame, sel)}
+            onCommit={(listings) => handlePickerCommit(listings)}
             onCancel={() => { setActiveGame(null); setGameSearch('') }}
           />
         )}

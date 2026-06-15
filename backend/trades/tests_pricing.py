@@ -26,23 +26,28 @@ class PricingModelTests(MatchingTestBase):
         self.el_a1.refresh_from_db()
         self.assertEqual(self.el_a1.sell_price, Decimal("12.50"))
 
-    def test_want_bid_board_game_target_requires_board_game(self):
+    def test_want_bid_listing_ok(self):
         wb = WantBid(
             user=self.user_a, event=self.event,
-            target_type=WantBid.TargetType.BOARD_GAME, amount=Decimal("30"),
-        )
-        with self.assertRaises(ValidationError):
-            wb.clean()
-
-    def test_want_bid_listing_target_ok(self):
-        wb = WantBid(
-            user=self.user_a, event=self.event,
-            target_type=WantBid.TargetType.LISTING,
             event_listing=self.el_b1, amount=Decimal("30"),
         )
         wb.clean()  # no raise
         wb.save()
         self.assertEqual(WantBid.objects.filter(user=self.user_a).count(), 1)
+
+    def test_want_bid_listing_from_other_event_rejected(self):
+        from events.models import TradeEvent, EventListing
+        other = TradeEvent.objects.create(
+            name="Other Ev", organizer=self.user_a,
+            status=TradeEvent.Status.SUBMISSIONS_OPEN,
+        )
+        other_listing = EventListing.objects.create(event=other, copy=self.copy_a1)
+        wb = WantBid(
+            user=self.user_a, event=self.event,
+            event_listing=other_listing, amount=Decimal("30"),
+        )
+        with self.assertRaises(ValidationError):
+            wb.clean()
 
 
 class ResolveAskTests(MatchingTestBase):
@@ -72,39 +77,28 @@ class ResolveBidTests(MatchingTestBase):
         )
         WantBid.objects.create(
             user=self.user_a, event=self.event,
-            target_type=WantBid.TargetType.BOARD_GAME,
-            board_game=self.game_terra, amount=Decimal("25"),
+            event_listing=self.el_b1, amount=Decimal("25"),
         )
-        target = WantGroupItem(
-            target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game_terra
-        )
+        target = WantGroupItem(event_listing=self.el_b1)  # el_b1 is a terra copy
         self.assertEqual(pricing.resolve_bid(self.user_a, self.event, target), Decimal("25"))
 
     def test_listing_target_uses_listing_game_default(self):
         UserGamePrice.objects.create(
             user=self.user_a, event=self.event, board_game=self.game_terra, price=Decimal("20")
         )
-        target = WantGroupItem(
-            target_type=WantGroupItem.TargetType.LISTING, event_listing=self.el_b1
-        )  # el_b1 is a terra copy
+        target = WantGroupItem(event_listing=self.el_b1)  # el_b1 is a terra copy
         self.assertEqual(pricing.resolve_bid(self.user_a, self.event, target), Decimal("20"))
 
     def test_none_when_no_bid(self):
-        target = WantGroupItem(
-            target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game_terra
-        )
+        target = WantGroupItem(event_listing=self.el_b1)
         self.assertIsNone(pricing.resolve_bid(self.user_a, self.event, target))
 
     def test_listing_override_wins(self):
         WantBid.objects.create(
             user=self.user_a, event=self.event,
-            target_type=WantBid.TargetType.LISTING,
             event_listing=self.el_b1, amount=Decimal("15"),
         )
-        target = WantGroupItem(
-            target_type=WantGroupItem.TargetType.LISTING,
-            event_listing=self.el_b1,
-        )
+        target = WantGroupItem(event_listing=self.el_b1)
         self.assertEqual(pricing.resolve_bid(self.user_a, self.event, target), Decimal("15"))
 
 
@@ -160,32 +154,20 @@ class WantBidEndpointTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         self.url = f"/api/events/{self.slug}/want-bids/"
 
-    def test_put_board_game_upsert(self):
-        body = {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id, "amount": "25"}
+    def test_put_listing_upsert(self):
+        body = {"event_listing": self.el_b1.id, "amount": "25"}
         r1 = self.client.put(self.url, body, format="json")
         self.assertEqual(r1.status_code, 200, r1.data)
         r2 = self.client.put(self.url, {**body, "amount": "30"}, format="json")
         self.assertEqual(r2.status_code, 200, r2.data)
         self.assertEqual(WantBid.objects.count(), 1)
         self.assertEqual(WantBid.objects.get().amount, Decimal("30"))
-
-    def test_put_listing_target(self):
-        body = {"target_type": "LISTING", "event_listing": self.el_b1.id, "amount": "12"}
-        r = self.client.put(self.url, body, format="json")
-        self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(WantBid.objects.get().event_listing_id, self.el_b1.id)
 
-    def test_board_game_with_listing_rejected(self):
-        body = {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id,
-                "event_listing": self.el_b1.id, "amount": "5"}
-        r = self.client.put(self.url, body, format="json")
-        self.assertEqual(r.status_code, 400)
-
-    def test_delete_board_game_bid(self):
+    def test_delete_bid(self):
         WantBid.objects.create(user=self.user_a, event=self.event,
-                               target_type=WantBid.TargetType.BOARD_GAME,
-                               board_game=self.game_terra, amount=Decimal("10"))
-        r = self.client.delete(f"{self.url}?board_game={self.game_terra.bgg_id}")
+                               event_listing=self.el_b1, amount=Decimal("10"))
+        r = self.client.delete(f"{self.url}?event_listing={self.el_b1.id}")
         self.assertEqual(r.status_code, 204)
         self.assertEqual(WantBid.objects.count(), 0)
 
@@ -194,7 +176,7 @@ class WantBidEndpointTests(MatchingTestBase):
         self.assertEqual(r.status_code, 400)
 
     def test_delete_non_numeric_param_400(self):
-        r = self.client.delete(f"{self.url}?board_game=abc")
+        r = self.client.delete(f"{self.url}?event_listing=abc")
         self.assertEqual(r.status_code, 400)
 
     def test_listing_from_other_event_rejected(self):
@@ -204,7 +186,7 @@ class WantBidEndpointTests(MatchingTestBase):
             status=TradeEvent.Status.SUBMISSIONS_OPEN,
         )
         other_listing = EventListing.objects.create(event=other, copy=self.copy_a1)
-        body = {"target_type": "LISTING", "event_listing": other_listing.id, "amount": "5"}
+        body = {"event_listing": other_listing.id, "amount": "5"}
         r = self.client.put(self.url, body, format="json")
         self.assertEqual(r.status_code, 400)
 
@@ -272,8 +254,8 @@ class ResolvedReadFieldTests(MatchingTestBase):
         UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_terra, price=Decimal("22"))
         wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg")
         item = WantGroupItem.objects.create(
-            want_group=wg, target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game_terra
-        )
+            want_group=wg, event_listing=self.el_b1
+        )  # el_b1 is a terra copy
         from trades.serializers import WantGroupItemSerializer
         data = WantGroupItemSerializer(item, context={"event": self.event}).data
         self.assertEqual(Decimal(data["resolved_bid"]), Decimal("22"))
@@ -283,11 +265,11 @@ class ResolvedReadFieldTests(MatchingTestBase):
         from trades.models import WantGroup, WantGroupItem, WantBid
         wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg2")
         item = WantGroupItem.objects.create(
-            want_group=wg, target_type=WantGroupItem.TargetType.LISTING, event_listing=self.el_b1
+            want_group=wg, event_listing=self.el_b1
         )
         WantBid.objects.create(
             user=self.user_a, event=self.event,
-            target_type=WantBid.TargetType.LISTING, event_listing=self.el_b1, amount=Decimal("17"),
+            event_listing=self.el_b1, amount=Decimal("17"),
         )
         from trades.serializers import WantGroupItemSerializer
         data = WantGroupItemSerializer(item, context={"event": self.event}).data

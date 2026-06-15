@@ -16,8 +16,8 @@ OfferGroup output fields:
 
 WantGroup output fields:
     id, event, user, user_username, name, min_receive,
-    items: [{id, target_type, board_game, board_game_name, event_listing,
-             listing_code, board_game_name (for LISTING)}],
+    items: [{id, event_listing, listing_code, board_game_name,
+             board_game_id, board_game_thumbnail}],
     created, updated
 
 TradeWish output fields:
@@ -61,36 +61,16 @@ class UserGamePriceSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 class WantBidSerializer(serializers.ModelSerializer):
-    board_game = serializers.PrimaryKeyRelatedField(
-        queryset=BoardGame.objects.all(), pk_field=serializers.IntegerField(),
-        required=False, allow_null=True,
-    )
     event_listing = serializers.PrimaryKeyRelatedField(
         queryset=EventListing.objects.all(), pk_field=serializers.IntegerField(),
-        required=False, allow_null=True,
     )
 
     class Meta:
         model = WantBid
-        fields = ["id", "target_type", "board_game", "event_listing", "amount", "updated"]
+        fields = ["id", "event_listing", "amount", "updated"]
         read_only_fields = ["id", "updated"]
 
     def validate(self, data):
-        tt = data.get("target_type")
-        bg = data.get("board_game")
-        el = data.get("event_listing")
-        if tt == WantBid.TargetType.BOARD_GAME:
-            if not bg:
-                raise serializers.ValidationError({"board_game": "required for BOARD_GAME."})
-            if el:
-                raise serializers.ValidationError({"event_listing": "must be null for BOARD_GAME."})
-        elif tt == WantBid.TargetType.LISTING:
-            if not el:
-                raise serializers.ValidationError({"event_listing": "required for LISTING."})
-            if bg:
-                raise serializers.ValidationError({"board_game": "must be null for LISTING."})
-        else:
-            raise serializers.ValidationError({"target_type": f"Invalid: {tt}"})
         if data.get("amount") is not None and data["amount"] < 0:
             raise serializers.ValidationError({"amount": "amount cannot be negative."})
         return data
@@ -253,44 +233,40 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
     Used both for nested read output and for the items list in WantGroup writes.
 
     Read:
-        id, target_type, board_game (bgg_id int or null), board_game_name,
-        event_listing (id int or null), listing_code
+        id, board_game_name, board_game_id (bgg_id), board_game_thumbnail,
+        event_listing (id), listing_code
 
     Write (nested in WantGroup):
-        target_type, board_game (bgg_id), event_listing (id)
+        event_listing (id)
 
     Wants are binary — no priority/tier/rank. Items keep insertion order.
     """
 
-    # Display-only companions
-    board_game_name      = serializers.SerializerMethodField()
-    board_game_id        = serializers.SerializerMethodField()
+    # Display-only companions (derived from the listing's copy)
+    board_game_name      = serializers.CharField(
+        source="event_listing.copy.board_game.name", read_only=True
+    )
+    board_game_id        = serializers.IntegerField(
+        source="event_listing.copy.board_game_id", read_only=True
+    )
     board_game_thumbnail = serializers.SerializerMethodField()
-    listing_code         = serializers.SerializerMethodField()
+    listing_code         = serializers.CharField(
+        source="event_listing.copy.listing_code", read_only=True
+    )
     resolved_bid         = serializers.SerializerMethodField()
     bid_is_override      = serializers.SerializerMethodField()
 
-    # Writable FK references
-    board_game    = serializers.PrimaryKeyRelatedField(
-        queryset=BoardGame.objects.all(),
-        pk_field=serializers.IntegerField(),
-        required=False,
-        allow_null=True,
-    )
+    # Writable FK reference
     event_listing = serializers.PrimaryKeyRelatedField(
         queryset=EventListing.objects.select_related("copy", "copy__board_game").all(),
-        required=False,
-        allow_null=True,
     )
 
     class Meta:
         model = WantGroupItem
         fields = [
             "id",
-            "target_type",
-            "board_game",           # bgg_id int
             "board_game_name",
-            "board_game_id",        # canonical bgg_id for BOTH types (FE grouping)
+            "board_game_id",        # canonical bgg_id (FE grouping)
             "board_game_thumbnail",
             "event_listing",        # EventListing pk int
             "listing_code",
@@ -300,32 +276,8 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "board_game_name", "board_game_id", "board_game_thumbnail",
                             "listing_code", "resolved_bid", "bid_is_override"]
 
-    def get_board_game_name(self, obj):
-        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
-            return obj.board_game.name
-        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
-            return obj.event_listing.copy.board_game.name
-        return None
-
     def get_board_game_thumbnail(self, obj):
-        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
-            return (obj.board_game.metadata or {}).get("thumbnail", "")
-        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
-            return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
-        return ""
-
-    def get_board_game_id(self, obj):
-        """Canonical game id (bgg_id) for grouping — works for LISTING too."""
-        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME and obj.board_game:
-            return obj.board_game_id
-        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
-            return obj.event_listing.copy.board_game_id
-        return None
-
-    def get_listing_code(self, obj):
-        if obj.target_type == WantGroupItem.TargetType.LISTING and obj.event_listing:
-            return obj.event_listing.copy.listing_code
-        return None
+        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
 
     # Per-item DB lookups; want-lists are per-user and small, so N+1 here is acceptable.
     def get_resolved_bid(self, obj):
@@ -341,45 +293,10 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         event = self.context.get("event")
         if event is None or not obj.pk:
             return False
-        if obj.target_type == WantGroupItem.TargetType.BOARD_GAME:
-            return WantBid.objects.filter(
-                user=obj.want_group.user, event=event,
-                target_type=WantBid.TargetType.BOARD_GAME, board_game_id=obj.board_game_id,
-            ).exists()
         return WantBid.objects.filter(
             user=obj.want_group.user, event=event,
-            target_type=WantBid.TargetType.LISTING, event_listing_id=obj.event_listing_id,
+            event_listing_id=obj.event_listing_id,
         ).exists()
-
-    def validate(self, data):
-        target_type   = data.get("target_type")
-        board_game    = data.get("board_game")
-        event_listing = data.get("event_listing")
-
-        if target_type == WantGroupItem.TargetType.BOARD_GAME:
-            if not board_game:
-                raise serializers.ValidationError(
-                    {"board_game": "board_game is required when target_type is BOARD_GAME."}
-                )
-            if event_listing:
-                raise serializers.ValidationError(
-                    {"event_listing": "event_listing must be null when target_type is BOARD_GAME."}
-                )
-        elif target_type == WantGroupItem.TargetType.LISTING:
-            if not event_listing:
-                raise serializers.ValidationError(
-                    {"event_listing": "event_listing is required when target_type is LISTING."}
-                )
-            if board_game:
-                raise serializers.ValidationError(
-                    {"board_game": "board_game must be null when target_type is LISTING."}
-                )
-        else:
-            raise serializers.ValidationError(
-                {"target_type": f"Invalid target_type: {target_type}"}
-            )
-
-        return data
 
 
 # ---------------------------------------------------------------------------

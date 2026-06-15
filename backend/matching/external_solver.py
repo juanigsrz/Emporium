@@ -25,7 +25,6 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 
-from trades.models import WantGroupItem
 
 
 # ---------------------------------------------------------------------------
@@ -42,12 +41,10 @@ def _listing_index(event):
         .select_related("copy__board_game", "copy__owner")
     )
     by_code, by_id = {}, {}
-    by_game = defaultdict(list)
     for el in listings:
         by_code[el.copy.listing_code] = el
         by_id[el.id] = el
-        by_game[el.copy.board_game_id].append(el)
-    return listings, by_code, by_game, by_id
+    return listings, by_code, by_id
 
 
 def _active_wishes(event):
@@ -136,7 +133,7 @@ def _distance_blocked(user_id, coords):
     return blocked
 
 
-def _expand(want_items, user_id, by_game, by_id, blocked):
+def _expand(want_items, user_id, by_id, blocked):
     """Canonical wants -> concrete listing_codes (others' active copies).
 
     Binary wants — no priority. Returns a deterministic, sorted list, excluding
@@ -144,14 +141,9 @@ def _expand(want_items, user_id, by_game, by_id, blocked):
     """
     codes = set()
     for it in want_items:
-        if it.target_type == WantGroupItem.TargetType.BOARD_GAME:
-            for el in by_game.get(it.board_game_id, []):
-                if el.copy.owner_id != user_id and el.copy.owner_id not in blocked:
-                    codes.add(el.copy.listing_code)
-        elif it.target_type == WantGroupItem.TargetType.LISTING:
-            el = by_id.get(it.event_listing_id)
-            if el and el.copy.owner_id != user_id and el.copy.owner_id not in blocked:
-                codes.add(el.copy.listing_code)
+        el = by_id.get(it.event_listing_id)
+        if el and el.copy.owner_id != user_id and el.copy.owner_id not in blocked:
+            codes.add(el.copy.listing_code)
     return sorted(codes)
 
 
@@ -160,15 +152,15 @@ def _expand(want_items, user_id, by_game, by_id, blocked):
 # ---------------------------------------------------------------------------
 
 def build_wants(event, include_locations: bool = False) -> str:
-    listings, by_code, by_game, by_id = _listing_index(event)
+    listings, by_code, by_id = _listing_index(event)
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
 
     money_block = (
-        _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs)
+        _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs)
         if event.money_enabled else ""
     )
-    body = _build_xtoy(wishes, by_game, by_id, by_code, block_pairs)
+    body = _build_xtoy(wishes, by_id, by_code, block_pairs)
     location_block = _location_lines(listings, wishes) if include_locations else ""
     return money_block + body + location_block
 
@@ -178,7 +170,7 @@ def _to_cents(amount) -> int:
     return int((Decimal(str(amount)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_pairs) -> str:
+def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) -> str:
     """Emit user/item/bid directives for main.py when money is enabled on an XTOY event.
 
     Returns a string block (ending with newline) or empty string if nothing to emit.
@@ -242,7 +234,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)
-            codes = _expand([it], w.user_id, by_game, by_id, blocked)
+            codes = _expand([it], w.user_id, by_id, blocked)
             codes = [c for c in codes if c not in give_codes]
             for code in codes:
                 key = (username, code)
@@ -255,7 +247,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_game, by_id, block_
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
+def _build_xtoy(wishes, by_id, by_code, block_pairs) -> str:
     """gurobi: one `username : (NforM) give -> take` line per active wish.
 
     A duplicate-protected wish lists its real take copies and contributes a
@@ -279,7 +271,7 @@ def _build_xtoy(wishes, by_game, by_id, by_code, block_pairs) -> str:
             for ogi in w.offer_group.items.all()
             if ogi.event_listing.active
         )
-        take = [c for c in _expand(w.want_group.items.all(), w.user_id, by_game, by_id, blocked)
+        take = [c for c in _expand(w.want_group.items.all(), w.user_id, by_id, blocked)
                 if c not in give]
         if not give or not take:
             continue
@@ -450,7 +442,7 @@ def load_solution(match_run, raw_output: str):
     from matching.models import TradeAssignment
 
     event = match_run.event
-    listings, by_code, by_game, by_id = _listing_index(event)
+    listings, by_code, by_id = _listing_index(event)
 
     parsed = parse_gurobi(raw_output)
 
@@ -493,7 +485,7 @@ def load_solution(match_run, raw_output: str):
         _assign_components(resolved)
 
     # Best-effort: which of the receiver's active wishes this move satisfies.
-    wish_index = _build_wish_index(event, by_game, by_id)
+    wish_index = _build_wish_index(event, by_id)
 
     from trades.pricing import resolve_ask
 
@@ -596,13 +588,13 @@ def load_solution(match_run, raw_output: str):
     return result, summary, log
 
 
-def _build_wish_index(event, by_game, by_id):
+def _build_wish_index(event, by_id):
     """receiver_user_id -> [(expanded_codes:set, wish_id), ...]."""
     block_pairs = _block_pairs()
     idx = defaultdict(list)
     for w in _active_wishes(event):
         blocked = _blocked_with(w.user_id, block_pairs)
-        codes = set(_expand(w.want_group.items.all(), w.user_id, by_game, by_id, blocked))
+        codes = set(_expand(w.want_group.items.all(), w.user_id, by_id, blocked))
         idx[w.user_id].append((codes, w.id))
     return idx
 

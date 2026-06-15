@@ -166,17 +166,13 @@ class MatchingTestBase(APITestCase):
             min_receive=min_receive,
         )
         if want_game:
-            WantGroupItem.objects.create(
-                want_group=wg,
-                target_type=WantGroupItem.TargetType.BOARD_GAME,
-                board_game=want_game,
-            )
+            # "Want any copy of game" → every other-owned listing of that game.
+            for el in EventListing.objects.filter(
+                event=cls.event, copy__board_game=want_game
+            ).exclude(copy__owner=user):
+                WantGroupItem.objects.create(want_group=wg, event_listing=el)
         elif want_listing:
-            WantGroupItem.objects.create(
-                want_group=wg,
-                target_type=WantGroupItem.TargetType.LISTING,
-                event_listing=want_listing,
-            )
+            WantGroupItem.objects.create(want_group=wg, event_listing=want_listing)
 
         return TradeWish.objects.create(
             event=cls.event, user=user, offer_group=og, want_group=wg, active=True
@@ -198,11 +194,10 @@ class MatchingTestBase(APITestCase):
             min_receive=min_receive,
         )
         for game in want_games:
-            WantGroupItem.objects.create(
-                want_group=wg,
-                target_type=WantGroupItem.TargetType.BOARD_GAME,
-                board_game=game,
-            )
+            for el in EventListing.objects.filter(
+                event=cls.event, copy__board_game=game
+            ).exclude(copy__owner=user):
+                WantGroupItem.objects.create(want_group=wg, event_listing=el)
 
         return TradeWish.objects.create(
             event=cls.event, user=user, offer_group=og, want_group=wg, active=True

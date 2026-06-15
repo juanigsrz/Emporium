@@ -184,7 +184,6 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
             WantGroup.objects
             .filter(event=event, user=request.user)
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
             )
             .order_by("-created")
@@ -197,8 +196,6 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
         ctx = self._serializer_context(request, event)
 
         # Validate event_listing items belong to this event before saving.
-        # The WantGroupItemSerializer validates target_type logic; we add event
-        # scoping here.
         self._check_want_items_event_scope(request.data.get("items", []), event)
 
         ser = WantGroupSerializer(data=request.data, context=ctx)
@@ -207,7 +204,6 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
         group_full = (
             WantGroup.objects
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
             )
             .get(pk=group.pk)
@@ -252,7 +248,6 @@ class WantGroupDetailView(EventScopedMixin, APIView):
         return (
             WantGroup.objects
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
             )
             .get(pk=pk)
@@ -430,39 +425,26 @@ class WantBidView(EventScopedMixin, APIView):
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        if (
-            d["target_type"] == WantBid.TargetType.LISTING
-            and d["event_listing"].event_id != event.id
-        ):
+        if d["event_listing"].event_id != event.id:
             raise ValidationError(
                 {"event_listing": "Listing does not belong to this event."}
             )
-        if d["target_type"] == WantBid.TargetType.BOARD_GAME:
-            key = {"board_game": d["board_game"], "event_listing": None}
-        else:
-            key = {"event_listing": d["event_listing"], "board_game": None}
         obj, _ = WantBid.objects.update_or_create(
-            user=request.user, event=event, target_type=d["target_type"], **key,
+            user=request.user, event=event, event_listing=d["event_listing"],
             defaults={"amount": d["amount"]},
         )
         return Response(WantBidSerializer(obj).data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
         event = self._get_event(slug)
-        bgg = request.query_params.get("board_game")
         el = request.query_params.get("event_listing")
-        if not bgg and not el:
-            raise ValidationError({"detail": "board_game or event_listing query param required."})
-        f = {"user": request.user, "event": event}
-        if bgg:
-            try:
-                f["board_game_id"] = int(bgg)
-            except (TypeError, ValueError):
-                raise ValidationError({"board_game": "Must be an integer."})
-        if el:
-            try:
-                f["event_listing_id"] = int(el)
-            except (TypeError, ValueError):
-                raise ValidationError({"event_listing": "Must be an integer."})
-        WantBid.objects.filter(**f).delete()
+        if not el:
+            raise ValidationError({"detail": "event_listing query param required."})
+        try:
+            el_id = int(el)
+        except (TypeError, ValueError):
+            raise ValidationError({"event_listing": "Must be an integer."})
+        WantBid.objects.filter(
+            user=request.user, event=event, event_listing_id=el_id
+        ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -35,13 +35,11 @@ export interface OfferGroupPayload {
 
 export interface WantGroupItem {
   id: number
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
   board_game_name: string | null
   board_game_thumbnail: string
-  /** Canonical bgg id for BOTH types — use to group LISTING items under a game. */
+  /** Canonical bgg id of the listing's game — use to group items under a game. */
   board_game_id: number | null
-  event_listing: number | null
+  event_listing: number
   listing_code: string | null
   resolved_bid?: string | null
   bid_is_override?: boolean
@@ -61,9 +59,7 @@ export interface WantGroup {
 }
 
 export interface WantGroupItemPayload {
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game?: number
-  event_listing?: number
+  event_listing: number
 }
 
 export interface WantGroupPayload {
@@ -210,17 +206,13 @@ export async function deleteGamePrice(slug: string, board_game: number): Promise
 // ---- Want Bids ----
 
 export interface WantBidPayload {
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game?: number | null
-  event_listing?: number | null
+  event_listing: number
   amount: string
 }
 
 export interface WantBid {
   id: number
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
-  event_listing: number | null
+  event_listing: number
   amount: string
   updated: string
 }
@@ -232,7 +224,7 @@ export async function setWantBid(slug: string, body: WantBidPayload): Promise<Wa
 
 export async function deleteWantBid(
   slug: string,
-  target: { board_game?: number; event_listing?: number }
+  target: { event_listing: number }
 ): Promise<void> {
   await apiClient.delete(`/events/${slug}/want-bids/`, { params: target })
 }

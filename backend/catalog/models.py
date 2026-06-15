@@ -18,7 +18,7 @@ class BoardGame(models.Model):
     """
 
     bgg_id = models.IntegerField(primary_key=True)
-    name = models.CharField(max_length=300, db_index=True)
+    name = models.CharField(max_length=512, db_index=True)
     year_published = models.IntegerField(null=True, blank=True)
     rank = models.IntegerField(null=True, blank=True, db_index=True)
     bayes_average = models.FloatField(null=True, blank=True)
