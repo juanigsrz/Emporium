@@ -155,7 +155,10 @@ class Command(BaseCommand):
                     f"Event '{slug}' already exists. Re-run with --reset to rebuild it."
                 )
             existing.delete()  # cascades listings + participations
-            Copy.objects.filter(owner__in=traders).delete()
+            # Delete by the seed's own marker, not the current trader list: a
+            # prior run with more --users leaves orphan copies whose recycled
+            # TEST- listing_codes collide on the next run.
+            Copy.objects.filter(listing_code__startswith="TEST-").delete()
 
         money_cap = opts["money_cap"]
         money_enabled = money_cap > 0
@@ -226,10 +229,12 @@ class Command(BaseCommand):
         )
         listings_by_owner = {}
         games_by_owner = {}
+        listings_by_game = {}
         all_games = set()
         for el in saved:
             listings_by_owner.setdefault(el.copy.owner_id, []).append(el)
             games_by_owner.setdefault(el.copy.owner_id, set()).add(el.copy.board_game_id)
+            listings_by_game.setdefault(el.copy.board_game_id, []).append(el)
             all_games.add(el.copy.board_game_id)
         all_games_sorted = sorted(all_games)
 
@@ -238,9 +243,9 @@ class Command(BaseCommand):
 
         offer_groups = []          # parallel to want_groups / plan
         want_groups = []
-        plan = []                  # (event_listing, offer_group, want_group, wanted_game_ids)
+        plan = []                  # (event_listing, offer_group, want_group, wanted_listings)
         sell_updates = []          # listings that got a per-copy ask
-        bid_candidates = []        # (user_id, board_game_id, amount) in RNG order
+        bid_candidates = []        # (user_id, event_listing_id, amount) in RNG order
         n_money_offers = 0
 
         for u in traders:
@@ -252,6 +257,12 @@ class Command(BaseCommand):
             for el in listings_by_owner.get(u.id, []):
                 k = min(rng.randint(wmin, wmax), len(candidates))
                 wanted_games = rng.sample(candidates, k)
+                # Post-refactor wants are listing-based: resolve each wanted game
+                # to one specific listing (all owned by others, since candidates
+                # excludes games this user owns).
+                wanted_listings = [
+                    rng.choice(listings_by_game[g]) for g in wanted_games
+                ]
 
                 og = OfferGroup(
                     event=event, user=u, name=el.copy.listing_code, max_give=1
@@ -267,14 +278,14 @@ class Command(BaseCommand):
                     min_receive=1, duplicate_protection=True,
                 )
                 # Buy side (P): ~30% of wants get a per-target bid override.
-                for bgg_id in wanted_games:
+                for target in wanted_listings:
                     if money_enabled and rng.random() < 0.3:
                         amount = round(rng.uniform(5, min(money_cap, 30)), 2)
-                        bid_candidates.append((u.id, bgg_id, amount))
+                        bid_candidates.append((u.id, target.id, amount))
 
                 offer_groups.append(og)
                 want_groups.append(wg)
-                plan.append((el, og, wg, wanted_games))
+                plan.append((el, og, wg, wanted_listings))
 
         # Insert the groups first so their PKs are available for the children.
         OfferGroup.objects.bulk_create(offer_groups, batch_size=BATCH)
@@ -283,15 +294,11 @@ class Command(BaseCommand):
         offer_items = []
         want_items = []
         wishes = []
-        for el, og, wg, wanted_games in plan:
+        for el, og, wg, wanted_listings in plan:
             offer_items.append(OfferGroupItem(offer_group=og, event_listing=el))
-            for bgg_id in wanted_games:
+            for target in wanted_listings:
                 want_items.append(
-                    WantGroupItem(
-                        want_group=wg,
-                        target_type=WantGroupItem.TargetType.BOARD_GAME,
-                        board_game_id=bgg_id,
-                    )
+                    WantGroupItem(want_group_id=wg.id, event_listing_id=target.id)
                 )
             wishes.append(
                 TradeWish(
@@ -310,19 +317,19 @@ class Command(BaseCommand):
                 sell_updates, ["sell_price"], batch_size=BATCH
             )
 
-        # WantBid is keyed per (user, event, board_game): keep the first draw for
-        # each pair (matching the old get_or_create) and drop later duplicates.
+        # WantBid is keyed per (user, event, event_listing): keep the first draw
+        # for each pair and drop later duplicates.
         seen = set()
         want_bids = []
-        for uid, bgg_id, amount in bid_candidates:
-            key = (uid, bgg_id)
+        for uid, listing_id, amount in bid_candidates:
+            key = (uid, listing_id)
             if key in seen:
                 continue
             seen.add(key)
             want_bids.append(
                 WantBid(
-                    user_id=uid, event=event, board_game_id=bgg_id,
-                    target_type=WantBid.TargetType.BOARD_GAME, amount=amount,
+                    user_id=uid, event_id=event.id,
+                    event_listing_id=listing_id, amount=amount,
                 )
             )
         WantBid.objects.bulk_create(want_bids, batch_size=BATCH)

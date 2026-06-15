@@ -44,6 +44,13 @@ _DEFAULT_ENRICHED_CSV = Path(__file__).resolve().parent.parent.parent / "boardga
 CHUNK_SIZE = 2000
 
 
+def _dedupe_by(objs, attr):
+    """Keep one obj per attr value (last wins). Postgres upsert rejects a batch
+    that proposes the same conflict target twice."""
+    seen = {getattr(o, attr): o for o in objs}
+    return list(seen.values())
+
+
 def _safe_int(value):
     """Return int or None for blank/invalid strings."""
     if value is None:
@@ -234,19 +241,21 @@ def import_versions(path=None):
                 weight=_safe_float(row.get("weight")),
             ))
             if len(buffer) >= CHUNK_SIZE:
+                rows = _dedupe_by(buffer, "bgg_version_id")
                 BoardGameVersion.objects.bulk_create(
-                    buffer, update_conflicts=True,
+                    rows, update_conflicts=True,
                     update_fields=update_fields, unique_fields=["bgg_version_id"],
                 )
-                imported += len(buffer)
+                imported += len(rows)
                 buffer = []
 
     if buffer:
+        rows = _dedupe_by(buffer, "bgg_version_id")
         BoardGameVersion.objects.bulk_create(
-            buffer, update_conflicts=True,
+            rows, update_conflicts=True,
             update_fields=update_fields, unique_fields=["bgg_version_id"],
         )
-        imported += len(buffer)
+        imported += len(rows)
 
     logger.info("Versions import: %d upserted, %d skipped (missing game)", imported, skipped)
     return {"imported": imported, "skipped_missing_game": skipped}

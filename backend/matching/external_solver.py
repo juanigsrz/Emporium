@@ -180,7 +180,13 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
       bid <username> <code> <cents>    — per buy-side want item with a resolved bid price
     """
     from events.models import EventParticipation
-    from trades.pricing import resolve_ask, resolve_bid
+    from trades.pricing import (
+        load_bids, load_game_prices, resolve_ask, resolve_bid,
+    )
+
+    # Preload pricing rows once; resolve_ask/resolve_bid below run per item.
+    bids = load_bids(event)
+    game_prices = load_game_prices(event)
 
     lines = []
 
@@ -206,7 +212,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
     for el in sorted(listings, key=lambda e: e.copy.listing_code):
         code = el.copy.listing_code
         owner_username = el.copy.owner.username
-        ask = resolve_ask(el)
+        ask = resolve_ask(el, game_prices)
         if ask is not None:
             lines.append(f"item {code} owner {owner_username} ask {_to_cents(ask)}")
         else:
@@ -217,7 +223,6 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
     bid_map = {}
     blocked_cache = {}
     coords = _load_coords()
-    # resolve_bid/resolve_ask do per-item DB lookups; fine on this once-per-export path.
     for w in wishes:
         blocked = blocked_cache.setdefault(
             w.user_id,
@@ -230,7 +235,7 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
             if ogi.event_listing.active
         }
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, event, it)
+            bid = resolve_bid(w.user, event, it, bids, game_prices)
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)

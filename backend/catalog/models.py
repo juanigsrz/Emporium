@@ -60,7 +60,7 @@ class BoardGameVersion(models.Model):
     )  # null for Unknown
     name = models.CharField(max_length=300, blank=True, default="")
     thumbnail_url = models.URLField(max_length=500, blank=True, default="")
-    language = models.CharField(max_length=300, blank=True, default="")  # pipe-joined if multiple
+    language = models.CharField(max_length=500, blank=True, default="")  # pipe-joined if multiple
     publisher = models.CharField(max_length=500, blank=True, default="")  # pipe-joined value(s)
     year_published = models.IntegerField(null=True, blank=True)
     width = models.FloatField(null=True, blank=True)

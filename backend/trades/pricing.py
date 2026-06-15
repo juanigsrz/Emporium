@@ -35,22 +35,63 @@ def _game_default(user_id, event_id, board_game_id):
     return row
 
 
-def resolve_ask(event_listing):
-    """Effective sell ask for a listing, or None if barter-only."""
+def load_bids(event):
+    """Preload all WantBids for an event: (user_id, event_listing_id) -> amount.
+
+    Pass to resolve_bid to avoid a per-item DB lookup in bulk loops (exports).
+    """
+    return {
+        (uid, elid): amount
+        for uid, elid, amount in WantBid.objects
+        .filter(event=event)
+        .values_list("user_id", "event_listing_id", "amount")
+    }
+
+
+def load_game_prices(event):
+    """Preload all UserGamePrices for an event: (user_id, board_game_id) -> price.
+
+    Pass to resolve_ask/resolve_bid to avoid a per-item DB lookup in bulk loops.
+    """
+    return {
+        (uid, bgid): price
+        for uid, bgid, price in UserGamePrice.objects
+        .filter(event=event)
+        .values_list("user_id", "board_game_id", "price")
+    }
+
+
+def resolve_ask(event_listing, game_prices=None):
+    """Effective sell ask for a listing, or None if barter-only.
+
+    Pass a preloaded game_prices map (load_game_prices) to skip the DB lookup.
+    """
     if event_listing.sell_price is not None:
         return event_listing.sell_price
     copy = event_listing.copy
+    if game_prices is not None:
+        return game_prices.get((copy.owner_id, copy.board_game_id))
     return _game_default(copy.owner_id, event_listing.event_id, copy.board_game_id)
 
 
-def resolve_bid(user, event, target):
-    """Effective buy bid for a user's want target, or None if no bid."""
-    override = (
-        WantBid.objects
-        .filter(user=user, event=event, event_listing_id=target.event_listing_id)
-        .values_list("amount", flat=True)
-        .first()
-    )
+def resolve_bid(user, event, target, bids=None, game_prices=None):
+    """Effective buy bid for a user's want target, or None if no bid.
+
+    Pass preloaded bids/game_prices maps (load_bids/load_game_prices) to skip the
+    per-item DB lookups in bulk loops.
+    """
+    if bids is not None:
+        override = bids.get((user.id, target.event_listing_id))
+    else:
+        override = (
+            WantBid.objects
+            .filter(user=user, event=event, event_listing_id=target.event_listing_id)
+            .values_list("amount", flat=True)
+            .first()
+        )
     if override is not None:
         return override
-    return _game_default(user.id, event.id, target.event_listing.copy.board_game_id)
+    bgid = target.event_listing.copy.board_game_id
+    if game_prices is not None:
+        return game_prices.get((user.id, bgid))
+    return _game_default(user.id, event.id, bgid)
