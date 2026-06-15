@@ -6,8 +6,8 @@ Organizer admin operations that mutate other users' event data.
 kick_participant() removes ALL of a user's event-scoped rows from an event while
 keeping their Copy inventory. Deleting the user's EventListings relies on the
 existing on_delete=CASCADE FKs to clean up OTHER users' references to those
-specific listings (WantGroupItem[LISTING], WantBid[LISTING], OfferGroupItem,
-plus any stale TradeAssignment/Shipment). BOARD_GAME-type wants are untouched.
+specific listings (WantGroupItem, WantBid, OfferGroupItem, plus any stale
+TradeAssignment/Shipment).
 """
 
 from django.db import transaction

@@ -107,10 +107,16 @@ class EventCycleQA(APITestCase):
         og = self.client.post(offer_groups(slug), og_body, format="json")
         self.assertEqual(og.status_code, status.HTTP_201_CREATED, og.data)
 
-        item = {"target_type": "BOARD_GAME", "board_game": want_game.bgg_id}
+        from events.models import EventListing
+        items = [
+            {"event_listing": el_id}
+            for el_id in EventListing.objects.filter(
+                event__slug=slug, copy__board_game=want_game
+            ).exclude(copy__owner=user).values_list("id", flat=True)
+        ]
         wg = self.client.post(want_groups(slug), {
             "name": f"wg-{offer_listing_id}", "min_receive": 1,
-            "duplicate_protection": dup, "items": [item],
+            "duplicate_protection": dup, "items": items,
         }, format="json")
         self.assertEqual(wg.status_code, status.HTTP_201_CREATED, wg.data)
 

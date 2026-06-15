@@ -128,33 +128,16 @@ class WantGroup(models.Model):
 # ---------------------------------------------------------------------------
 
 class WantGroupItem(models.Model):
-    """A tiered, ranked target inside a WantGroup."""
-
-    class TargetType(models.TextChoices):
-        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
-        LISTING    = "LISTING",    "Specific Listing"
+    """A specific-listing target inside a WantGroup."""
 
     want_group    = models.ForeignKey(
         WantGroup,
         on_delete=models.CASCADE,
         related_name="items",
     )
-    target_type   = models.CharField(
-        max_length=20,
-        choices=TargetType.choices,
-    )
-    board_game    = models.ForeignKey(
-        "catalog.BoardGame",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="want_group_items",
-    )
     event_listing = models.ForeignKey(
         "events.EventListing",
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="want_memberships",
     )
 
@@ -164,31 +147,8 @@ class WantGroupItem(models.Model):
     def __str__(self):
         return (
             f"WantGroupItem(group={self.want_group_id}, "
-            f"type={self.target_type})"
+            f"listing={self.event_listing_id})"
         )
-
-    def clean(self):
-        """Validate exactly one of board_game / event_listing is set, matching target_type."""
-        if self.target_type == self.TargetType.BOARD_GAME:
-            if not self.board_game_id:
-                raise ValidationError(
-                    "board_game is required when target_type is BOARD_GAME."
-                )
-            if self.event_listing_id:
-                raise ValidationError(
-                    "event_listing must be null when target_type is BOARD_GAME."
-                )
-        elif self.target_type == self.TargetType.LISTING:
-            if not self.event_listing_id:
-                raise ValidationError(
-                    "event_listing is required when target_type is LISTING."
-                )
-            if self.board_game_id:
-                raise ValidationError(
-                    "board_game must be null when target_type is LISTING."
-                )
-        else:
-            raise ValidationError(f"Unknown target_type: {self.target_type}")
 
 
 # ---------------------------------------------------------------------------
@@ -278,11 +238,7 @@ class UserGamePrice(models.Model):
 # ---------------------------------------------------------------------------
 
 class WantBid(models.Model):
-    """A user's bid override for one target (a game or a specific listing)."""
-
-    class TargetType(models.TextChoices):
-        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
-        LISTING    = "LISTING",    "Specific Listing"
+    """A user's bid override for one specific listing."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="want_bids"
@@ -290,14 +246,9 @@ class WantBid(models.Model):
     event = models.ForeignKey(
         "events.TradeEvent", on_delete=models.CASCADE, related_name="want_bids"
     )
-    target_type = models.CharField(max_length=20, choices=TargetType.choices)
-    board_game = models.ForeignKey(
-        "catalog.BoardGame", on_delete=models.CASCADE,
-        null=True, blank=True, related_name="want_bids",
-    )
     event_listing = models.ForeignKey(
         "events.EventListing", on_delete=models.CASCADE,
-        null=True, blank=True, related_name="want_bids",
+        related_name="want_bids",
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -307,34 +258,16 @@ class WantBid(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "event", "board_game"],
-                condition=models.Q(board_game__isnull=False),
-                name="uniq_wantbid_user_event_game",
-            ),
-            models.UniqueConstraint(
                 fields=["user", "event", "event_listing"],
-                condition=models.Q(event_listing__isnull=False),
                 name="uniq_wantbid_user_event_listing",
             ),
         ]
         ordering = ["id"]
 
     def clean(self):
-        """Validate exactly one of board_game / event_listing is set, matching target_type."""
-        if self.target_type == self.TargetType.BOARD_GAME:
-            if not self.board_game_id:
-                raise ValidationError("board_game is required when target_type is BOARD_GAME.")
-            if self.event_listing_id:
-                raise ValidationError("event_listing must be null when target_type is BOARD_GAME.")
-        elif self.target_type == self.TargetType.LISTING:
-            if not self.event_listing_id:
-                raise ValidationError("event_listing is required when target_type is LISTING.")
-            if self.board_game_id:
-                raise ValidationError("board_game must be null when target_type is LISTING.")
-            if self.event_listing.event_id != self.event_id:
-                raise ValidationError("event_listing must belong to the same event as this bid.")
-        else:
-            raise ValidationError(f"Unknown target_type: {self.target_type}")
+        """Validate the listing belongs to the same event as this bid."""
+        if self.event_listing.event_id != self.event_id:
+            raise ValidationError("event_listing must belong to the same event as this bid.")
 
     def __str__(self):
-        return f"WantBid({self.user.username}, {self.target_type}, {self.amount})"
+        return f"WantBid({self.user.username}, {self.event_listing_id}, {self.amount})"

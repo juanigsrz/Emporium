@@ -51,20 +51,19 @@ class AdminDashboardBase(APITestCase):
         self.v_offer = OfferGroup.objects.create(event=self.event, user=self.victim, name="vo")
         OfferGroupItem.objects.create(offer_group=self.v_offer, event_listing=self.victim_listing)
         self.v_want = WantGroup.objects.create(event=self.event, user=self.victim, name="vw")
-        WantGroupItem.objects.create(want_group=self.v_want,
-            target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game2)
+        WantGroupItem.objects.create(want_group=self.v_want, event_listing=self.other_listing)
         TradeWish.objects.create(event=self.event, user=self.victim,
             offer_group=self.v_offer, want_group=self.v_want)
 
-        # other wants victim's SPECIFIC listing (LISTING target) + a bid on it.
+        # other wants victim's listing + a bid on it.
         self.o_want = WantGroup.objects.create(event=self.event, user=self.other, name="ow")
         self.o_listing_item = WantGroupItem.objects.create(want_group=self.o_want,
-            target_type=WantGroupItem.TargetType.LISTING, event_listing=self.victim_listing)
-        # other also wants game2 by BOARD_GAME (must survive the kick).
+            event_listing=self.victim_listing)
+        # other also wants a non-victim listing (must survive the kick).
         self.o_game_item = WantGroupItem.objects.create(want_group=self.o_want,
-            target_type=WantGroupItem.TargetType.BOARD_GAME, board_game=self.game2)
+            event_listing=self.other_listing)
         self.o_bid = WantBid.objects.create(user=self.other, event=self.event,
-            target_type=WantBid.TargetType.LISTING, event_listing=self.victim_listing, amount=5)
+            event_listing=self.victim_listing, amount=5)
 
 
 class KickServiceTests(AdminDashboardBase):
@@ -85,10 +84,10 @@ class KickServiceTests(AdminDashboardBase):
 
     def test_kick_cascades_other_users_listing_refs_only(self):
         kick_participant(self.event, self.victim)
-        # other's LISTING-type want + listing bid (pointed at victim's listing) gone
+        # other's want + bid pointed at victim's listing are gone
         self.assertFalse(WantGroupItem.objects.filter(pk=self.o_listing_item.pk).exists())
         self.assertFalse(WantBid.objects.filter(pk=self.o_bid.pk).exists())
-        # other's BOARD_GAME want survives, and other's own want group + listing remain
+        # other's non-victim listing want survives, and own want group + listing remain
         self.assertTrue(WantGroupItem.objects.filter(pk=self.o_game_item.pk).exists())
         self.assertTrue(WantGroup.objects.filter(pk=self.o_want.pk).exists())
         self.assertTrue(EventListing.objects.filter(pk=self.other_listing.pk).exists())

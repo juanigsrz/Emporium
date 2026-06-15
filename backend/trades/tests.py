@@ -4,7 +4,7 @@ trades/tests.py
 F5 X-to-Y Trades test suite.
 
 Tests:
-    1.  1-to-1 wish: OfferGroup{one listing} max_give=1 → WantGroup{3 BOARD_GAME
+    1.  1-to-1 wish: OfferGroup{one listing} max_give=1 → WantGroup{3 listing
         targets} min_receive=1 — creates ok, X=1 Y=1 persisted.
     2.  M-to-N wish: max_give=2 → min_receive=2 — creates ok, X=2 Y=2 persisted.
     3.  Offer item not owned by user → 400.
@@ -20,7 +20,7 @@ Tests:
     13. Non-owner PATCH/DELETE wish → 403.
     14. Offer-group PATCH replaces items.
     15. OfferGroupItem serializer fields present (listing_code, board_game_name).
-    16. WantGroupItem with target_type=LISTING: listing_code and board_game_name populated.
+    16. WantGroupItem (LISTING): listing_code and board_game_name populated.
     17. TradeWish serializer includes offer_group_name, want_group_name, max_give, min_receive.
     18. Want group items returned in insertion order in response.
     19. DELETE offer-group returns 204.
@@ -193,9 +193,9 @@ class OneToOneWishTests(TradeTestBase):
             "name": "Want Any One",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el2a.id},
+                {"event_listing": self.el2b.id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         self.assertEqual(wg_resp.status_code, status.HTTP_201_CREATED, wg_resp.data)
@@ -227,7 +227,7 @@ class OneToOneWishTests(TradeTestBase):
             "name": "DB Check WG",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         wish_resp = self.client.post(wishes_url(self.slug), {
@@ -261,9 +261,9 @@ class MToNWishTests(TradeTestBase):
             "name": "Want Two",
             "min_receive": 2,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el2a.id},
+                {"event_listing": self.el2b.id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         self.assertEqual(wg_resp.status_code, status.HTTP_201_CREATED, wg_resp.data)
@@ -289,8 +289,8 @@ class MToNWishTests(TradeTestBase):
             "name": "MN WG",
             "min_receive": 2,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
+                {"event_listing": self.el2a.id},
+                {"event_listing": self.el2b.id},
             ],
         }, format="json")
         wish_resp = self.client.post(wishes_url(self.slug), {
@@ -333,52 +333,24 @@ class OfferItemOwnershipTests(TradeTestBase):
 
 class WantItemValidationTests(TradeTestBase):
 
-    def test_want_item_neither_target_returns_400(self):
-        """target_type=BOARD_GAME with no board_game → 400."""
+    def test_want_item_without_listing_returns_400(self):
+        """Want item with no event_listing → 400."""
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "Bad Want",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME"},
-                # missing board_game
+                {},  # missing event_listing
             ],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
 
-    def test_want_item_listing_type_without_listing_returns_400(self):
-        """target_type=LISTING with no event_listing → 400."""
-        resp = self.client.post(want_groups_url(self.slug), {
-            "name": "Bad Want Listing",
-            "min_receive": 1,
-            "items": [
-                {"target_type": "LISTING"},
-                # missing event_listing
-            ],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
-
-    def test_want_item_both_targets_returns_400(self):
-        """BOARD_GAME target_type with event_listing also set → 400."""
-        resp = self.client.post(want_groups_url(self.slug), {
-            "name": "Both Targets",
-            "min_receive": 1,
-            "items": [
-                {
-                    "target_type": "BOARD_GAME",
-                    "board_game": self.game_terra.bgg_id,
-                    "event_listing": self.el2a.id,
-                },
-            ],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
-
-    def test_valid_listing_target_type_succeeds(self):
-        """target_type=LISTING with a valid event_listing → 201."""
+    def test_valid_listing_target_succeeds(self):
+        """Want item with a valid event_listing → 201."""
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "Specific Listing Want",
             "min_receive": 1,
             "items": [
-                {"target_type": "LISTING", "event_listing": self.el2a.id},
+                {"event_listing": self.el2a.id},
             ],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
@@ -397,8 +369,8 @@ class WantGroupReorderTests(TradeTestBase):
             "name": "Reorderable",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
+                {"event_listing": self.el2a.id},
+                {"event_listing": self.el2b.id},
             ],
         }, format="json")
         wg_id = wg_resp.data["id"]
@@ -406,16 +378,16 @@ class WantGroupReorderTests(TradeTestBase):
         # PATCH replaces the whole set with a new (swapped) list
         patch_resp = self.client.patch(want_group_url(self.slug, wg_id), {
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
+                {"event_listing": self.el2b.id},
+                {"event_listing": self.el2a.id},
             ],
         }, format="json")
         self.assertEqual(patch_resp.status_code, status.HTTP_200_OK, patch_resp.data)
         items = patch_resp.data["items"]
         self.assertEqual(len(items), 2)
         # Items returned in insertion order (no tier/rank concept)
-        self.assertEqual(items[0]["board_game"], self.game_gaia.bgg_id)
-        self.assertEqual(items[1]["board_game"], self.game_terra.bgg_id)
+        self.assertEqual(items[0]["event_listing"], self.el2b.id)
+        self.assertEqual(items[1]["event_listing"], self.el2a.id)
         self.assertNotIn("tier", items[0])
         self.assertNotIn("rank", items[0])
 
@@ -425,7 +397,7 @@ class WantGroupReorderTests(TradeTestBase):
             "name": "Keep Items",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         wg_id = wg_resp.data["id"]
@@ -472,7 +444,7 @@ class CrossEventValidationTests(TradeTestBase):
             "name": "Cross Event Want",
             "min_receive": 1,
             "items": [
-                {"target_type": "LISTING", "event_listing": self.el_other_event.id},
+                {"event_listing": self.el_other_event.id},
             ],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
@@ -502,7 +474,7 @@ class WishGroupOwnershipTests(TradeTestBase):
             "name": f"WG-{user.username}",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         self.client.force_authenticate(user=self.user1)
@@ -553,7 +525,7 @@ class OwnerOnlyWriteTests(TradeTestBase):
             "name": "Alice WG",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
+                {"event_listing": self.el2a.id},
             ],
         }, format="json")
         self.alice_wg_id = wg_resp.data["id"]
@@ -691,32 +663,15 @@ class WantGroupItemListingFieldTests(TradeTestBase):
             "name": "Specific Listing WG",
             "min_receive": 1,
             "items": [
-                {"target_type": "LISTING", "event_listing": self.el2a.id},
+                {"event_listing": self.el2a.id},
             ],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         item = resp.data["items"][0]
-        self.assertEqual(item["target_type"], "LISTING")
         self.assertEqual(item["event_listing"], self.el2a.id)
         self.assertEqual(item["listing_code"], self.copy2a.listing_code)
         self.assertEqual(item["board_game_name"], "Terraforming Mars")
-        self.assertIsNone(item["board_game"])  # board_game is null for LISTING type
-
-    def test_want_group_item_board_game_fields_populated(self):
-        resp = self.client.post(want_groups_url(self.slug), {
-            "name": "BG Target WG",
-            "min_receive": 1,
-            "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-            ],
-        }, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        item = resp.data["items"][0]
-        self.assertEqual(item["target_type"], "BOARD_GAME")
-        self.assertEqual(item["board_game"], self.game_terra.bgg_id)
-        self.assertEqual(item["board_game_name"], "Terraforming Mars")
-        self.assertIsNone(item["event_listing"])
-        self.assertIsNone(item["listing_code"])
+        self.assertEqual(item["board_game_id"], self.game_terra.bgg_id)
 
 
 # ---------------------------------------------------------------------------
@@ -735,7 +690,7 @@ class TradeWishSerializerFieldTests(TradeTestBase):
             "name": "Wish Field WG",
             "min_receive": 2,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         wish_resp = self.client.post(wishes_url(self.slug), {
@@ -769,16 +724,16 @@ class WantGroupItemOrderingTests(TradeTestBase):
             "name": "Ordered WG",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id},
-                {"target_type": "BOARD_GAME", "board_game": self.game_gaia.bgg_id},
+                {"event_listing": self.el1b.id},
+                {"event_listing": self.el2a.id},
+                {"event_listing": self.el2b.id},
             ],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         items = resp.data["items"]
-        self.assertEqual(items[0]["board_game"], self.game_ark.bgg_id)
-        self.assertEqual(items[1]["board_game"], self.game_terra.bgg_id)
-        self.assertEqual(items[2]["board_game"], self.game_gaia.bgg_id)
+        self.assertEqual(items[0]["event_listing"], self.el1b.id)
+        self.assertEqual(items[1]["event_listing"], self.el2a.id)
+        self.assertEqual(items[2]["event_listing"], self.el2b.id)
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +770,7 @@ class DeleteTests(TradeTestBase):
             "name": "Del Wish WG",
             "min_receive": 1,
             "items": [
-                {"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id},
+                {"event_listing": self.el1b.id},
             ],
         }, format="json")
         wish_resp = self.client.post(wishes_url(self.slug), {
@@ -835,7 +790,7 @@ class MoneyAndDupProtectionTests(TradeTestBase):
     def test_want_group_duplicate_protection_defaults_false(self):
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "Plain", "min_receive": 1,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id}],
+            "items": [{"event_listing": self.el2a.id}],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertFalse(resp.data["duplicate_protection"])
@@ -843,7 +798,7 @@ class MoneyAndDupProtectionTests(TradeTestBase):
     def test_want_group_duplicate_protection_persists(self):
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "Protected", "min_receive": 1, "duplicate_protection": True,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id}],
+            "items": [{"event_listing": self.el2a.id}],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertTrue(resp.data["duplicate_protection"])
@@ -852,7 +807,7 @@ class MoneyAndDupProtectionTests(TradeTestBase):
         # user1 wants user2's specific terra listing (el2a)
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "Specific", "min_receive": 1,
-            "items": [{"target_type": "LISTING", "event_listing": self.el2a.id}],
+            "items": [{"event_listing": self.el2a.id}],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         item = resp.data["items"][0]
@@ -885,7 +840,7 @@ class StatusLockTests(TradeTestBase):
         self._set_status("MATCHING")
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "x", "min_receive": 1,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+            "items": [{"event_listing": self.el1a.id}],
         }, format="json")
         self._reset_status()
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
@@ -893,7 +848,7 @@ class StatusLockTests(TradeTestBase):
     def test_wantgroup_create_allowed_in_wantlist_open(self):
         resp = self.client.post(want_groups_url(self.slug), {
             "name": "y", "min_receive": 1,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+            "items": [{"event_listing": self.el1a.id}],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -903,7 +858,7 @@ class StatusLockTests(TradeTestBase):
                 self._set_status(s)
                 resp = self.client.post(want_groups_url(self.slug), {
                     "name": "z", "min_receive": 1,
-                    "items": [{"target_type": "BOARD_GAME", "board_game": self.game_brass.bgg_id}],
+                    "items": [{"event_listing": self.el1a.id}],
                 }, format="json")
                 self._reset_status()
                 self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, f"Expected 403 for status={s}")
@@ -929,7 +884,7 @@ class StatusLockTests(TradeTestBase):
         # Create the group while open
         wg_resp = self.client.post(want_groups_url(self.slug), {
             "name": "Patch target", "min_receive": 1,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_ark.bgg_id}],
+            "items": [{"event_listing": self.el1b.id}],
         }, format="json")
         wg_id = wg_resp.data["id"]
 
@@ -989,7 +944,7 @@ class StatusLockTests(TradeTestBase):
         }, format="json").data
         wg = self.client.post(want_groups_url(self.slug), {
             "name": "wg wish", "min_receive": 1,
-            "items": [{"target_type": "BOARD_GAME", "board_game": self.game_terra.bgg_id}],
+            "items": [{"event_listing": self.el2a.id}],
         }, format="json").data
         return og["id"], wg["id"]
 

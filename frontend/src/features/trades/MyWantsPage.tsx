@@ -28,7 +28,7 @@ import BackButton from '../../components/BackButton'
 
 // ============================================================
 // Model: a "want target" is one row in the matrix.
-//   key  =  "G:<bggId>"  (any copy of a game)  |  "L:<listingId>" (specific copy)
+//   key  =  "L:<listingId>" (a specific copy)
 // Each of my EventListings (a "my item") maps to a single-listing
 // OfferGroup(max_give=1) → TradeWish → WantGroup(min_receive=1). The WantGroup's
 // items are that listing's want list. Toggling a cell adds/removes a target from
@@ -37,25 +37,22 @@ import BackButton from '../../components/BackButton'
 
 interface Target {
   key: string
-  type: 'BOARD_GAME' | 'LISTING'
-  boardGameId?: number
-  listingId?: number
+  listingId: number
   label: string
-  /** Canonical game this target belongs to — LISTING targets group under it. */
+  /** Canonical game this target belongs to — listings group under it. */
   gameId: number
   gameName: string
   /** Thumbnail of the canonical game (for the Visual view's receive cluster). */
   thumbnail?: string | null
 }
 
-// A canonical-game row in the want views: one game, its optional "any copy"
-// target plus any specific-copy (LISTING) targets. Collapses the duplicate rows.
+// A canonical-game row in the want views: one game and its specific-copy
+// (listing) targets. Collapses the duplicate per-copy rows under one game.
 interface GameGroup {
   gameId: number
   gameName: string
   thumbnail?: string | null    // canonical game thumbnail (Visual view)
-  anyTarget?: Target           // BOARD_GAME (any copy)
-  copyTargets: Target[]        // specific LISTING selections
+  copyTargets: Target[]        // specific listing selections
 }
 
 function groupTargetsByGame(targets: Target[]): GameGroup[] {
@@ -66,43 +63,30 @@ function groupTargetsByGame(targets: Target[]): GameGroup[] {
       g = { gameId: t.gameId, gameName: t.gameName, thumbnail: t.thumbnail, copyTargets: [] }
       byGame.set(t.gameId, g)
     }
-    if (t.type === 'BOARD_GAME') g.anyTarget = t
-    else g.copyTargets.push(t)
+    g.copyTargets.push(t)
   }
   return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
 }
 
 function groupKeys(g: GameGroup): string[] {
-  const keys = g.copyTargets.map((t) => t.key)
-  if (g.anyTarget) keys.push(g.anyTarget.key)
-  return keys
+  return g.copyTargets.map((t) => t.key)
 }
 
 function groupIsOn(editor: Editor, listingId: number, g: GameGroup): boolean {
   return groupKeys(g).some((k) => editor.isOn(listingId, k))
 }
 
-// Aggregate toggle: on→clear every target of this game; off→want "any copy"
-// (or re-enable the previously-picked specific copies if that's all there is).
+// Aggregate toggle: on→clear every copy of this game; off→select all its copies.
 function toggleGroup(editor: Editor, listingId: number, g: GameGroup): void {
-  if (groupIsOn(editor, listingId, g)) {
-    groupKeys(g).forEach((k) => editor.toggle(listingId, k, false))
-  } else if (g.anyTarget) {
-    editor.toggle(listingId, g.anyTarget.key, true)
-  } else {
-    g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, true))
-  }
+  const on = groupIsOn(editor, listingId, g)
+  g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, !on))
 }
 
 function groupBadge(g: GameGroup): string {
-  if (g.anyTarget) return 'any copy'
   const n = g.copyTargets.length
   return `${n} cop${n === 1 ? 'y' : 'ies'}`
 }
 
-function gameTargetKey(bggId: number): string {
-  return `G:${bggId}`
-}
 function listingTargetKey(listingId: number): string {
   return `L:${listingId}`
 }
@@ -161,36 +145,19 @@ function buildModel(
       if (wg) {
         wantGroupByListing.set(listing.id, wg)
         for (const item of wg.items) {
-          if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-            const key = gameTargetKey(item.board_game)
-            set.add(key)
-            if (!baseTargets.has(key)) {
-              baseTargets.set(key, {
-                key,
-                type: 'BOARD_GAME',
-                boardGameId: item.board_game,
-                label: item.board_game_name ?? `Game ${item.board_game}`,
-                gameId: item.board_game,
-                gameName: item.board_game_name ?? `Game ${item.board_game}`,
-                thumbnail: item.board_game_thumbnail,
-              })
-            }
-          } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-            const key = listingTargetKey(item.event_listing)
-            set.add(key)
-            if (!baseTargets.has(key)) {
-              baseTargets.set(key, {
-                key,
-                type: 'LISTING',
-                listingId: item.event_listing,
-                label: item.listing_code ?? `Listing ${item.event_listing}`,
-                // board_game_id is the canonical game of the listing's copy →
-                // lets specific-copy wants fold under their game row.
-                gameId: item.board_game_id ?? -item.event_listing,
-                gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
-                thumbnail: item.board_game_thumbnail,
-              })
-            }
+          const key = listingTargetKey(item.event_listing)
+          set.add(key)
+          if (!baseTargets.has(key)) {
+            baseTargets.set(key, {
+              key,
+              listingId: item.event_listing,
+              label: item.listing_code ?? `Listing ${item.event_listing}`,
+              // board_game_id is the canonical game of the listing's copy →
+              // lets specific-copy wants fold under their game row.
+              gameId: item.board_game_id ?? -item.event_listing,
+              gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
+              thumbnail: item.board_game_thumbnail,
+            })
           }
         }
       }
@@ -203,8 +170,8 @@ function buildModel(
 
 // ============================================================
 // Game browse — paginated card grid of the games available in THIS event.
-// Expand a card to see the concrete copies it resolves to; "Want" toggles a
-// BOARD_GAME target on for ALL my items, then the inline "Offering N/M" panel
+// Expand a card to see the concrete copies it resolves to; "Want" selects every
+// copy of that game for ALL my items, then the inline "Offering N/M" panel
 // (or the grid) refines which of my offered items go toward that want.
 // Replaces the old typeahead search; only event-scoped games, never the
 // global 177k catalog.
@@ -324,32 +291,45 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 interface WantGroupControlsProps {
   slug: string
   bggId: number
+  username?: string
   customWantGroups: WantGroup[]
 }
 
-function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsProps) {
+function WantGroupControls({ slug, bggId, username, customWantGroups }: WantGroupControlsProps) {
   const qc = useQueryClient()
   const [groupSel, setGroupSel] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [groupMsg, setGroupMsg] = useState<string | null>(null)
 
+  // "Want this game" → every other-owned, in-range listing of it.
+  async function targetListingIds(): Promise<number[]> {
+    const res = await fetchEventListings(slug, { board_game: bggId, page_size: 200 })
+    return res.results
+      .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
+      .map((c) => c.id)
+  }
+
   async function addToExisting(groupId: number) {
     setGroupMsg(null)
     const group = customWantGroups.find((g) => g.id === groupId)
     if (!group) return
-    if (group.items.some((i) => i.target_type === 'BOARD_GAME' && i.board_game === bggId)) {
-      setGroupMsg('Already in that group.')
+    let listingIds: number[]
+    try {
+      listingIds = await targetListingIds()
+    } catch {
+      setGroupMsg('Could not add.')
+      return
+    }
+    const existing = new Set(group.items.map((i) => i.event_listing))
+    const toAdd = listingIds.filter((id) => !existing.has(id))
+    if (toAdd.length === 0) {
+      setGroupMsg(listingIds.length ? 'Already in that group.' : 'No copies to add.')
       return
     }
     const items: WantGroupItemPayload[] = [
-      ...group.items.map((i) => ({
-        target_type: i.target_type,
-        ...(i.target_type === 'BOARD_GAME'
-          ? { board_game: i.board_game! }
-          : { event_listing: i.event_listing! }),
-      })),
-      { target_type: 'BOARD_GAME', board_game: bggId },
+      ...group.items.map((i) => ({ event_listing: i.event_listing })),
+      ...toAdd.map((id) => ({ event_listing: id })),
     ]
     try {
       await patchWantGroupRaw(slug, group.id, { items })
@@ -364,11 +344,22 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
     const name = newName.trim()
     if (!name) return
     setGroupMsg(null)
+    let listingIds: number[]
+    try {
+      listingIds = await targetListingIds()
+    } catch {
+      setGroupMsg('Could not create group.')
+      return
+    }
+    if (listingIds.length === 0) {
+      setGroupMsg('No copies to add.')
+      return
+    }
     try {
       await createWantGroupRaw(slug, {
         name,
         min_receive: 1,
-        items: [{ target_type: 'BOARD_GAME', board_game: bggId }],
+        items: listingIds.map((id) => ({ event_listing: id })),
       })
       invalidateTrades(qc, slug)
       setShowNew(false)
@@ -486,8 +477,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
       return
     }
-    // "Want any copy" = select every current copy explicitly (no BOARD_GAME target),
-    // so the per-copy checkboxes all light up and it persists as concrete copies.
+    // "Want any copy" = select every current copy explicitly, so the per-copy
+    // checkboxes all light up and it persists as concrete copies.
     let copies: EventListing[]
     try {
       const res = await fetchEventListings(slug, { board_game: g.bgg_id, page_size: 200 })
@@ -500,7 +491,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       .forEach((c) => {
         const key = listingTargetKey(c.id)
         editor.addTarget({
-          key, type: 'LISTING', listingId: c.id, label: c.listing_code,
+          key, listingId: c.id, label: c.listing_code,
           gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
         })
         myListings.forEach((l) => editor.toggle(l.id, key, true))
@@ -621,6 +612,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     <WantGroupControls
                       slug={slug}
                       bggId={g.bgg_id}
+                      username={username}
                       customWantGroups={customWantGroups}
                     />
                     <GameCopies
@@ -753,45 +745,22 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
   const ownCount = all.length - others.length
 
   const canSelect = !!(selectable && editor && myListings && myListings.length > 0)
-  // A copy counts as wanted if its specific LISTING target is on, OR a legacy
-  // "any copy" (BOARD_GAME) target is still on for this game — so seeded/any
-  // wishes light up every per-copy box (any = all copies selected).
-  const anyKey = gameTargetKey(bggId)
   const isCopyWanted = (listingId: number) =>
     !!editor && !!myListings &&
-    myListings.some(
-      (ml) => editor.isOn(ml.id, listingTargetKey(listingId)) || editor.isOn(ml.id, anyKey)
-    )
+    myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
 
   function toggleCopy(l: EventListing) {
     if (!editor || !myListings || l.owner_too_far) return
     const next = !isCopyWanted(l.id)
-    const otherSelectable = others.filter((o) => !o.owner_too_far)
     // Act on the items already offering this game (preserve per-item refinement);
     // if none offer it yet, this is a fresh want → apply to all my items.
     const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
     const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
     const acting = offering.length ? offering : myListings
 
-    acting.forEach((ml) => {
-      // Materialize a legacy "any copy" want into explicit copies before editing,
-      // so toggling one box doesn't silently leave the any-target on.
-      if (editor!.isOn(ml.id, anyKey)) {
-        editor!.toggle(ml.id, anyKey, false)
-        otherSelectable.forEach((o) => {
-          const k = listingTargetKey(o.id)
-          editor!.addTarget({
-            key: k, type: 'LISTING', listingId: o.id, label: o.listing_code,
-            gameId: o.board_game_id, gameName: o.board_game_name, thumbnail: o.board_game_thumbnail,
-          })
-          editor!.toggle(ml.id, k, true)
-        })
-      }
-    })
-
     const key = listingTargetKey(l.id)
     editor.addTarget({
-      key, type: 'LISTING', listingId: l.id, label: l.listing_code,
+      key, listingId: l.id, label: l.listing_code,
       gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
     })
     acting.forEach((ml) => editor!.toggle(ml.id, key, next))
@@ -1160,7 +1129,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
 
             <div className="flex flex-wrap items-center gap-1.5">
               {myWants.map((g) => {
-                const specific = !g.anyTarget && g.copyTargets.length > 0
+                const specific = g.copyTargets.length > 0
                 return (
                   <span
                     key={g.gameId}
@@ -1314,7 +1283,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
           {groupTargetsByGame(editor.targets).map((g) => {
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
-            const specific = !g.anyTarget && g.copyTargets.length > 0
+            const specific = g.copyTargets.length > 0
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1450,10 +1419,7 @@ async function persistChanges(
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
     const items: WantGroupItemPayload[] = desired.map((t) => ({
-      target_type: t.type,
-      ...(t.type === 'BOARD_GAME'
-        ? { board_game: t.boardGameId! }
-        : { event_listing: t.listingId! }),
+      event_listing: t.listingId,
     }))
 
     let wg = model.wantGroupByListing.get(listingId)

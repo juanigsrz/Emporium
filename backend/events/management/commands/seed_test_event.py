@@ -41,7 +41,13 @@ The RNG draw order is identical to the previous version, so a given --seed still
 produces the same data set.
 """
 
+"""
+seed_test_event — populate a testing event with many users, copies, and submitted listings.
+Optimized for massive scale using generator-based chunking.
+"""
+
 import random
+from itertools import islice
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
@@ -61,7 +67,19 @@ PASSWORD = "testpass123"
 ORGANIZER_USERNAME = "mt_organizer"
 TRADER_PREFIX = "trader"
 LANGUAGES = ["English", "Spanish", "German", "French"]
-BATCH = 2000  # rows per bulk_create / bulk_update round-trip
+BATCH = 5000  # Increased for higher throughput on large datasets
+
+
+def chunked_bulk_insert(model, generator, batch_size=BATCH):
+    """Consumes a generator in chunks and bulk_creates them to keep memory flat."""
+    total_created = 0
+    while True:
+        batch = list(islice(generator, batch_size))
+        if not batch:
+            break
+        model.objects.bulk_create(batch, batch_size=batch_size)
+        total_created += len(batch)
+    return total_created
 
 
 class Command(BaseCommand):
@@ -80,12 +98,8 @@ class Command(BaseCommand):
             help="Event status to set (default WANTLIST_OPEN so want-lists are buildable).",
         )
         parser.add_argument("--seed", type=int, default=42, help="RNG seed for reproducibility.")
-        parser.add_argument(
-            "--wants-min", type=int, default=2, help="Min want targets per listing."
-        )
-        parser.add_argument(
-            "--wants-max", type=int, default=4, help="Max want targets per listing."
-        )
+        parser.add_argument("--wants-min", type=int, default=2, help="Min want targets per listing.")
+        parser.add_argument("--wants-max", type=int, default=4, help="Max want targets per listing.")
         parser.add_argument(
             "--money-cap", type=float, default=50.0,
             help="Per-user money cap (enables money trading). 0 disables money.",
@@ -115,27 +129,19 @@ class Command(BaseCommand):
                 "Need at least 2 ranked games in the catalog. Run import_games first."
             )
 
-        # Real editions for the pool games, grouped by game, so each copy can be
-        # given an actual version (and inherit that edition's language). Games with
-        # no imported versions fall back to a random language and no version.
         versions_by_game = {}
         for v in BoardGameVersion.objects.filter(board_game__in=pool).exclude(name="Unknown"):
             versions_by_game.setdefault(v.board_game_id, []).append(v)
 
         # --- users (organizer + traders) ------------------------------------
-        # All test users share one password, so hash it a single time and reuse
-        # the hash instead of running the KDF once per user.
         hashed = make_password(PASSWORD)
         usernames = [ORGANIZER_USERNAME] + [
-            f"{TRADER_PREFIX}{i:02d}" for i in range(1, n_users + 1)
+            f"{TRADER_PREFIX}{i:04d}" for i in range(1, n_users + 1) # Padded to 4 digits for large testcases
         ]
         found = {u.username: u for u in User.objects.filter(username__in=usernames)}
 
         if found:
-            # Keep pre-existing users' password in sync (idempotent re-runs).
-            User.objects.filter(pk__in=[u.pk for u in found.values()]).update(
-                password=hashed
-            )
+            User.objects.filter(pk__in=[u.pk for u in found.values()]).update(password=hashed)
             for u in found.values():
                 u.password = hashed
         for uname in usernames:
@@ -145,16 +151,14 @@ class Command(BaseCommand):
                 )
 
         organizer = found[ORGANIZER_USERNAME]
-        traders = [found[f"{TRADER_PREFIX}{i:02d}"] for i in range(1, n_users + 1)]
+        traders = [found[f"{TRADER_PREFIX}{i:04d}"] for i in range(1, n_users + 1)]
 
         # --- event ----------------------------------------------------------
         existing = TradeEvent.objects.filter(slug=slug).first()
         if existing:
             if not opts["reset"]:
-                raise CommandError(
-                    f"Event '{slug}' already exists. Re-run with --reset to rebuild it."
-                )
-            existing.delete()  # cascades listings + participations
+                raise CommandError(f"Event '{slug}' already exists. Re-run with --reset to rebuild it.")
+            existing.delete() 
             Copy.objects.filter(owner__in=traders).delete()
 
         money_cap = opts["money_cap"]
@@ -172,25 +176,18 @@ class Command(BaseCommand):
         # --- participations + copies + submitted listings -------------------
         participations = []
         copies = []
-        copy_counter = 1 # Use a counter to ensure uniqueness
+        copy_counter = 1 
 
         for u in traders:
             region = rng.choice(["NA", "EU", "SA", "APAC"])
-            max_spend = (
-                round(rng.uniform(money_cap * 0.4, money_cap), 2)
-                if money_enabled else 0
-            )
-            participations.append(
-                EventParticipation(
-                    event=event, user=u, region=region, max_spend=max_spend
-                )
-            )
+            max_spend = (round(rng.uniform(money_cap * 0.4, money_cap), 2) if money_enabled else 0)
+            participations.append(EventParticipation(event=event, user=u, region=region, max_spend=max_spend))
+            
             for _ in range(rng.randint(lo, hi)):
                 game = rng.choice(pool)
                 vers = versions_by_game.get(game.bgg_id)
                 if vers:
                     ver = rng.choice(vers)
-                    # version.language is pipe-joined when multiple; take the first.
                     language = (ver.language or "").split("|")[0].strip() or rng.choice(LANGUAGES)
                     edition = ver.name
                 else:
@@ -199,52 +196,46 @@ class Command(BaseCommand):
                     edition = ""
                 copies.append(
                     Copy(
-                        owner=u,
-                        board_game=game,
-                        version=ver,
+                        owner=u, board_game=game, version=ver,
                         condition=rng.choice([c.value for c in Copy.Condition]),
-                        language=language,
-                        edition=edition,
-                        status=Copy.Status.ACTIVE,
-                        listing_code=f"TEST-{copy_counter:06d}" # <--- Manually inject a unique code
+                        language=language, edition=edition, status=Copy.Status.ACTIVE,
+                        listing_code=f"TEST-{copy_counter:06d}" 
                     )
                 )
                 copy_counter += 1
 
         EventParticipation.objects.bulk_create(participations, batch_size=BATCH)
         Copy.objects.bulk_create(copies, batch_size=BATCH)
-        EventListing.objects.bulk_create(
-            [EventListing(event=event, copy=c, active=True) for c in copies],
-            batch_size=BATCH,
-        )
+        
+        # Generator for EventListings
+        chunked_bulk_insert(EventListing, (EventListing(event=event, copy=c, active=True) for c in copies))
         total_copies = len(copies)
 
-        # Re-read listings with their copy so listing_code etc. reflect the DB,
-        # and group them for want-list building.
-        saved = list(
-            EventListing.objects.filter(event=event).select_related("copy")
-        )
+        # Re-read listings
+        saved = list(EventListing.objects.filter(event=event).select_related("copy"))
         listings_by_owner = {}
         games_by_owner = {}
+        listings_by_game = {}
         all_games = set()
+        
         for el in saved:
             listings_by_owner.setdefault(el.copy.owner_id, []).append(el)
             games_by_owner.setdefault(el.copy.owner_id, set()).add(el.copy.board_game_id)
+            listings_by_game.setdefault(el.copy.board_game_id, []).append(el)
             all_games.add(el.copy.board_game_id)
         all_games_sorted = sorted(all_games)
 
         # --- want lists: one offer+want+wish trio per listing ---------------
         wmin, wmax = opts["wants_min"], opts["wants_max"]
 
-        offer_groups = []          # parallel to want_groups / plan
+        offer_groups = []          
         want_groups = []
-        plan = []                  # (event_listing, offer_group, want_group, wanted_game_ids)
-        sell_updates = []          # listings that got a per-copy ask
-        bid_candidates = []        # (user_id, board_game_id, amount) in RNG order
+        plan = []                  
+        sell_updates = []          
+        bid_candidates = []        
         n_money_offers = 0
 
         for u in traders:
-            # Games owned by OTHERS only (so a match is actually possible).
             owned = games_by_owner.get(u.id, set())
             candidates = [g for g in all_games_sorted if g not in owned]
             if not candidates:
@@ -253,20 +244,15 @@ class Command(BaseCommand):
                 k = min(rng.randint(wmin, wmax), len(candidates))
                 wanted_games = rng.sample(candidates, k)
 
-                og = OfferGroup(
-                    event=event, user=u, name=el.copy.listing_code, max_give=1
-                )
-                # Sell side (Q): ~40% of listings get a per-copy ask override.
+                og = OfferGroup(event=event, user=u, name=el.copy.listing_code, max_give=1)
+                
                 if money_enabled and rng.random() < 0.4:
                     el.sell_price = round(rng.uniform(5, min(money_cap, 25)), 2)
                     sell_updates.append(el)
                     n_money_offers += 1
 
-                wg = WantGroup(
-                    event=event, user=u, name=f"Wants for {el.copy.listing_code}",
-                    min_receive=1, duplicate_protection=True,
-                )
-                # Buy side (P): ~30% of wants get a per-target bid override.
+                wg = WantGroup(event=event, user=u, name=f"Wants for {el.copy.listing_code}", min_receive=1, duplicate_protection=True)
+                
                 for bgg_id in wanted_games:
                     if money_enabled and rng.random() < 0.3:
                         amount = round(rng.uniform(5, min(money_cap, 30)), 2)
@@ -276,67 +262,53 @@ class Command(BaseCommand):
                 want_groups.append(wg)
                 plan.append((el, og, wg, wanted_games))
 
-        # Insert the groups first so their PKs are available for the children.
         OfferGroup.objects.bulk_create(offer_groups, batch_size=BATCH)
         WantGroup.objects.bulk_create(want_groups, batch_size=BATCH)
 
-        offer_items = []
-        want_items = []
-        wishes = []
-        for el, og, wg, wanted_games in plan:
-            offer_items.append(OfferGroupItem(offer_group=og, event_listing=el))
-            for bgg_id in wanted_games:
-                want_items.append(
-                    WantGroupItem(
-                        want_group=wg,
-                        target_type=WantGroupItem.TargetType.BOARD_GAME,
-                        board_game_id=bgg_id,
-                    )
-                )
-            wishes.append(
-                TradeWish(
-                    event=event, user=og.user,
-                    offer_group=og, want_group=wg, active=True,
-                )
-            )
+        # Use generators for the massive inserts
+        def generate_offer_items():
+            for el, og, wg, wanted_games in plan:
+                yield OfferGroupItem(offer_group=og, event_listing=el)
 
-        OfferGroupItem.objects.bulk_create(offer_items, batch_size=BATCH)
-        WantGroupItem.objects.bulk_create(want_items, batch_size=BATCH)
-        TradeWish.objects.bulk_create(wishes, batch_size=BATCH)
-        n_wishes = len(wishes)
+        def generate_want_items():
+            for el, og, wg, wanted_games in plan:
+                for bgg_id in wanted_games:
+                    for target in listings_by_game.get(bgg_id, []):
+                        yield WantGroupItem(want_group=wg, event_listing=target)
+
+        def generate_wishes():
+            for el, og, wg, wanted_games in plan:
+                yield TradeWish(event=event, user=og.user, offer_group=og, want_group=wg, active=True)
+
+        chunked_bulk_insert(OfferGroupItem, generate_offer_items())
+        total_wants_inserted = chunked_bulk_insert(WantGroupItem, generate_want_items())
+        n_wishes = chunked_bulk_insert(TradeWish, generate_wishes())
 
         if sell_updates:
-            EventListing.objects.bulk_update(
-                sell_updates, ["sell_price"], batch_size=BATCH
-            )
+            EventListing.objects.bulk_update(sell_updates, ["sell_price"], batch_size=BATCH)
 
-        # WantBid is keyed per (user, event, board_game): keep the first draw for
-        # each pair (matching the old get_or_create) and drop later duplicates.
-        seen = set()
-        want_bids = []
-        for uid, bgg_id, amount in bid_candidates:
-            key = (uid, bgg_id)
-            if key in seen:
-                continue
-            seen.add(key)
-            want_bids.append(
-                WantBid(
-                    user_id=uid, event=event, board_game_id=bgg_id,
-                    target_type=WantBid.TargetType.BOARD_GAME, amount=amount,
-                )
-            )
-        WantBid.objects.bulk_create(want_bids, batch_size=BATCH)
-        n_money_wants = len(want_bids)
+        def generate_want_bids():
+            seen = set()
+            for uid, bgg_id, amount in bid_candidates:
+                key = (uid, bgg_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                for target in listings_by_game.get(bgg_id, []):
+                    yield WantBid(user_id=uid, event=event, event_listing=target, amount=amount)
+
+        n_money_wants = chunked_bulk_insert(WantBid, generate_want_bids())
 
         # --- report ---------------------------------------------------------
         distinct_games = len({c.board_game_id for c in copies})
         self.stdout.write(self.style.SUCCESS(f"Seeded event '{event.slug}' ({event.status})"))
         self.stdout.write(
             f"  organizer:   {organizer.username}  (password: {PASSWORD})\n"
-            f"  traders:     {len(traders)}  ({TRADER_PREFIX}01..{TRADER_PREFIX}{n_users:02d}, password: {PASSWORD})\n"
+            f"  traders:     {len(traders)}  ({TRADER_PREFIX}0001..{TRADER_PREFIX}{n_users:04d}, password: {PASSWORD})\n"
             f"  copies:      {total_copies} submitted listings\n"
             f"  game pool:   {len(pool)} games, {distinct_games} distinct games actually listed\n"
             f"  wishes:      {n_wishes} (one per listing)\n"
+            f"  want items:  {total_wants_inserted} target mappings created\n"
             f"  money:       {'enabled, cap ' + str(round(money_cap, 2)) if money_enabled else 'disabled'}"
             f"{', ' + str(n_money_wants) + ' buy bids, ' + str(n_money_offers) + ' sell asks' if money_enabled else ''}\n"
             f"  frontend:    /events/{event.slug}\n"
