@@ -20,6 +20,7 @@ innovation (see DESIGN.md §4).
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +70,34 @@ class OfferGroupItem(models.Model):
         "events.EventListing",
         on_delete=models.CASCADE,
         related_name="offer_memberships",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo",
+        on_delete=models.CASCADE,
+        related_name="offer_memberships",
+        null=True, blank=True,
     )
 
     class Meta:
-        unique_together = [("offer_group", "event_listing")]
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="offeritem_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["offer_group", "event_listing"],
+                condition=Q(event_listing__isnull=False),
+                name="uniq_offeritem_group_listing",
+            ),
+            models.UniqueConstraint(
+                fields=["offer_group", "combo"],
+                condition=Q(combo__isnull=False),
+                name="uniq_offeritem_group_combo",
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -82,10 +106,15 @@ class OfferGroupItem(models.Model):
         )
 
     def clean(self):
-        """Validate that the listing's copy is owned by the offer group's user."""
-        if self.event_listing.copy.owner_id != self.offer_group.user_id:
+        """Validate the target (listing or combo) belongs to the group's user."""
+        if self.event_listing_id and \
+                self.event_listing.copy.owner_id != self.offer_group.user_id:
             raise ValidationError(
                 "The event listing does not belong to the offer group's user."
+            )
+        if self.combo_id and self.combo.owner_id != self.offer_group.user_id:
+            raise ValidationError(
+                "The combo does not belong to the offer group's user."
             )
 
 
@@ -139,10 +168,24 @@ class WantGroupItem(models.Model):
         "events.EventListing",
         on_delete=models.CASCADE,
         related_name="want_memberships",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo",
+        on_delete=models.CASCADE,
+        related_name="want_memberships",
+        null=True, blank=True,
     )
 
     class Meta:
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="wantitem_exactly_one_target",
+            ),
+        ]
 
     def __str__(self):
         return (
@@ -249,6 +292,12 @@ class WantBid(models.Model):
     event_listing = models.ForeignKey(
         "events.EventListing", on_delete=models.CASCADE,
         related_name="want_bids",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo", on_delete=models.CASCADE,
+        related_name="want_bids",
+        null=True, blank=True,
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -257,17 +306,30 @@ class WantBid(models.Model):
 
     class Meta:
         constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="wantbid_exactly_one_target",
+            ),
             models.UniqueConstraint(
                 fields=["user", "event", "event_listing"],
+                condition=Q(event_listing__isnull=False),
                 name="uniq_wantbid_user_event_listing",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "event", "combo"],
+                condition=Q(combo__isnull=False),
+                name="uniq_wantbid_user_event_combo",
             ),
         ]
         ordering = ["id"]
 
     def clean(self):
-        """Validate the listing belongs to the same event as this bid."""
-        if self.event_listing.event_id != self.event_id:
+        """Validate the target belongs to the same event as this bid."""
+        if self.event_listing_id and self.event_listing.event_id != self.event_id:
             raise ValidationError("event_listing must belong to the same event as this bid.")
+        if self.combo_id and self.combo.event_id != self.event_id:
+            raise ValidationError("combo must belong to the same event as this bid.")
 
     def __str__(self):
         return f"WantBid({self.user.username}, {self.event_listing_id}, {self.amount})"
