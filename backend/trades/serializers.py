@@ -360,8 +360,6 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         event = self.context.get("event")
         if event is None or not obj.pk:
             return None
-        if obj.combo_id:
-            return None  # combo pricing handled in Task 5
         v = resolve_bid(obj.want_group.user, event, obj)
         return f"{v:.2f}" if v is not None else None
 

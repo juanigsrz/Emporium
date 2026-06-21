@@ -87,3 +87,64 @@ class ComboTargetingTests(APITestCase):
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.assertEqual(resp.data["combo"], self.combo.id)
+
+
+from django.test import TestCase
+
+from decimal import Decimal
+
+from trades.models import WantBid
+from trades.pricing import resolve_ask_target, resolve_bid
+
+
+class ComboPricingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user("po", "po@t.test", "pass1234")
+        cls.wisher = User.objects.create_user("pw", "pw@t.test", "pass1234")
+        cls.bg1 = BoardGame.objects.create(bgg_id=4001, name="Ark")
+        cls.bg2 = BoardGame.objects.create(bgg_id=4002, name="Ark Exp")
+        cls.event = TradeEvent.objects.create(name="P Ev", organizer=cls.owner)
+        cls.c1 = Copy.objects.create(owner=cls.owner, board_game=cls.bg1)
+        cls.c2 = Copy.objects.create(owner=cls.owner, board_game=cls.bg2)
+        cls.el1 = EventListing.objects.create(event=cls.event, copy=cls.c1)
+        cls.el2 = EventListing.objects.create(event=cls.event, copy=cls.c2)
+        cls.combo = Combo.objects.create(
+            event=cls.event, owner=cls.owner, name="bundle", sell_price=Decimal("40.00")
+        )
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el1)
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
+
+    def test_resolve_ask_target_combo(self):
+        from decimal import Decimal
+        self.assertEqual(resolve_ask_target(self.combo), Decimal("40.00"))
+
+    def test_resolve_ask_target_barter_combo_is_none(self):
+        barter = Combo.objects.create(event=self.event, owner=self.owner, name="b2")
+        self.assertIsNone(resolve_ask_target(barter))
+
+    def test_resolve_bid_combo_target(self):
+        from decimal import Decimal
+        WantBid.objects.create(
+            user=self.wisher, event=self.event, combo=self.combo, amount="35.00"
+        )
+        item = self.combo.want_memberships.model(combo=self.combo)  # unsaved stand-in
+        # Build a minimal want item pointing at the combo:
+        from trades.models import WantGroup, WantGroupItem
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="w")
+        wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        self.assertEqual(resolve_bid(self.wisher, self.event, wi), Decimal("35.00"))
+
+    def test_want_group_item_serializer_resolved_bid_for_combo(self):
+        """WantGroupItemSerializer surfaces resolved_bid for a combo want item."""
+        from decimal import Decimal
+        from trades.models import WantGroup, WantGroupItem
+        from trades.serializers import WantGroupItemSerializer
+
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="wser")
+        wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        WantBid.objects.create(
+            user=self.wisher, event=self.event, combo=self.combo, amount="27.50"
+        )
+        ser = WantGroupItemSerializer(wi, context={"event": self.event})
+        self.assertEqual(ser.data["resolved_bid"], "27.50")
