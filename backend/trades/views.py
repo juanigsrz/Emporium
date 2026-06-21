@@ -425,14 +425,22 @@ class WantBidView(EventScopedMixin, APIView):
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        if d["event_listing"].event_id != event.id:
-            raise ValidationError(
-                {"event_listing": "Listing does not belong to this event."}
+        if d.get("combo"):
+            if d["combo"].event_id != event.id:
+                raise ValidationError({"combo": "Combo does not belong to this event."})
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, combo=d["combo"],
+                defaults={"amount": d["amount"]},
             )
-        obj, _ = WantBid.objects.update_or_create(
-            user=request.user, event=event, event_listing=d["event_listing"],
-            defaults={"amount": d["amount"]},
-        )
+        else:
+            if d["event_listing"].event_id != event.id:
+                raise ValidationError(
+                    {"event_listing": "Listing does not belong to this event."}
+                )
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, event_listing=d["event_listing"],
+                defaults={"amount": d["amount"]},
+            )
         return Response(WantBidSerializer(obj).data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
