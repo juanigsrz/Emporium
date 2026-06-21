@@ -35,3 +35,10 @@ class ComboModelTests(TestCase):
         ComboItem.objects.create(combo=c, event_listing=self.el2)
         self.assertEqual(c.items.count(), 2)
         self.assertEqual(c.sell_price, Decimal("40.00"))
+
+    def test_duplicate_combo_item_rejected(self):
+        from django.db import IntegrityError
+        c = Combo.objects.create(event=self.event, owner=self.u, name="WS bundle")
+        ComboItem.objects.create(combo=c, event_listing=self.el1)
+        with self.assertRaises(IntegrityError):
+            ComboItem.objects.create(combo=c, event_listing=self.el1)

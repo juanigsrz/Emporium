@@ -225,8 +225,9 @@ COMBO_CODE_RETRIES = 10
 
 
 def _generate_combo_code():
-    """"K-XXXXXX": 6 random uppercase base32 chars. Mirrors Copy.listing_code
-    but with a "K-" prefix so combo tokens never collide with copies' "C-"."""
+    """Generate "K-XXXXXX": 6 random uppercase base32 chars. Mirrors
+    Copy.listing_code but with a "K-" prefix so combo tokens never collide
+    with copies' "C-"."""
     raw = os.urandom(4)
     encoded = base64.b32encode(raw).decode("ascii")
     chars = encoded.rstrip("=")[:6]
