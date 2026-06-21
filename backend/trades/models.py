@@ -100,10 +100,8 @@ class OfferGroupItem(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"OfferGroupItem(group={self.offer_group_id}, "
-            f"listing={self.event_listing_id})"
-        )
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"OfferGroupItem(group={self.offer_group_id}, {target})"
 
     def clean(self):
         """Validate the target (listing or combo) belongs to the group's user."""
@@ -179,6 +177,9 @@ class WantGroupItem(models.Model):
 
     class Meta:
         ordering = ["id"]
+        # No (want_group, target) uniqueness: duplicate want targets were always
+        # tolerated here (pre-combo too) and the solver export dedupes via a set
+        # in external_solver._expand, so duplicates are harmless.
         constraints = [
             models.CheckConstraint(
                 check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
@@ -332,4 +333,5 @@ class WantBid(models.Model):
             raise ValidationError("combo must belong to the same event as this bid.")
 
     def __str__(self):
-        return f"WantBid({self.user.username}, {self.event_listing_id}, {self.amount})"
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"WantBid({self.user.username}, {target}, {self.amount})"
