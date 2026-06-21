@@ -42,6 +42,20 @@ class ComboTargetingTests(APITestCase):
         self.assertEqual(item["combo"], self.combo.id)
         self.assertEqual(item["combo_code"], self.combo.combo_code)
 
+    def test_want_group_rejects_combo_from_other_event(self):
+        other_event = TradeEvent.objects.create(
+            name="Other Ev", organizer=self.owner, status="WANTLIST_OPEN"
+        )
+        other_combo = Combo.objects.create(
+            event=other_event, owner=self.owner, name="other bundle"
+        )
+        self.client.force_authenticate(self.wisher)
+        resp = self.client.post(self._u("want-groups/"), {
+            "name": "cross-event", "min_receive": 1,
+            "items": [{"combo": other_combo.id}],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_want_item_rejects_both_targets(self):
         self.client.force_authenticate(self.wisher)
         resp = self.client.post(self._u("want-groups/"), {
