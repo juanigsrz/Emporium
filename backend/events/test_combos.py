@@ -104,6 +104,7 @@ class ComboAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_blocked_when_inputs_locked(self):
+        self.event.refresh_from_db()
         self.event.status = "MATCHING"
         self.event.save(update_fields=["status"])
         self.client.force_authenticate(self.owner)
@@ -114,9 +115,10 @@ class ComboAPITests(APITestCase):
 
     def test_browse_lists_all_active_combos(self):
         self.client.force_authenticate(self.owner)
-        self.client.post(self._url(), {
+        created = self.client.post(self._url(), {
             "name": "a", "item_listing_ids": [self.el1.id, self.el2.id],
         }, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
         # other user can see it in browse
         self.client.force_authenticate(self.other)
         resp = self.client.get(self._url())
@@ -125,9 +127,10 @@ class ComboAPITests(APITestCase):
 
     def test_browse_filter_by_board_game(self):
         self.client.force_authenticate(self.owner)
-        self.client.post(self._url(), {
+        created = self.client.post(self._url(), {
             "name": "a", "item_listing_ids": [self.el1.id, self.el2.id],
         }, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
         resp = self.client.get(self._url() + f"?board_game={self.bg1.bgg_id}")
         self.assertEqual(resp.data["count"], 1)
         resp2 = self.client.get(self._url() + "?board_game=999999")
