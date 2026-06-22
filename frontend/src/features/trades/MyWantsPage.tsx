@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
 import type { EventListing } from '../../api/events'
+import { useCombos } from '../../api/combos'
+import type { Combo } from '../../api/combos'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
 import { useMyRatings, ratingMap, useSetRating, useDeleteRating } from '../../api/ratings'
@@ -44,6 +46,8 @@ interface Target {
   gameName: string
   /** Thumbnail of the canonical game (for the Visual view's receive cluster). */
   thumbnail?: string | null
+  /** Set when this target is a Combo (not a listing). */
+  comboId?: number
 }
 
 // A canonical-game row in the want views: one game and its specific-copy
@@ -91,6 +95,14 @@ function listingTargetKey(listingId: number): string {
   return `L:${listingId}`
 }
 
+// Combo targets render as their own one-row group, keyed off a synthetic gameId
+// well above any real bgg id so they never collide with a game group.
+const COMBO_GAME_OFFSET = 1_000_000_000
+
+function comboTargetKey(comboId: number): string {
+  return `K:${comboId}`
+}
+
 function cellKey(listingId: number, targetKey: string): string {
   return `${listingId}::${targetKey}`
 }
@@ -114,7 +126,9 @@ function buildModel(
   offerGroups: OfferGroup[],
   wantGroups: WantGroup[],
   wishes: { offer_group: number; want_group: number }[],
-  gamePrices: GamePrice[]
+  gamePrices: GamePrice[],
+  combos: Combo[],
+  username: string | undefined
 ): PageModel {
   const wantGroupById = new Map(wantGroups.map((wg) => [wg.id, wg]))
   const wantGroupIdByOffer = new Map(wishes.map((w) => [w.offer_group, w.want_group]))
@@ -146,7 +160,23 @@ function buildModel(
       if (wg) {
         wantGroupByListing.set(listing.id, wg)
         for (const item of wg.items) {
-          if (item.event_listing == null) continue  // combo want item: visual grid handles in 2b-ii
+          if (item.combo != null) {
+            const key = comboTargetKey(item.combo)
+            set.add(key)
+            if (!baseTargets.has(key)) {
+              baseTargets.set(key, {
+                key,
+                listingId: 0,
+                comboId: item.combo,
+                label: item.combo_code ?? `Combo ${item.combo}`,
+                gameId: COMBO_GAME_OFFSET + item.combo,
+                gameName: `🎁 ${item.combo_name ?? 'Combo'}`,
+                thumbnail: null,
+              })
+            }
+            continue
+          }
+          if (item.event_listing == null) continue
           const key = listingTargetKey(item.event_listing)
           set.add(key)
           if (!baseTargets.has(key)) {
@@ -165,6 +195,25 @@ function buildModel(
       }
     }
     baseMatrix.set(listing.id, set)
+  }
+
+  // Surface every active combo (not the user's own) as a wantable target row,
+  // even if not yet wanted. Its own one-row group (synthetic gameId) renders in
+  // the visual/grid views; baseMatrix above already marks the wanted ones.
+  for (const c of combos) {
+    if (c.owner_username === username) continue
+    const key = comboTargetKey(c.id)
+    if (!baseTargets.has(key)) {
+      baseTargets.set(key, {
+        key,
+        listingId: 0,
+        comboId: c.id,
+        label: c.combo_code,
+        gameId: COMBO_GAME_OFFSET + c.id,
+        gameName: `🎁 ${c.name}`,
+        thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+      })
+    }
   }
 
   return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
@@ -1321,7 +1370,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
                         {groupBadge(g)}
                       </span>
                     </span>
-                    {moneyEnabled && g.gameId >= 0 && (
+                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
                       <div className="mt-1 flex items-center gap-1 text-xs">
                         <span className="text-moss">$</span>
                         <input
@@ -1402,9 +1451,9 @@ async function persistChanges(
   // each staged price independently of the want lists.
   if (moneyEnabled) {
     for (const [gameId, value] of editor.changedGamePrices) {
-      // Per-game prices are keyed by bgg id; LISTING-only targets that lack a
-      // real bgg id use a negative synthetic id and can't be priced.
-      if (gameId < 0) continue
+      // Per-game prices are keyed by bgg id; LISTING-only targets use a negative
+      // synthetic id and combos use a >= COMBO_GAME_OFFSET id — neither is priceable.
+      if (gameId < 0 || gameId >= COMBO_GAME_OFFSET) continue
       const raw = (value ?? '').trim()
       if (raw === '') {
         await deleteGamePrice(slug, gameId)
@@ -1422,9 +1471,9 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => ({
-      event_listing: t.listingId,
-    }))
+    const items: WantGroupItemPayload[] = desired.map((t) =>
+      t.comboId != null ? { combo: t.comboId } : { event_listing: t.listingId }
+    )
 
     let wg = model.wantGroupByListing.get(listingId)
 
@@ -1469,6 +1518,8 @@ export default function MyWantsPage() {
   const { data: offerGroups = [] } = useOfferGroups(slug)
   const { data: wantGroups = [] } = useWantGroups(slug)
   const { data: wishes = [] } = useWishes(slug)
+  const { data: combosData } = useCombos(slug)
+  const combos = useMemo(() => combosData?.results ?? [], [combosData])
   // Per-game prices (UserGamePrice) — the source of truth for each game's price.
   const { data: gamePrices = [] } = useQuery({
     queryKey: ['trades', 'game-prices', slug ?? ''],
@@ -1480,8 +1531,8 @@ export default function MyWantsPage() {
   const myListings = useMemo(() => listingsData?.results ?? [], [listingsData])
 
   const model = useMemo(
-    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices),
-    [myListings, offerGroups, wantGroups, wishes, gamePrices]
+    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices, combos, user?.username),
+    [myListings, offerGroups, wantGroups, wishes, gamePrices, combos, user?.username]
   )
 
   const customWantGroups = useMemo(() => {

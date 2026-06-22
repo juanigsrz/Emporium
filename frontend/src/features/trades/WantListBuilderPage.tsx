@@ -457,13 +457,16 @@ interface DraftWantItem {
   // Unique local key for DnD (not the backend id)
   localId: string
   board_game_name: string | null
-  event_listing: number
+  event_listing: number | null
   listing_code: string | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
   bid: string  // '' = none
 }
 
 function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
-  return `listing-${item.event_listing}`
+  return item.combo != null ? `combo-${item.combo}` : `listing-${item.event_listing}`
 }
 
 function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPanelProps) {
@@ -639,21 +642,31 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
         <p className="text-xs text-moss/70 italic">No targets yet.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {group.items.map((item) => (
-            <span
-              key={item.id}
-              className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700"
-            >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              <span className="font-mono text-moss/70">{item.listing_code}</span>
-              {item.board_game_name}
-              {item.resolved_bid != null && (
-                <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
-                  pay ≤${item.resolved_bid}
-                </span>
-              )}
-            </span>
-          ))}
+          {group.items.map((item) =>
+            item.combo != null ? (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-amber-100 text-amber-800"
+              >
+                🎁 {item.combo_name}
+                <span className="font-mono text-amber-700/70">{item.combo_code}</span>
+              </span>
+            ) : (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700"
+              >
+                <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
+                <span className="font-mono text-moss/70">{item.listing_code}</span>
+                {item.board_game_name}
+                {item.resolved_bid != null && (
+                  <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
+                    pay ≤${item.resolved_bid}
+                  </span>
+                )}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>
@@ -790,15 +803,16 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   const [minReceive, setMinReceive] = useState(String(group?.min_receive ?? 1))
   const [dupProtect, setDupProtect] = useState(group?.duplicate_protection ?? false)
   const [items, setItems] = useState<DraftWantItem[]>(() =>
-    (group?.items ?? [])
-      .filter((i) => i.event_listing != null)
-      .map((i) => ({
-        localId: makeDraftKey(i),
-        board_game_name: i.board_game_name,
-        event_listing: i.event_listing as number,
-        listing_code: i.listing_code,
-        bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
-      }))
+    (group?.items ?? []).map((i) => ({
+      localId: makeDraftKey(i),
+      board_game_name: i.board_game_name,
+      event_listing: i.event_listing,
+      listing_code: i.listing_code,
+      combo: i.combo,
+      combo_code: i.combo_code,
+      combo_name: i.combo_name,
+      bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
+    }))
   )
   const [gameSearch, setGameSearch] = useState('')
   const [activeGame, setActiveGame] = useState<EventGame | null>(null)
@@ -827,6 +841,9 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           board_game_name: listing.board_game_name,
           event_listing: listing.id,
           listing_code: listing.listing_code,
+          combo: null,
+          combo_code: null,
+          combo_name: null,
           bid: '',
         })
       }
@@ -845,18 +862,22 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   }
 
   function buildPayloadItems(): WantGroupItemPayload[] {
-    return items.map((item) => ({ event_listing: item.event_listing }))
+    return items.map((item) =>
+      item.combo != null ? { combo: item.combo } : { event_listing: item.event_listing as number }
+    )
   }
 
   // Persist per-listing buy bids as WantBid overrides (decoupled from the want item).
   async function saveWantBids() {
     if (!moneyEnabled) return
     for (const item of items) {
+      if (item.combo != null) continue
+      const listingId = item.event_listing as number
       const trimmed = item.bid.trim()
       if (trimmed === '') {
-        await deleteWantBid(slug, { event_listing: item.event_listing })
+        await deleteWantBid(slug, { event_listing: listingId })
       } else {
-        await setWantBid(slug, { event_listing: item.event_listing, amount: trimmed })
+        await setWantBid(slug, { event_listing: listingId, amount: trimmed })
       }
     }
   }
@@ -957,12 +978,23 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                 className="rounded-xl border border-ink/15 bg-white px-3 py-2 flex items-center justify-between gap-2"
               >
                 <div className="min-w-0">
-                  <span className="text-sm text-ink font-medium truncate block">
-                    {item.board_game_name}
-                  </span>
-                  <span className="text-xs text-blue-600 font-mono">{item.listing_code}</span>
+                  {item.combo != null ? (
+                    <>
+                      <span className="text-sm text-ink font-medium truncate block">
+                        🎁 {item.combo_name}
+                      </span>
+                      <span className="text-xs text-amber-600 font-mono">{item.combo_code}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-ink font-medium truncate block">
+                        {item.board_game_name}
+                      </span>
+                      <span className="text-xs text-blue-600 font-mono">{item.listing_code}</span>
+                    </>
+                  )}
                 </div>
-                {moneyEnabled && (
+                {moneyEnabled && item.combo == null && (
                   <div className="flex shrink-0 items-center gap-1">
                     <span className="text-xs text-moss/70">pay ≤$</span>
                     <input
