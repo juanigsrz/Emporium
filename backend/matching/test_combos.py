@@ -138,3 +138,23 @@ class ComboLoadTests(TestCase):
         self.assertIsNone(row.event_listing_id)
         self.assertEqual(row.giver_id, self.owner.id)
         self.assertEqual(row.receiver_id, self.wisher.id)
+
+    def test_combo_move_links_wish_id(self):
+        # wisher has a wish wanting the combo -> the combo assignment carries wish_id
+        og = OfferGroup.objects.create(event=self.event, user=self.wisher,
+                                       name="og", max_give=1)
+        OfferGroupItem.objects.create(offer_group=og, event_listing=self.elw)
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher,
+                                      name="wg", min_receive=1)
+        WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        wish = TradeWish.objects.create(event=self.event, user=self.wisher,
+                                        offer_group=og, want_group=wg, active=True)
+        run = MatchRun.objects.create(event=self.event, algorithm="gurobi")
+        out = (
+            "Trade Results:\n"
+            f"{self.combo.combo_code} -> {self.cw.listing_code}\n"
+            f"{self.cw.listing_code} -> {self.combo.combo_code}\n"
+        )
+        load_solution(run, out)
+        row = TradeAssignment.objects.get(match_run=run, combo=self.combo)
+        self.assertEqual(row.wish_id, wish.id)

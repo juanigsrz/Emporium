@@ -463,34 +463,6 @@ def parse_gurobi_settlement(output: str):
     return transfers
 
 
-def _assign_components(resolved):
-    """Weakly-connected components over users joined by each move (XTOY)."""
-    parent = {}
-
-    def find(x):
-        parent.setdefault(x, x)
-        root = x
-        while parent[root] != root:
-            root = parent[root]
-        while parent[x] != root:
-            parent[x], x = root, parent[x]
-        return root
-
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[ra] = rb
-
-    for _el, giver, receiver, _g in resolved:
-        union(giver.id, receiver.id)
-
-    roots = {}
-    for row in resolved:
-        r = find(row[1].id)
-        roots.setdefault(r, len(roots))
-        row[3] = roots[r]
-
-
 def _assign_components_v2(resolved):
     """Weakly-connected components for rows [kind, target, giver, receiver, group]."""
     parent = {}
@@ -533,7 +505,7 @@ def load_solution(match_run, raw_output: str):
 
     event = match_run.event
     listings, by_code, by_id = _listing_index(event)
-    _combos, combo_by_code, _combo_by_id = _combo_index(event)
+    _combos, combo_by_code, combo_by_id = _combo_index(event)
 
     parsed = parse_gurobi(raw_output)
 
@@ -584,7 +556,7 @@ def load_solution(match_run, raw_output: str):
         _assign_components_v2(resolved)
 
     # Best-effort: which of the receiver's active wishes this move satisfies.
-    wish_index = _build_wish_index(event, by_id)
+    wish_index = _build_wish_index(event, by_id, combo_by_id)
 
     from trades.pricing import resolve_ask_target
 
@@ -707,13 +679,13 @@ def load_solution(match_run, raw_output: str):
     return result, summary, log
 
 
-def _build_wish_index(event, by_id):
+def _build_wish_index(event, by_id, combo_by_id=None):
     """receiver_user_id -> [(expanded_codes:set, wish_id), ...]."""
     block_pairs = _block_pairs()
     idx = defaultdict(list)
     for w in _active_wishes(event):
         blocked = _blocked_with(w.user_id, block_pairs)
-        codes = set(_expand(w.want_group.items.all(), w.user_id, by_id, blocked))
+        codes = set(_expand(w.want_group.items.all(), w.user_id, by_id, blocked, combo_by_id))
         idx[w.user_id].append((codes, w.id))
     return idx
 
