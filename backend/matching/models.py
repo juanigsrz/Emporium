@@ -37,6 +37,9 @@ class MatchRun(models.Model):
     summary     = models.JSONField(default=dict)  # counts: matched_wishes, cycles, unmatched
     result      = models.JSONField(default=dict)  # full result blob per DATA_MODEL schema
     log         = models.TextField(blank=True)    # human-readable progress log
+    # Set once apply_carryover has flipped traded copies + minted fresh ones for
+    # this run's receivers (idempotency guard).
+    carried_over = models.BooleanField(default=False)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

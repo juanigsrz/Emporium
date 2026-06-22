@@ -24,7 +24,11 @@ Permissions:
     - Listings delete: copy.owner == request.user
 """
 
+import logging
+
 from django.contrib.auth import get_user_model
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -173,6 +177,13 @@ class TradeEventViewSet(
 
         event.status = target
         event.save(update_fields=["status", "updated"])
+
+        if target == TradeEvent.Status.ARCHIVED:
+            from matching.services import apply_carryover
+            try:
+                apply_carryover(event)
+            except Exception:  # never block archiving on a carryover hiccup (idempotent retry-safe)
+                logger.exception("carryover failed for event %s", event.slug)
 
         from notifications.models import Notification
         Notification.objects.bulk_create([
