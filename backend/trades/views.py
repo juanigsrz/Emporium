@@ -456,9 +456,21 @@ class WantBidView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
+        combo = request.query_params.get("combo")
+        if combo:
+            try:
+                combo_id = int(combo)
+            except (TypeError, ValueError):
+                raise ValidationError({"combo": "Must be an integer."})
+            WantBid.objects.filter(
+                user=request.user, event=event, combo_id=combo_id
+            ).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
         el = request.query_params.get("event_listing")
         if not el:
-            raise ValidationError({"detail": "event_listing query param required."})
+            raise ValidationError(
+                {"detail": "event_listing or combo query param required."}
+            )
         try:
             el_id = int(el)
         except (TypeError, ValueError):

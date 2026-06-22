@@ -144,3 +144,41 @@ class ComboPricingTests(TestCase):
         )
         ser = WantGroupItemSerializer(wi, context={"event": self.event})
         self.assertEqual(ser.data["resolved_bid"], "27.50")
+
+
+class ComboBidDeleteTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user("bo", "bo@t.test", "pass1234")
+        cls.wisher = User.objects.create_user("bw", "bw@t.test", "pass1234")
+        cls.bg1 = BoardGame.objects.create(bgg_id=7001, name="Bd1")
+        cls.bg2 = BoardGame.objects.create(bgg_id=7002, name="Bd2")
+        cls.event = TradeEvent.objects.create(
+            name="BidDel Ev", organizer=cls.owner, status="WANTLIST_OPEN",
+            money_enabled=True,
+        )
+        cls.c1 = Copy.objects.create(owner=cls.owner, board_game=cls.bg1)
+        cls.c2 = Copy.objects.create(owner=cls.owner, board_game=cls.bg2)
+        cls.el1 = EventListing.objects.create(event=cls.event, copy=cls.c1)
+        cls.el2 = EventListing.objects.create(event=cls.event, copy=cls.c2)
+        cls.combo = Combo.objects.create(event=cls.event, owner=cls.owner, name="cb")
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el1)
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
+
+    def test_delete_combo_bid(self):
+        from trades.models import WantBid
+        self.client.force_authenticate(self.wisher)
+        self.client.put(
+            f"/api/events/{self.event.slug}/want-bids/",
+            {"combo": self.combo.id, "amount": "30.00"}, format="json",
+        )
+        self.assertTrue(
+            WantBid.objects.filter(user=self.wisher, combo=self.combo).exists()
+        )
+        resp = self.client.delete(
+            f"/api/events/{self.event.slug}/want-bids/?combo={self.combo.id}"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            WantBid.objects.filter(user=self.wisher, combo=self.combo).exists()
+        )
