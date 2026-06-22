@@ -78,3 +78,19 @@ class ComboExportTests(TestCase):
         wish_lines = [l for l in lines if l.startswith(f"{self.wisher.username} : ")]
         self.assertTrue(any(self.combo.combo_code in l for l in wish_lines),
                         f"combo not in any wish take side: {wish_lines}")
+
+    def test_combo_appears_as_give(self):
+        # owner offers the combo (give side) in exchange for the wisher's game
+        og = OfferGroup.objects.create(event=self.event, user=self.owner,
+                                       name="og2", max_give=1)
+        OfferGroupItem.objects.create(offer_group=og, combo=self.combo)
+        wg = WantGroup.objects.create(event=self.event, user=self.owner,
+                                      name="wg2", min_receive=1)
+        WantGroupItem.objects.create(want_group=wg, event_listing=self.elw)
+        TradeWish.objects.create(event=self.event, user=self.owner, offer_group=og,
+                                 want_group=wg, active=True)
+        owner_lines = [l for l in self._lines()
+                       if l.startswith(f"{self.owner.username} : ")]
+        give_sides = [l.split("->")[0] for l in owner_lines]
+        self.assertTrue(any(self.combo.combo_code in g for g in give_sides),
+                        f"combo not on give side: {owner_lines}")

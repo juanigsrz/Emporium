@@ -176,7 +176,7 @@ def _expand(want_items, user_id, by_id, blocked, combo_by_id=None):
 
 def build_wants(event, include_locations: bool = False) -> str:
     listings, by_code, by_id = _listing_index(event)
-    combos, combo_by_code, combo_by_id = _combo_index(event)
+    combos, _combo_by_code, combo_by_id = _combo_index(event)  # by_code used by load_solution
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
 
