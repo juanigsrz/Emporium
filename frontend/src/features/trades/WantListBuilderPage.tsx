@@ -345,7 +345,7 @@ function OfferGroupForm({ slug, myListings, moneyEnabled, existing, onSave, onCa
           <input
             type="number"
             min={1}
-            max={myListings.length || 1}
+            max={(myListings.length + myCombos.length) || 1}
             value={maxGive}
             onChange={(e) => setMaxGive(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
