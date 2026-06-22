@@ -491,6 +491,34 @@ def _assign_components(resolved):
         row[3] = roots[r]
 
 
+def _assign_components_v2(resolved):
+    """Weakly-connected components for rows [kind, target, giver, receiver, group]."""
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for _kind, _target, giver, receiver, _g in resolved:
+        union(giver.id, receiver.id)
+
+    roots = {}
+    for row in resolved:
+        r = find(row[2].id)
+        roots.setdefault(r, len(roots))
+        row[4] = roots[r]
+
+
 # ---------------------------------------------------------------------------
 # Load a parsed solution onto a MatchRun
 # ---------------------------------------------------------------------------
@@ -505,24 +533,31 @@ def load_solution(match_run, raw_output: str):
 
     event = match_run.event
     listings, by_code, by_id = _listing_index(event)
+    _combos, combo_by_code, _combo_by_id = _combo_index(event)
 
     parsed = parse_gurobi(raw_output)
 
-    # Resolve tokens -> [moved_el, giver_user, receiver_user, group]
-    resolved = []
+    def _resolve_token(code):
+        """Return (target, owner) where target is an EventListing or Combo."""
+        el = by_code.get(code)
+        if el is not None:
+            return ("listing", el, el.copy.owner)
+        combo = combo_by_code.get(code)
+        if combo is not None:
+            return ("combo", combo, combo.owner)
+        raise ValueError(f"Unknown token in solution: {code!r}")
+
+    resolved = []  # [kind, target, giver, receiver, group]
     for moved_code, recv_code, group in parsed:
-        moved_el = by_code.get(moved_code)
-        if moved_el is None:
-            raise ValueError(f"Unknown listing code in solution: {moved_code!r}")
-        recv_el = by_code.get(recv_code)
-        if recv_el is None:
-            raise ValueError(f"Unknown listing code in solution: {recv_code!r}")
-        resolved.append([moved_el, moved_el.copy.owner, recv_el.copy.owner, group])
+        moved_kind, moved_target, moved_owner = _resolve_token(moved_code)
+        _recv_kind, _recv_target, recv_owner = _resolve_token(recv_code)
+        resolved.append([moved_kind, moved_target, moved_owner, recv_owner, group])
 
     # Cash purchases (money mode): the buyer (receiver) is named only by
     # username in the `Cash Purchases:` section, so it can't be resolved via a
     # listing-code anchor like a swap. Resolve the buyer directly.
     cash_by_listing = {}  # event_listing.id -> Decimal dollars
+    cash_by_combo = {}    # combo.id -> Decimal dollars
     cash_moves = parse_gurobi_cash(raw_output)
     if cash_moves:
         from django.contrib.auth import get_user_model
@@ -533,43 +568,64 @@ def load_solution(match_run, raw_output: str):
             for u in get_user_model().objects.filter(username__in=names)
         }
         for moved_code, buyer_username, amount_cents in cash_moves:
-            moved_el = by_code.get(moved_code)
-            if moved_el is None:
-                raise ValueError(f"Unknown listing code in cash purchase: {moved_code!r}")
+            moved_kind, moved_target, moved_owner = _resolve_token(moved_code)
             buyer = users_by_name.get(buyer_username)
             if buyer is None:
                 raise ValueError(f"Unknown buyer in cash purchase: {buyer_username!r}")
-            cash_by_listing[moved_el.id] = Decimal(amount_cents) / 100
-            resolved.append([moved_el, moved_el.copy.owner, buyer, None])
+            cash_amt = Decimal(amount_cents) / 100
+            if moved_kind == "listing":
+                cash_by_listing[moved_target.id] = cash_amt
+            else:
+                cash_by_combo[moved_target.id] = cash_amt
+            resolved.append([moved_kind, moved_target, moved_owner, buyer, None])
 
-    # XTOY came back without groups -> recover connected components.
-    if resolved and resolved[0][3] is None:
-        _assign_components(resolved)
+    # XTOY came back without groups -> recover connected components by user.
+    if resolved and resolved[0][4] is None:
+        _assign_components_v2(resolved)
 
     # Best-effort: which of the receiver's active wishes this move satisfies.
     wish_index = _build_wish_index(event, by_id)
 
-    from trades.pricing import resolve_ask
+    from trades.pricing import resolve_ask_target
 
-    rows = []  # (moved_el, giver, receiver, cycle_id, wish_id, cash_amount, item_value)
-    for moved_el, giver, receiver, group in resolved:
-        wid = _match_wish(wish_index, receiver.id, moved_el.copy.listing_code)
-        amt = cash_by_listing.get(moved_el.id)
-        # item_value = the money on this item: the parsed cash-buy amount when present
-        # (authoritative, from the solver), else the resolved ask for a swap leg.
-        val = amt if amt is not None else resolve_ask(moved_el)
-        rows.append((moved_el, giver, receiver, (group or 0) + 1, wid, amt, val))
+    rows = []  # (kind, target, giver, receiver, cycle_id, wish_id, cash_amount, item_value)
+    for kind, target, giver, receiver, group in resolved:
+        if kind == "listing":
+            token = target.copy.listing_code
+            amt = cash_by_listing.get(target.id)
+        else:
+            token = target.combo_code
+            amt = cash_by_combo.get(target.id)
+        wid = _match_wish(wish_index, receiver.id, token)
+        val = amt if amt is not None else resolve_ask_target(target)
+        rows.append((kind, target, giver, receiver, (group or 0) + 1, wid, amt, val))
 
     cycles = defaultdict(list)
-    for moved_el, giver, receiver, cid, wid, amt, val in rows:
-        cycles[cid].append({
-            "listing_code": moved_el.copy.listing_code,
-            "board_game": moved_el.copy.board_game.name,
+    for kind, target, giver, receiver, cid, wid, amt, val in rows:
+        if kind == "listing":
+            step = {
+                "listing_code": target.copy.listing_code,
+                "board_game": target.copy.board_game.name,
+                "combo_code": None,
+            }
+        else:
+            members = list(target.items.all())
+            step = {
+                "listing_code": None,
+                "board_game": ", ".join(
+                    ci.event_listing.copy.board_game.name for ci in members
+                ),
+                "combo_code": target.combo_code,
+                "combo_name": target.name,
+                "members": [ci.event_listing.copy.listing_code for ci in members],
+            }
+        step.update({
             "from_user": giver.username,
             "to_user": receiver.username,
             "wish_id": wid,
             "cash_amount": str(amt) if amt is not None else None,
         })
+        cycles[cid].append(step)
     cycle_list = [
         {"id": cid, "length": len(steps), "steps": steps}
         for cid, steps in sorted(cycles.items())
@@ -583,7 +639,7 @@ def load_solution(match_run, raw_output: str):
     summary_net = parse_gurobi_cash_summary(raw_output)
     if summary_net:
         recon = defaultdict(int)  # username -> net cents (received - given)
-        for moved_el, giver, receiver, cid, wid, amt, val in rows:
+        for kind, target, giver, receiver, cid, wid, amt, val in rows:
             if val:
                 cents = _to_cents(val)
                 recon[receiver.username] += cents
@@ -602,7 +658,7 @@ def load_solution(match_run, raw_output: str):
         })
 
     active_wishes = _active_wishes(event)
-    received_user_ids = {r[2].id for r in rows}
+    received_user_ids = {r[3].id for r in rows}
     unmatched = [
         {"wish_id": w.id, "reason": "no items received"}
         for w in active_wishes if w.user_id not in received_user_ids
@@ -631,7 +687,8 @@ def load_solution(match_run, raw_output: str):
     TradeAssignment.objects.bulk_create([
         TradeAssignment(
             match_run=match_run,
-            event_listing=moved_el,
+            event_listing=(target if kind == "listing" else None),
+            combo=(target if kind == "combo" else None),
             giver=giver,
             receiver=receiver,
             wish_id=wid,
@@ -639,7 +696,7 @@ def load_solution(match_run, raw_output: str):
             cash_amount=amt,
             item_value=val,
         )
-        for moved_el, giver, receiver, cid, wid, amt, val in rows
+        for kind, target, giver, receiver, cid, wid, amt, val in rows
     ])
 
     log = (

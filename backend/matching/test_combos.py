@@ -94,3 +94,47 @@ class ComboExportTests(TestCase):
         give_sides = [l.split("->")[0] for l in owner_lines]
         self.assertTrue(any(self.combo.combo_code in g for g in give_sides),
                         f"combo not on give side: {owner_lines}")
+
+
+from matching.external_solver import load_solution
+from matching.models import MatchRun, TradeAssignment
+
+
+class ComboLoadTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user("lo", "lo@t.test", "pass1234")
+        cls.wisher = User.objects.create_user("lw", "lw@t.test", "pass1234")
+        cls.bg1 = BoardGame.objects.create(bgg_id=6001, name="L1")
+        cls.bg2 = BoardGame.objects.create(bgg_id=6002, name="L2")
+        cls.bgw = BoardGame.objects.create(bgg_id=6003, name="LW")
+        cls.event = TradeEvent.objects.create(
+            name="L Ev", organizer=cls.owner, status="MATCHING", money_enabled=False
+        )
+        cls.c1 = Copy.objects.create(owner=cls.owner, board_game=cls.bg1)
+        cls.c2 = Copy.objects.create(owner=cls.owner, board_game=cls.bg2)
+        cls.el1 = EventListing.objects.create(event=cls.event, copy=cls.c1)
+        cls.el2 = EventListing.objects.create(event=cls.event, copy=cls.c2)
+        cls.combo = Combo.objects.create(event=cls.event, owner=cls.owner, name="bundle")
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el1)
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
+        cls.cw = Copy.objects.create(owner=cls.wisher, board_game=cls.bgw)
+        cls.elw = EventListing.objects.create(event=cls.event, copy=cls.cw)
+
+    def test_combo_move_loads_as_single_assignment(self):
+        run = MatchRun.objects.create(event=self.event, algorithm="gurobi")
+        # wisher gives their copy LW, receives the combo:
+        #   "<wisher give> -> <combo>" reads combo given so wisher's item received
+        # Solver emits two barter edges for the cycle; the combo token is K-...
+        out = (
+            "Trade Results:\n"
+            f"{self.combo.combo_code} -> {self.cw.listing_code}\n"
+            f"{self.cw.listing_code} -> {self.combo.combo_code}\n"
+        )
+        result, summary, log = load_solution(run, out)
+        combo_rows = TradeAssignment.objects.filter(match_run=run, combo=self.combo)
+        self.assertEqual(combo_rows.count(), 1)
+        row = combo_rows.first()
+        self.assertIsNone(row.event_listing_id)
+        self.assertEqual(row.giver_id, self.owner.id)
+        self.assertEqual(row.receiver_id, self.wisher.id)
