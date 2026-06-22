@@ -128,3 +128,58 @@ class TradeCapAPITests(APITestCase):
         self.client.force_authenticate(self.other)
         resp = self.client.delete(f"{self._url()}{created['id']}/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+from matching.external_solver import build_wants
+from trades.models import OfferGroup, OfferGroupItem, TradeWish, WantGroup, WantGroupItem
+
+
+class TradeCapExportTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user("ce_o", "ce_o@t.test", "pass1234")
+        cls.wisher = User.objects.create_user("ce_w", "ce_w@t.test", "pass1234")
+        cls.bg1 = BoardGame.objects.create(bgg_id=9201, name="E1")
+        cls.bg2 = BoardGame.objects.create(bgg_id=9202, name="E2")
+        cls.event = TradeEvent.objects.create(
+            name="Cap Exp Ev", organizer=cls.owner, status="WANTLIST_OPEN"
+        )
+        cls.c1 = Copy.objects.create(owner=cls.owner, board_game=cls.bg1)
+        cls.c2 = Copy.objects.create(owner=cls.owner, board_game=cls.bg2)
+        cls.el1 = EventListing.objects.create(event=cls.event, copy=cls.c1)
+        cls.el2 = EventListing.objects.create(event=cls.event, copy=cls.c2)
+        cls.combo = Combo.objects.create(event=cls.event, owner=cls.owner, name="cb")
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el1)
+        ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
+
+    def test_give_cap_emits_givecap_line(self):
+        cap = TradeCap.objects.create(event=self.event, user=self.owner,
+                                      kind=TradeCap.Kind.GIVE, n=1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
+        TradeCapItem.objects.create(cap=cap, combo=self.combo)
+        lines = build_wants(self.event).splitlines()
+        self.assertIn(
+            f"givecap {self.owner.username} 1 {self.c1.listing_code} {self.combo.combo_code}",
+            lines,
+        )
+
+    def test_take_cap_emits_takecap_line(self):
+        cap = TradeCap.objects.create(event=self.event, user=self.wisher,
+                                      kind=TradeCap.Kind.TAKE, n=2)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el2)
+        lines = build_wants(self.event).splitlines()
+        tokens = " ".join(sorted([self.c1.listing_code, self.c2.listing_code]))
+        self.assertIn(
+            f"takecap {self.wisher.username} 2 {tokens}",
+            lines,
+        )
+
+    def test_inactive_item_skipped(self):
+        cap = TradeCap.objects.create(event=self.event, user=self.owner,
+                                      kind=TradeCap.Kind.GIVE, n=1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el2)
+        EventListing.objects.filter(id=self.el2.id).update(active=False)
+        lines = build_wants(self.event).splitlines()
+        self.assertIn(f"givecap {self.owner.username} 1 {self.c1.listing_code}", lines)

@@ -187,8 +187,9 @@ def build_wants(event, include_locations: bool = False) -> str:
     )
     body = _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs)
     givecap_block = _build_givecaps(combos)
+    caps_block = _build_user_caps(event, by_id, combo_by_id)
     location_block = _location_lines(listings, wishes) if include_locations else ""
-    return money_block + body + givecap_block + location_block
+    return money_block + body + givecap_block + caps_block + location_block
 
 
 def _to_cents(amount) -> int:
@@ -335,6 +336,38 @@ def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs) -> str:
     for (username, _bg_id), codes in sorted(dup_groups.items()):
         if len(codes) >= 2:
             lines.append(f"dupcap {username} {' '.join(sorted(codes))}")
+    return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _build_user_caps(event, by_id, combo_by_id) -> str:
+    """User-defined caps: one `takecap`/`givecap <user> <n> <tokens>` line per
+    active TradeCap. Tokens resolve to active listing/combo codes; items whose
+    listing/combo is inactive are skipped, and a cap with no live tokens is
+    dropped. Additive to the auto dupcap/combo-givecap lines."""
+    from trades.models import TradeCap
+
+    caps = (
+        TradeCap.objects.filter(event=event)
+        .select_related("user")
+        .prefetch_related("items__event_listing__copy", "items__combo")
+        .order_by("id")
+    )
+    lines = []
+    for cap in caps:
+        tokens = []
+        for it in cap.items.all():
+            if it.event_listing_id:
+                el = by_id.get(it.event_listing_id)
+                if el:
+                    tokens.append(el.copy.listing_code)
+            elif it.combo_id:
+                c = combo_by_id.get(it.combo_id)
+                if c:
+                    tokens.append(c.combo_code)
+        if not tokens:
+            continue
+        directive = "takecap" if cap.kind == TradeCap.Kind.TAKE else "givecap"
+        lines.append(f"{directive} {cap.user.username} {cap.n} {' '.join(sorted(tokens))}")
     return ("\n".join(lines) + "\n") if lines else ""
 
 
