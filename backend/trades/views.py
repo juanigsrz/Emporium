@@ -30,8 +30,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice, WantBid
-from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer, WantBidSerializer
+from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice, WantBid, TradeCap
+from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer, WantBidSerializer, TradeCapSerializer
 
 
 # ---------------------------------------------------------------------------
@@ -478,4 +478,64 @@ class WantBidView(EventScopedMixin, APIView):
         WantBid.objects.filter(
             user=request.user, event=event, event_listing_id=el_id
         ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TradeCapListCreateView(EventScopedMixin, APIView):
+    """GET/POST /api/events/{slug}/caps/ — the user's own caps."""
+
+    _PREFETCH = ("items__event_listing__copy__board_game", "items__combo")
+
+    def get(self, request, slug):
+        event = self._get_event(slug)
+        qs = (
+            TradeCap.objects.filter(event=event, user=request.user)
+            .prefetch_related(*self._PREFETCH)
+            .order_by("-created")
+        )
+        return self._paginate(qs, TradeCapSerializer, request, event)
+
+    def post(self, request, slug):
+        event = self._get_event(slug)
+        self._assert_editable(event)
+        ctx = self._serializer_context(request, event)
+        ser = TradeCapSerializer(data=request.data, context=ctx)
+        ser.is_valid(raise_exception=True)
+        cap = ser.save(event=event, user=request.user)
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=ctx).data,
+                        status=status.HTTP_201_CREATED)
+
+
+class TradeCapDetailView(EventScopedMixin, APIView):
+    """GET/PATCH/DELETE /api/events/{slug}/caps/{id}/ — owner-only."""
+
+    _PREFETCH = ("items__event_listing__copy__board_game", "items__combo")
+
+    def _get_cap(self, slug, pk, request):
+        event = self._get_event(slug)
+        cap = get_object_or_404(TradeCap, pk=pk, event=event)
+        if cap.user_id != request.user.id:
+            raise PermissionDenied("You do not own this cap.")
+        return event, cap
+
+    def get(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=self._serializer_context(request, event)).data)
+
+    def patch(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        self._assert_editable(event)
+        ctx = self._serializer_context(request, event)
+        ser = TradeCapSerializer(cap, data=request.data, partial=True, context=ctx)
+        ser.is_valid(raise_exception=True)
+        cap = ser.save()
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=ctx).data)
+
+    def delete(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        self._assert_editable(event)
+        cap.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

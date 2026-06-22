@@ -19,6 +19,8 @@ from .views import (
     GamePriceView,
     OfferGroupDetailView,
     OfferGroupListCreateView,
+    TradeCapDetailView,
+    TradeCapListCreateView,
     TradeWishDetailView,
     TradeWishListCreateView,
     WantBidView,
@@ -71,5 +73,16 @@ urlpatterns = [
         "events/<slug:slug>/want-bids/",
         WantBidView.as_view(),
         name="want-bid",
+    ),
+    # Trade Caps
+    path(
+        "events/<slug:slug>/caps/",
+        TradeCapListCreateView.as_view(),
+        name="trade-cap-list",
+    ),
+    path(
+        "events/<slug:slug>/caps/<int:pk>/",
+        TradeCapDetailView.as_view(),
+        name="trade-cap-detail",
     ),
 ]
