@@ -56,8 +56,10 @@ def _active_wishes(event):
         .select_related("user", "offer_group", "want_group")
         .prefetch_related(
             "offer_group__items__event_listing__copy",
+            "offer_group__items__combo",
             "want_group__items",
             "want_group__items__event_listing__copy",
+            "want_group__items__combo",
         )
     )
 
@@ -133,14 +135,35 @@ def _distance_blocked(user_id, coords):
     return blocked
 
 
-def _expand(want_items, user_id, by_id, blocked):
-    """Canonical wants -> concrete listing_codes (others' active copies).
+def _combo_index(event):
+    """Active Combos of the event, indexed by code / id, members prefetched."""
+    from events.models import Combo
+
+    combos = list(
+        Combo.objects.filter(event=event, active=True)
+        .select_related("owner")
+        .prefetch_related("items__event_listing__copy")
+    )
+    by_code, by_id = {}, {}
+    for c in combos:
+        by_code[c.combo_code] = c
+        by_id[c.id] = c
+    return combos, by_code, by_id
+
+
+def _expand(want_items, user_id, by_id, blocked, combo_by_id=None):
+    """Canonical wants -> concrete tokens (others' active listings / combos).
 
     Binary wants — no priority. Returns a deterministic, sorted list, excluding
-    the wisher's own copies and any owned by a blocked user.
+    the wisher's own items and any owned by a blocked user.
     """
     codes = set()
     for it in want_items:
+        if getattr(it, "combo_id", None):
+            c = (combo_by_id or {}).get(it.combo_id)
+            if c and c.owner_id != user_id and c.owner_id not in blocked:
+                codes.add(c.combo_code)
+            continue
         el = by_id.get(it.event_listing_id)
         if el and el.copy.owner_id != user_id and el.copy.owner_id not in blocked:
             codes.add(el.copy.listing_code)
@@ -153,16 +176,19 @@ def _expand(want_items, user_id, by_id, blocked):
 
 def build_wants(event, include_locations: bool = False) -> str:
     listings, by_code, by_id = _listing_index(event)
+    combos, combo_by_code, combo_by_id = _combo_index(event)
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
 
     money_block = (
-        _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs)
+        _build_xtoy_money_directives(
+            event, listings, combos, wishes, by_id, combo_by_id, block_pairs)
         if event.money_enabled else ""
     )
-    body = _build_xtoy(wishes, by_id, by_code, block_pairs)
+    body = _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs)
+    givecap_block = _build_givecaps(combos)
     location_block = _location_lines(listings, wishes) if include_locations else ""
-    return money_block + body + location_block
+    return money_block + body + givecap_block + location_block
 
 
 def _to_cents(amount) -> int:
@@ -170,7 +196,7 @@ def _to_cents(amount) -> int:
     return int((Decimal(str(amount)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) -> str:
+def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_by_id, block_pairs) -> str:
     """Emit user/item/bid directives for main.py when money is enabled on an XTOY event.
 
     Returns a string block (ending with newline) or empty string if nothing to emit.
@@ -181,8 +207,10 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
     """
     from events.models import EventParticipation
     from trades.pricing import (
-        load_bids, load_game_prices, resolve_ask, resolve_bid,
+        load_bids, load_combo_bids, load_game_prices,
+        resolve_ask, resolve_ask_target, resolve_bid,
     )
+    combo_bids = load_combo_bids(event)
 
     # Preload pricing rows once; resolve_ask/resolve_bid below run per item.
     bids = load_bids(event)
@@ -218,6 +246,15 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
         else:
             lines.append(f"item {code} owner {owner_username}")
 
+    # --- combo item lines ---
+    for c in sorted(combos, key=lambda x: x.combo_code):
+        owner_username = c.owner.username
+        ask = resolve_ask_target(c)
+        if ask is not None:
+            lines.append(f"item {c.combo_code} owner {owner_username} ask {_to_cents(ask)}")
+        else:
+            lines.append(f"item {c.combo_code} owner {owner_username}")
+
     # --- bid lines ---
     # De-duplicate: (username, code) -> max bid in cents
     bid_map = {}
@@ -229,17 +266,20 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
             _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
         )
         username = w.user.username
-        give_codes = {
-            ogi.event_listing.copy.listing_code
-            for ogi in w.offer_group.items.all()
-            if ogi.event_listing.active
-        }
+        give_codes = set()
+        for ogi in w.offer_group.items.all():
+            if ogi.combo_id:
+                c = combo_by_id.get(ogi.combo_id)
+                if c:
+                    give_codes.add(c.combo_code)
+            elif ogi.event_listing and ogi.event_listing.active:
+                give_codes.add(ogi.event_listing.copy.listing_code)
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, event, it, bids, game_prices)
+            bid = resolve_bid(w.user, event, it, bids, game_prices, combo_bids)
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)
-            codes = _expand([it], w.user_id, by_id, blocked)
+            codes = _expand([it], w.user_id, by_id, blocked, combo_by_id)
             codes = [c for c in codes if c not in give_codes]
             for code in codes:
                 key = (username, code)
@@ -252,15 +292,12 @@ def _build_xtoy_money_directives(event, listings, wishes, by_id, block_pairs) ->
     return ("\n".join(lines) + "\n") if lines else ""
 
 
-def _build_xtoy(wishes, by_id, by_code, block_pairs) -> str:
+def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs) -> str:
     """gurobi: one `username : (NforM) give -> take` line per active wish.
 
-    A duplicate-protected wish lists its real take copies and contributes a
-    `dupcap <username> <copies>` directive per (user, canonical game) that has
-    >=2 acceptable copies. The solver caps the user's total receipts (swap +
-    cash) of those copies at one. dupcap lines are emitted after the wish lines,
-    sorted by (username, board_game_id), and union a user's copies for a game
-    across all of their dup-protected wishes.
+    Give/take tokens are listing_codes or combo_codes. A duplicate-protected
+    wish contributes `dupcap` over its multi-copy *listing* takes (combos are
+    not game-grouped — see the combos spec, out-of-scope note).
     """
     blocked_cache = {}
     coords = _load_coords()
@@ -271,12 +308,17 @@ def _build_xtoy(wishes, by_id, by_code, block_pairs) -> str:
             w.user_id,
             _blocked_with(w.user_id, block_pairs) | _distance_blocked(w.user_id, coords),
         )
-        give = sorted(
-            ogi.event_listing.copy.listing_code
-            for ogi in w.offer_group.items.all()
-            if ogi.event_listing.active
-        )
-        take = [c for c in _expand(w.want_group.items.all(), w.user_id, by_id, blocked)
+        give = set()
+        for ogi in w.offer_group.items.all():
+            if ogi.combo_id:
+                combo = combo_by_id.get(ogi.combo_id)
+                if combo:
+                    give.add(combo.combo_code)
+            elif ogi.event_listing and ogi.event_listing.active:
+                give.add(ogi.event_listing.copy.listing_code)
+        give = sorted(give)
+        take = [c for c in _expand(w.want_group.items.all(), w.user_id, by_id,
+                                   blocked, combo_by_id)
                 if c not in give]
         if not give or not take:
             continue
@@ -284,13 +326,28 @@ def _build_xtoy(wishes, by_id, by_code, block_pairs) -> str:
         m = w.want_group.min_receive
         if w.want_group.duplicate_protection:
             for code in take:
-                key = (w.user.username, by_code[code].copy.board_game_id)
+                el = by_code.get(code)
+                if el is None:   # combo token: not game-grouped
+                    continue
+                key = (w.user.username, el.copy.board_game_id)
                 dup_groups.setdefault(key, set()).add(code)
         lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
     for (username, _bg_id), codes in sorted(dup_groups.items()):
         if len(codes) >= 2:
             lines.append(f"dupcap {username} {' '.join(sorted(codes))}")
     return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _build_givecaps(combos) -> str:
+    """One `givecap <owner> 1 <member_code> <combo_code>` per combo member, so a
+    physical copy leaves at most once — standalone or inside the combo."""
+    lines = []
+    for c in combos:
+        owner = c.owner.username
+        for ci in c.items.all():
+            member_code = ci.event_listing.copy.listing_code
+            lines.append(f"givecap {owner} 1 {member_code} {c.combo_code}")
+    return ("\n".join(sorted(lines)) + "\n") if lines else ""
 
 
 # ---------------------------------------------------------------------------
