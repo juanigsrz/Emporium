@@ -31,6 +31,8 @@ import type {
   WantGroupItemPayload,
   TradeWish,
 } from '../../api/trades'
+import { useCombos } from '../../api/combos'
+import type { Combo } from '../../api/combos'
 
 // ---- Helpers ----
 
@@ -220,16 +222,26 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
         <p className="text-xs text-moss/70 italic">No listings in this group.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {group.items.map((item) => (
-            <span
-              key={item.id}
-              className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink"
-            >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              <span className="font-mono text-moss/70">{item.listing_code}</span>
-              {item.board_game_name}
-            </span>
-          ))}
+          {group.items.map((item) =>
+            item.combo != null ? (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+              >
+                🎁 {item.combo_name}
+                <span className="font-mono text-amber-700/70">{item.combo_code}</span>
+              </span>
+            ) : (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink"
+              >
+                <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
+                <span className="font-mono text-moss/70">{item.listing_code}</span>
+                {item.board_game_name}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>
@@ -245,21 +257,44 @@ interface OfferGroupFormProps {
     name: string
     max_give: number
     item_listing_ids: number[]
+    item_combo_ids: number[]
   }) => Promise<void>
   onCancel: () => void
   isSaving: boolean
 }
 
-function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+function OfferGroupForm({ slug, myListings, moneyEnabled, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+  const { data: combosData } = useCombos(slug, { mine: true })
+  const myCombos = combosData?.results ?? []
   const [name, setName] = useState(existing?.name ?? '')
   const [maxGive, setMaxGive] = useState(String(existing?.max_give ?? 1))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    new Set(existing?.items.map((i) => i.event_listing) ?? [])
+    new Set(
+      (existing?.items ?? [])
+        .filter((i) => i.event_listing != null)
+        .map((i) => i.event_listing as number)
+    )
+  )
+  const [selectedComboIds, setSelectedComboIds] = useState<Set<number>>(
+    new Set(
+      (existing?.items ?? [])
+        .filter((i) => i.combo != null)
+        .map((i) => i.combo as number)
+    )
   )
   const [formError, setFormError] = useState<string | null>(null)
 
   function toggleListing(id: number) {
     setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleCombo(id: number) {
+    setSelectedComboIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -273,10 +308,16 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
     if (!name.trim()) { setFormError('Name is required.'); return }
     const mg = parseInt(maxGive, 10)
     if (isNaN(mg) || mg < 1) { setFormError('Max give must be at least 1.'); return }
-    if (selectedIds.size === 0) { setFormError('Select at least one listing.'); return }
-    if (mg > selectedIds.size) { setFormError(`Max give (${mg}) cannot exceed the number of selected listings (${selectedIds.size}).`); return }
+    const totalSelected = selectedIds.size + selectedComboIds.size
+    if (totalSelected === 0) { setFormError('Select at least one listing or combo.'); return }
+    if (mg > totalSelected) { setFormError(`Max give (${mg}) cannot exceed the number of selected items (${totalSelected}).`); return }
 
-    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds) })
+    await onSave({
+      name: name.trim(),
+      max_give: mg,
+      item_listing_ids: Array.from(selectedIds),
+      item_combo_ids: Array.from(selectedComboIds),
+    })
   }
 
   return (
@@ -304,7 +345,7 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
           <input
             type="number"
             min={1}
-            max={myListings.length || 1}
+            max={(myListings.length + myCombos.length) || 1}
             value={maxGive}
             onChange={(e) => setMaxGive(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -349,6 +390,36 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
           </div>
         )}
       </div>
+
+      {myCombos.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-ink mb-1.5">
+            Or offer a combo ({selectedComboIds.size} selected)
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto">
+            {myCombos.map((c: Combo) => (
+              <label
+                key={c.id}
+                className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer transition-colors text-sm ${
+                  selectedComboIds.has(c.id)
+                    ? 'border-indigo-400 bg-white text-indigo-800'
+                    : 'border-ink/15 bg-white text-ink hover:border-indigo-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedComboIds.has(c.id)}
+                  onChange={() => toggleCombo(c.id)}
+                  className="h-3.5 w-3.5 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium">{c.name}</span>
+                <span className="font-mono text-xs text-moss/70">{c.combo_code}</span>
+                <span className="ml-auto text-xs text-moss/60">{c.items.length} items</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 pt-1">
         <button
@@ -719,13 +790,15 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   const [minReceive, setMinReceive] = useState(String(group?.min_receive ?? 1))
   const [dupProtect, setDupProtect] = useState(group?.duplicate_protection ?? false)
   const [items, setItems] = useState<DraftWantItem[]>(() =>
-    (group?.items ?? []).map((i) => ({
-      localId: makeDraftKey(i),
-      board_game_name: i.board_game_name,
-      event_listing: i.event_listing,
-      listing_code: i.listing_code,
-      bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
-    }))
+    (group?.items ?? [])
+      .filter((i) => i.event_listing != null)
+      .map((i) => ({
+        localId: makeDraftKey(i),
+        board_game_name: i.board_game_name,
+        event_listing: i.event_listing as number,
+        listing_code: i.listing_code,
+        bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
+      }))
   )
   const [gameSearch, setGameSearch] = useState('')
   const [activeGame, setActiveGame] = useState<EventGame | null>(null)
@@ -1212,25 +1285,27 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
 
           {(offerItems.length > 0 || wantItems.length > 0) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {offerItems.map((item) => (
-                <GameThumb
-                  key={item.id}
-                  src={item.board_game_thumbnail}
-                  alt={item.board_game_name ?? ''}
-                  className="h-7 w-7"
-                />
-              ))}
+              {offerItems.map((item) =>
+                item.combo != null ? (
+                  <span key={item.id} className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title={item.combo_name ?? 'combo'}>
+                    🎁 {item.combo_code}
+                  </span>
+                ) : (
+                  <GameThumb key={item.id} src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-7 w-7" />
+                )
+              )}
               <svg className="h-4 w-4 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
-              {wantItems.map((item) => (
-                <GameThumb
-                  key={item.id}
-                  src={item.board_game_thumbnail}
-                  alt={item.board_game_name ?? ''}
-                  className="h-7 w-7"
-                />
-              ))}
+              {wantItems.map((item) =>
+                item.combo != null ? (
+                  <span key={item.id} className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title={item.combo_name ?? 'combo'}>
+                    🎁 {item.combo_code}
+                  </span>
+                ) : (
+                  <GameThumb key={item.id} src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-7 w-7" />
+                )
+              )}
             </div>
           )}
         </div>

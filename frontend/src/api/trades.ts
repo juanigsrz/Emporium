@@ -7,11 +7,14 @@ import type { PaginatedResponse } from './games'
 
 export interface OfferGroupItem {
   id: number
-  event_listing: number
-  listing_code: string
-  board_game_name: string
+  event_listing: number | null
+  listing_code: string | null
+  board_game_name: string | null
   board_game_thumbnail: string
-  board_game_id: number
+  board_game_id: number | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
 }
 
 export interface OfferGroup {
@@ -31,6 +34,7 @@ export interface OfferGroupPayload {
   name: string
   max_give: number
   item_listing_ids: number[]
+  item_combo_ids?: number[]
 }
 
 export interface WantGroupItem {
@@ -39,8 +43,11 @@ export interface WantGroupItem {
   board_game_thumbnail: string
   /** Canonical bgg id of the listing's game — use to group items under a game. */
   board_game_id: number | null
-  event_listing: number
+  event_listing: number | null
   listing_code: string | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
   resolved_bid?: string | null
   bid_is_override?: boolean
 }
@@ -59,7 +66,8 @@ export interface WantGroup {
 }
 
 export interface WantGroupItemPayload {
-  event_listing: number
+  event_listing?: number
+  combo?: number
 }
 
 export interface WantGroupPayload {
@@ -206,13 +214,15 @@ export async function deleteGamePrice(slug: string, board_game: number): Promise
 // ---- Want Bids ----
 
 export interface WantBidPayload {
-  event_listing: number
+  event_listing?: number
+  combo?: number
   amount: string
 }
 
 export interface WantBid {
   id: number
-  event_listing: number
+  event_listing: number | null
+  combo: number | null
   amount: string
   updated: string
 }
@@ -224,7 +234,7 @@ export async function setWantBid(slug: string, body: WantBidPayload): Promise<Wa
 
 export async function deleteWantBid(
   slug: string,
-  target: { event_listing: number }
+  target: { event_listing: number } | { combo: number }
 ): Promise<void> {
   await apiClient.delete(`/events/${slug}/want-bids/`, { params: target })
 }

@@ -124,6 +124,7 @@ function buildModel(
   for (const og of offerGroups) {
     if (og.max_give === 1 && og.items.length === 1) {
       const lid = og.items[0].event_listing
+      if (lid == null) continue  // combo offer item: not a per-listing trio
       if (!offerGroupByListing.has(lid)) offerGroupByListing.set(lid, og)
     }
   }
@@ -145,6 +146,7 @@ function buildModel(
       if (wg) {
         wantGroupByListing.set(listing.id, wg)
         for (const item of wg.items) {
+          if (item.event_listing == null) continue  // combo want item: visual grid handles in 2b-ii
           const key = listingTargetKey(item.event_listing)
           set.add(key)
           if (!baseTargets.has(key)) {
@@ -328,7 +330,9 @@ function WantGroupControls({ slug, bggId, username, customWantGroups }: WantGrou
       return
     }
     const items: WantGroupItemPayload[] = [
-      ...group.items.map((i) => ({ event_listing: i.event_listing })),
+      ...group.items.map((i) =>
+        i.combo != null ? { combo: i.combo } : { event_listing: i.event_listing as number }
+      ),
       ...toAdd.map((id) => ({ event_listing: id })),
     ]
     try {
