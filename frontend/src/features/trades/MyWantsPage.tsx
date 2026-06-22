@@ -44,6 +44,8 @@ interface Target {
   gameName: string
   /** Thumbnail of the canonical game (for the Visual view's receive cluster). */
   thumbnail?: string | null
+  /** Set when this target is a Combo (not a listing). */
+  comboId?: number
 }
 
 // A canonical-game row in the want views: one game and its specific-copy
@@ -90,6 +92,12 @@ function groupBadge(g: GameGroup): string {
 function listingTargetKey(listingId: number): string {
   return `L:${listingId}`
 }
+
+// Combo targets render as their own one-row group, keyed off a synthetic gameId
+// well above any real bgg id so they never collide with a game group.
+const COMBO_GAME_OFFSET = 1_000_000_000
+
+// comboTargetKey will be added here in Task 2 alongside its first use in buildModel.
 
 function cellKey(listingId: number, targetKey: string): string {
   return `${listingId}::${targetKey}`
@@ -1402,9 +1410,9 @@ async function persistChanges(
   // each staged price independently of the want lists.
   if (moneyEnabled) {
     for (const [gameId, value] of editor.changedGamePrices) {
-      // Per-game prices are keyed by bgg id; LISTING-only targets that lack a
-      // real bgg id use a negative synthetic id and can't be priced.
-      if (gameId < 0) continue
+      // Per-game prices are keyed by bgg id; LISTING-only targets use a negative
+      // synthetic id and combos use a >= COMBO_GAME_OFFSET id — neither is priceable.
+      if (gameId < 0 || gameId >= COMBO_GAME_OFFSET) continue
       const raw = (value ?? '').trim()
       if (raw === '') {
         await deleteGamePrice(slug, gameId)
@@ -1422,9 +1430,9 @@ async function persistChanges(
 
     // Desired target set for this listing (apply staged changes over base).
     const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => ({
-      event_listing: t.listingId,
-    }))
+    const items: WantGroupItemPayload[] = desired.map((t) =>
+      t.comboId != null ? { combo: t.comboId } : { event_listing: t.listingId }
+    )
 
     let wg = model.wantGroupByListing.get(listingId)
 
