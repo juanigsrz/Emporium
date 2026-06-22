@@ -254,7 +254,11 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
   const [name, setName] = useState(existing?.name ?? '')
   const [maxGive, setMaxGive] = useState(String(existing?.max_give ?? 1))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    new Set(existing?.items.map((i) => i.event_listing) ?? [])
+    new Set(
+      (existing?.items ?? [])
+        .filter((i) => i.event_listing != null)
+        .map((i) => i.event_listing as number)
+    )
   )
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -719,13 +723,15 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   const [minReceive, setMinReceive] = useState(String(group?.min_receive ?? 1))
   const [dupProtect, setDupProtect] = useState(group?.duplicate_protection ?? false)
   const [items, setItems] = useState<DraftWantItem[]>(() =>
-    (group?.items ?? []).map((i) => ({
-      localId: makeDraftKey(i),
-      board_game_name: i.board_game_name,
-      event_listing: i.event_listing,
-      listing_code: i.listing_code,
-      bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
-    }))
+    (group?.items ?? [])
+      .filter((i) => i.event_listing != null)
+      .map((i) => ({
+        localId: makeDraftKey(i),
+        board_game_name: i.board_game_name,
+        event_listing: i.event_listing as number,
+        listing_code: i.listing_code,
+        bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
+      }))
   )
   const [gameSearch, setGameSearch] = useState('')
   const [activeGame, setActiveGame] = useState<EventGame | null>(null)
