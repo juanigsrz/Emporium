@@ -335,3 +335,65 @@ class WantBid(models.Model):
     def __str__(self):
         target = self.event_listing_id or f"combo={self.combo_id}"
         return f"WantBid({self.user.username}, {target}, {self.amount})"
+
+
+# ---------------------------------------------------------------------------
+# TradeCap — user-defined solver cap (takecap / givecap)
+# ---------------------------------------------------------------------------
+
+class TradeCap(models.Model):
+    """A user-defined cap: receive (TAKE) or give (GIVE) at most N of a listed
+    set of items (event listings and/or combos). Emitted to the solver as a
+    `takecap`/`givecap` directive."""
+
+    class Kind(models.TextChoices):
+        TAKE = "TAKE", "Take (receive at most N)"
+        GIVE = "GIVE", "Give (send at most N)"
+
+    event = models.ForeignKey(
+        "events.TradeEvent", on_delete=models.CASCADE, related_name="trade_caps"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="trade_caps"
+    )
+    kind = models.CharField(max_length=4, choices=Kind.choices)
+    n = models.PositiveIntegerField()
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def __str__(self):
+        return f"TradeCap({self.kind} {self.n}, user={self.user_id}, event={self.event_id})"
+
+
+class TradeCapItem(models.Model):
+    """One item in a TradeCap — exactly one of {event_listing, combo}."""
+
+    cap = models.ForeignKey(
+        TradeCap, on_delete=models.CASCADE, related_name="items"
+    )
+    event_listing = models.ForeignKey(
+        "events.EventListing", on_delete=models.CASCADE,
+        related_name="cap_memberships", null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo", on_delete=models.CASCADE,
+        related_name="cap_memberships", null=True, blank=True,
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="capitem_exactly_one_target",
+            ),
+        ]
+
+    def __str__(self):
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"TradeCapItem(cap={self.cap_id}, {target})"
