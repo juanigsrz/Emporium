@@ -36,6 +36,12 @@ class TradeCapModelTests(TestCase):
             # neither target set -> violates the check constraint
             TradeCapItem.objects.create(cap=cap)
 
+    def test_n_zero_rejected_at_db(self):
+        with self.assertRaises(IntegrityError):
+            TradeCap.objects.create(
+                event=self.event, user=self.u, kind=TradeCap.Kind.TAKE, n=0
+            )
+
 
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -120,6 +126,18 @@ class TradeCapAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["count"], 0)
 
+    def test_patch_kind_to_give_rejects_non_owned(self):
+        # A TAKE cap over someone else's listing must not flip to GIVE without
+        # re-validating ownership (would emit a givecap over a copy you don't own).
+        self.client.force_authenticate(self.owner)
+        created = self.client.post(self._url(), {
+            "kind": "TAKE", "n": 1, "item_listing_ids": [self.el_other.id],
+        }, format="json").data
+        resp = self.client.patch(
+            f"{self._url()}{created['id']}/", {"kind": "GIVE"}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_only_owner_can_delete(self):
         self.client.force_authenticate(self.owner)
         created = self.client.post(self._url(), {
@@ -183,3 +201,12 @@ class TradeCapExportTests(TestCase):
         EventListing.objects.filter(id=self.el2.id).update(active=False)
         lines = build_wants(self.event).splitlines()
         self.assertIn(f"givecap {self.owner.username} 1 {self.c1.listing_code}", lines)
+
+    def test_give_cap_declares_item_owner(self):
+        # A GIVE cap on a listing not offered in any wish must still declare the
+        # item's owner, so the solver's givecap ownership check doesn't crash.
+        cap = TradeCap.objects.create(event=self.event, user=self.owner,
+                                      kind=TradeCap.Kind.GIVE, n=1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
+        lines = build_wants(self.event).splitlines()
+        self.assertIn(f"item {self.c1.listing_code} owner {self.owner.username}", lines)

@@ -349,11 +349,14 @@ def _build_user_caps(event, by_id, combo_by_id) -> str:
     caps = (
         TradeCap.objects.filter(event=event)
         .select_related("user")
-        .prefetch_related("items__event_listing__copy", "items__combo")
+        .prefetch_related("items")   # only the FK ids are read; codes come from by_id/combo_by_id
         .order_by("id")
     )
+    decls = []          # `item <token> owner <user>` declarations for GIVE tokens
+    decl_seen = set()
     lines = []
     for cap in caps:
+        username = cap.user.username
         tokens = []
         for it in cap.items.all():
             if it.event_listing_id:
@@ -366,9 +369,20 @@ def _build_user_caps(event, by_id, combo_by_id) -> str:
                     tokens.append(c.combo_code)
         if not tokens:
             continue
-        directive = "takecap" if cap.kind == TradeCap.Kind.TAKE else "givecap"
-        lines.append(f"{directive} {cap.user.username} {cap.n} {' '.join(sorted(tokens))}")
-    return ("\n".join(lines) + "\n") if lines else ""
+        if cap.kind == TradeCap.Kind.GIVE:
+            # Declare each token's owner so the solver's givecap ownership check
+            # never hits an undeclared (None-owner) item and raises. The user owns
+            # all GIVE-cap items (serializer-validated); a redundant declaration is
+            # harmless (same-owner set_owner; no ask = no money).
+            for tok in tokens:
+                if tok not in decl_seen:
+                    decl_seen.add(tok)
+                    decls.append(f"item {tok} owner {username}")
+            lines.append(f"givecap {username} {cap.n} {' '.join(sorted(tokens))}")
+        else:
+            lines.append(f"takecap {username} {cap.n} {' '.join(sorted(tokens))}")
+    out = decls + lines
+    return ("\n".join(out) + "\n") if out else ""
 
 
 def _build_givecaps(combos) -> str:

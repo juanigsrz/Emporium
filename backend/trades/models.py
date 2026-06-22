@@ -364,6 +364,9 @@ class TradeCap(models.Model):
 
     class Meta:
         ordering = ["-created"]
+        constraints = [
+            models.CheckConstraint(check=Q(n__gte=1), name="tradecap_n_gte_1"),
+        ]
 
     def __str__(self):
         return f"TradeCap({self.kind} {self.n}, user={self.user_id}, event={self.event_id})"

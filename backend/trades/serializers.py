@@ -687,4 +687,19 @@ class TradeCapSerializer(serializers.ModelSerializer):
                 TradeCapItem.objects.create(cap=instance, event_listing=el)
             for c in combos:
                 TradeCapItem.objects.create(cap=instance, combo=c)
+        elif instance.kind == TradeCap.Kind.GIVE:
+            # kind may have flipped to GIVE without replacing items — re-validate
+            # that every existing item is owned by the user (atomic: a violation
+            # rolls back the kind change).
+            items = instance.items.select_related(
+                "event_listing__copy", "combo"
+            ).all()
+            bad = [ci.event_listing_id for ci in items
+                   if ci.event_listing_id and ci.event_listing.copy.owner_id != instance.user_id]
+            bad += [ci.combo_id for ci in items
+                    if ci.combo_id and ci.combo.owner_id != instance.user_id]
+            if bad:
+                raise serializers.ValidationError(
+                    {"kind": "Cannot switch to GIVE: this cap contains items you don't own."}
+                )
         return instance
