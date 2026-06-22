@@ -187,8 +187,9 @@ def build_wants(event, include_locations: bool = False) -> str:
     )
     body = _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs)
     givecap_block = _build_givecaps(combos)
+    caps_block = _build_user_caps(event, by_id, combo_by_id)
     location_block = _location_lines(listings, wishes) if include_locations else ""
-    return money_block + body + givecap_block + location_block
+    return money_block + body + givecap_block + caps_block + location_block
 
 
 def _to_cents(amount) -> int:
@@ -336,6 +337,52 @@ def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs) -> str:
         if len(codes) >= 2:
             lines.append(f"dupcap {username} {' '.join(sorted(codes))}")
     return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _build_user_caps(event, by_id, combo_by_id) -> str:
+    """User-defined caps: one `takecap`/`givecap <user> <n> <tokens>` line per
+    active TradeCap. Tokens resolve to active listing/combo codes; items whose
+    listing/combo is inactive are skipped, and a cap with no live tokens is
+    dropped. Additive to the auto dupcap/combo-givecap lines."""
+    from trades.models import TradeCap
+
+    caps = (
+        TradeCap.objects.filter(event=event)
+        .select_related("user")
+        .prefetch_related("items")   # only the FK ids are read; codes come from by_id/combo_by_id
+        .order_by("id")
+    )
+    decls = []          # `item <token> owner <user>` declarations for GIVE tokens
+    decl_seen = set()
+    lines = []
+    for cap in caps:
+        username = cap.user.username
+        tokens = []
+        for it in cap.items.all():
+            if it.event_listing_id:
+                el = by_id.get(it.event_listing_id)
+                if el:
+                    tokens.append(el.copy.listing_code)
+            elif it.combo_id:
+                c = combo_by_id.get(it.combo_id)
+                if c:
+                    tokens.append(c.combo_code)
+        if not tokens:
+            continue
+        if cap.kind == TradeCap.Kind.GIVE:
+            # Declare each token's owner so the solver's givecap ownership check
+            # never hits an undeclared (None-owner) item and raises. The user owns
+            # all GIVE-cap items (serializer-validated); a redundant declaration is
+            # harmless (same-owner set_owner; no ask = no money).
+            for tok in tokens:
+                if tok not in decl_seen:
+                    decl_seen.add(tok)
+                    decls.append(f"item {tok} owner {username}")
+            lines.append(f"givecap {username} {cap.n} {' '.join(sorted(tokens))}")
+        else:
+            lines.append(f"takecap {username} {cap.n} {' '.join(sorted(tokens))}")
+    out = decls + lines
+    return ("\n".join(out) + "\n") if out else ""
 
 
 def _build_givecaps(combos) -> str:

@@ -32,7 +32,7 @@ from rest_framework import serializers
 
 from events.models import Combo, EventListing
 from catalog.models import BoardGame
-from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice, WantBid
+from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice, WantBid, TradeCap, TradeCapItem
 
 
 # ---------------------------------------------------------------------------
@@ -582,3 +582,124 @@ class TradeWishSerializer(serializers.ModelSerializer):
             )
 
         return data
+
+
+# ---------------------------------------------------------------------------
+# TradeCap
+# ---------------------------------------------------------------------------
+
+class TradeCapItemSerializer(serializers.ModelSerializer):
+    listing_code    = serializers.SerializerMethodField()
+    board_game_name = serializers.SerializerMethodField()
+    combo_code      = serializers.CharField(source="combo.combo_code", read_only=True)
+    combo_name      = serializers.CharField(source="combo.name", read_only=True)
+
+    class Meta:
+        model = TradeCapItem
+        fields = ["id", "event_listing", "listing_code", "board_game_name",
+                  "combo", "combo_code", "combo_name"]
+        read_only_fields = fields
+
+    def get_listing_code(self, obj):
+        return obj.event_listing.copy.listing_code if obj.event_listing_id else None
+
+    def get_board_game_name(self, obj):
+        return obj.event_listing.copy.board_game.name if obj.event_listing_id else None
+
+
+class TradeCapSerializer(serializers.ModelSerializer):
+    user  = serializers.PrimaryKeyRelatedField(read_only=True)
+    items = TradeCapItemSerializer(many=True, read_only=True)
+    item_listing_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False, default=list,
+    )
+    item_combo_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False, default=list,
+    )
+
+    class Meta:
+        model = TradeCap
+        fields = ["id", "event", "user", "kind", "n", "items",
+                  "item_listing_ids", "item_combo_ids", "created"]
+        read_only_fields = ["id", "event", "user", "items", "created"]
+
+    def validate_n(self, value):
+        if value < 1:
+            raise serializers.ValidationError("n must be at least 1.")
+        return value
+
+    def _resolve_items(self, listing_ids, combo_ids, event, user, kind):
+        if not listing_ids and not combo_ids:
+            raise serializers.ValidationError("A cap needs at least one item.")
+        listings = list(
+            EventListing.objects.select_related("copy")
+            .filter(id__in=listing_ids, event=event)
+        )
+        if len(listings) != len(set(listing_ids)):
+            found = {el.id for el in listings}
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings not found in this event: {sorted(set(listing_ids) - found)}"}
+            )
+        combos = list(Combo.objects.filter(id__in=combo_ids, event=event))
+        if len(combos) != len(set(combo_ids)):
+            found = {c.id for c in combos}
+            raise serializers.ValidationError(
+                {"item_combo_ids": f"Combos not found in this event: {sorted(set(combo_ids) - found)}"}
+            )
+        if kind == TradeCap.Kind.GIVE:
+            bad = [el.id for el in listings if el.copy.owner_id != user.id]
+            bad += [c.id for c in combos if c.owner_id != user.id]
+            if bad:
+                raise serializers.ValidationError(
+                    {"item_listing_ids": f"givecap items must be owned by you: {sorted(bad)}"}
+                )
+        return listings, combos
+
+    @transaction.atomic
+    def create(self, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", [])
+        combo_ids = validated_data.pop("item_combo_ids", [])
+        event = validated_data["event"]
+        user = validated_data["user"]
+        listings, combos = self._resolve_items(
+            listing_ids, combo_ids, event, user, validated_data["kind"]
+        )
+        cap = TradeCap.objects.create(**validated_data)
+        for el in listings:
+            TradeCapItem.objects.create(cap=cap, event_listing=el)
+        for c in combos:
+            TradeCapItem.objects.create(cap=cap, combo=c)
+        return cap
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", None)
+        combo_ids = validated_data.pop("item_combo_ids", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if listing_ids is not None or combo_ids is not None:
+            listings, combos = self._resolve_items(
+                listing_ids or [], combo_ids or [], instance.event, instance.user, instance.kind
+            )
+            instance.items.all().delete()
+            for el in listings:
+                TradeCapItem.objects.create(cap=instance, event_listing=el)
+            for c in combos:
+                TradeCapItem.objects.create(cap=instance, combo=c)
+        elif instance.kind == TradeCap.Kind.GIVE:
+            # kind may have flipped to GIVE without replacing items — re-validate
+            # that every existing item is owned by the user (atomic: a violation
+            # rolls back the kind change).
+            items = instance.items.select_related(
+                "event_listing__copy", "combo"
+            ).all()
+            bad = [ci.event_listing_id for ci in items
+                   if ci.event_listing_id and ci.event_listing.copy.owner_id != instance.user_id]
+            bad += [ci.combo_id for ci in items
+                    if ci.combo_id and ci.combo.owner_id != instance.user_id]
+            if bad:
+                raise serializers.ValidationError(
+                    {"kind": "Cannot switch to GIVE: this cap contains items you don't own."}
+                )
+        return instance
