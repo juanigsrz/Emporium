@@ -13,6 +13,8 @@ Resolve effective money prices from the per-game default + overrides.
         ?? None  (no bid)
 
 `target` is a WantGroupItem (or any object exposing `.event_listing`).
+Combo targets: `resolve_ask_target`/`resolve_bid` read `combo.sell_price` and the
+explicit `WantBid(user, combo)` respectively — no per-game fallback for combos.
 
 Callers that invoke these helpers in a loop should pre-load related rows to
 avoid N+1: select_related("copy") on listings passed to resolve_ask, and

@@ -116,7 +116,6 @@ class ComboPricingTests(TestCase):
         ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
 
     def test_resolve_ask_target_combo(self):
-        from decimal import Decimal
         self.assertEqual(resolve_ask_target(self.combo), Decimal("40.00"))
 
     def test_resolve_ask_target_barter_combo_is_none(self):
@@ -124,11 +123,9 @@ class ComboPricingTests(TestCase):
         self.assertIsNone(resolve_ask_target(barter))
 
     def test_resolve_bid_combo_target(self):
-        from decimal import Decimal
         WantBid.objects.create(
             user=self.wisher, event=self.event, combo=self.combo, amount="35.00"
         )
-        item = self.combo.want_memberships.model(combo=self.combo)  # unsaved stand-in
         # Build a minimal want item pointing at the combo:
         from trades.models import WantGroup, WantGroupItem
         wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="w")
@@ -137,7 +134,6 @@ class ComboPricingTests(TestCase):
 
     def test_want_group_item_serializer_resolved_bid_for_combo(self):
         """WantGroupItemSerializer surfaces resolved_bid for a combo want item."""
-        from decimal import Decimal
         from trades.models import WantGroup, WantGroupItem
         from trades.serializers import WantGroupItemSerializer
 
