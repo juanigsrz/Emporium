@@ -96,7 +96,7 @@ class OfferGroupListCreateView(EventScopedMixin, APIView):
         qs = (
             OfferGroup.objects
             .filter(event=event, user=request.user)
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .order_by("-created")
         )
         return self._paginate(qs, OfferGroupSerializer, request, event)
@@ -111,7 +111,7 @@ class OfferGroupListCreateView(EventScopedMixin, APIView):
         # Re-serialize with prefetch for nested items
         group_full = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         out = OfferGroupSerializer(group_full, context=ctx)
@@ -140,7 +140,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
         event, group = self._get_group(slug, pk, request)
         group = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         ser = OfferGroupSerializer(group, context=self._serializer_context(request, event))
@@ -155,7 +155,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
         group = ser.save()
         group = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         out = OfferGroupSerializer(group, context=ctx)
@@ -185,6 +185,7 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
             .filter(event=event, user=request.user)
             .prefetch_related(
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .order_by("-created")
         )
@@ -205,6 +206,7 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
             WantGroup.objects
             .prefetch_related(
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .get(pk=group.pk)
         )
@@ -213,8 +215,8 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
 
     @staticmethod
     def _check_want_items_event_scope(items_data, event):
-        """Ensure any event_listing references belong to the given event."""
-        from events.models import EventListing
+        """Ensure any event_listing / combo references belong to the given event."""
+        from events.models import Combo, EventListing
         for idx, item in enumerate(items_data):
             el_id = item.get("event_listing")
             if el_id:
@@ -222,6 +224,14 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
                     raise ValidationError(
                         {f"items[{idx}].event_listing": (
                             f"EventListing {el_id} does not belong to this event."
+                        )}
+                    )
+            combo_id = item.get("combo")
+            if combo_id:
+                if not Combo.objects.filter(pk=combo_id, event=event).exists():
+                    raise ValidationError(
+                        {f"items[{idx}].combo": (
+                            f"Combo {combo_id} does not belong to this event."
                         )}
                     )
 
@@ -249,6 +259,7 @@ class WantGroupDetailView(EventScopedMixin, APIView):
             WantGroup.objects
             .prefetch_related(
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .get(pk=pk)
         )
@@ -425,14 +436,22 @@ class WantBidView(EventScopedMixin, APIView):
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        if d["event_listing"].event_id != event.id:
-            raise ValidationError(
-                {"event_listing": "Listing does not belong to this event."}
+        if d.get("combo"):
+            if d["combo"].event_id != event.id:
+                raise ValidationError({"combo": "Combo does not belong to this event."})
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, combo=d["combo"],
+                defaults={"amount": d["amount"]},
             )
-        obj, _ = WantBid.objects.update_or_create(
-            user=request.user, event=event, event_listing=d["event_listing"],
-            defaults={"amount": d["amount"]},
-        )
+        else:
+            if d["event_listing"].event_id != event.id:
+                raise ValidationError(
+                    {"event_listing": "Listing does not belong to this event."}
+                )
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, event_listing=d["event_listing"],
+                defaults={"amount": d["amount"]},
+            )
         return Response(WantBidSerializer(obj).data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):

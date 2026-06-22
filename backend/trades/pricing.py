@@ -13,6 +13,8 @@ Resolve effective money prices from the per-game default + overrides.
         ?? None  (no bid)
 
 `target` is a WantGroupItem (or any object exposing `.event_listing`).
+Combo targets: `resolve_ask_target`/`resolve_bid` read `combo.sell_price` and the
+explicit `WantBid(user, combo)` respectively — no per-game fallback for combos.
 
 Callers that invoke these helpers in a loop should pre-load related rows to
 avoid N+1: select_related("copy") on listings passed to resolve_ask, and
@@ -36,15 +38,26 @@ def _game_default(user_id, event_id, board_game_id):
 
 
 def load_bids(event):
-    """Preload all WantBids for an event: (user_id, event_listing_id) -> amount.
+    """Preload listing WantBids for an event: (user_id, event_listing_id) -> amount.
 
     Pass to resolve_bid to avoid a per-item DB lookup in bulk loops (exports).
+    Combo bids are loaded separately via load_combo_bids.
     """
     return {
         (uid, elid): amount
         for uid, elid, amount in WantBid.objects
-        .filter(event=event)
+        .filter(event=event, event_listing__isnull=False)
         .values_list("user_id", "event_listing_id", "amount")
+    }
+
+
+def load_combo_bids(event):
+    """Preload combo WantBids: (user_id, combo_id) -> amount."""
+    return {
+        (uid, cid): amount
+        for uid, cid, amount in WantBid.objects
+        .filter(event=event, combo__isnull=False)
+        .values_list("user_id", "combo_id", "amount")
     }
 
 
@@ -74,12 +87,34 @@ def resolve_ask(event_listing, game_prices=None):
     return _game_default(copy.owner_id, event_listing.event_id, copy.board_game_id)
 
 
-def resolve_bid(user, event, target, bids=None, game_prices=None):
+def resolve_ask_target(target):
+    """Effective sell ask for a tradeable target.
+
+    EventListing -> resolve_ask(target). Combo -> combo.sell_price (no fallback).
+    """
+    from events.models import Combo
+    if isinstance(target, Combo):
+        return target.sell_price
+    return resolve_ask(target)
+
+
+def resolve_bid(user, event, target, bids=None, game_prices=None, combo_bids=None):
     """Effective buy bid for a user's want target, or None if no bid.
 
-    Pass preloaded bids/game_prices maps (load_bids/load_game_prices) to skip the
-    per-item DB lookups in bulk loops.
+    Pass preloaded bids/game_prices/combo_bids maps to skip per-item DB lookups
+    in bulk loops. A combo target has no per-game fallback — its bid is the
+    explicit WantBid(user, combo) only.
     """
+    combo_id = getattr(target, "combo_id", None)
+    if combo_id:
+        if combo_bids is not None:
+            return combo_bids.get((user.id, combo_id))
+        return (
+            WantBid.objects
+            .filter(user=user, event=event, combo_id=combo_id)
+            .values_list("amount", flat=True)
+            .first()
+        )
     if bids is not None:
         override = bids.get((user.id, target.event_listing_id))
     else:

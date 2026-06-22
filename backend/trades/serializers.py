@@ -30,7 +30,7 @@ TradeWish output fields:
 from django.db import transaction
 from rest_framework import serializers
 
-from events.models import EventListing
+from events.models import Combo, EventListing
 from catalog.models import BoardGame
 from .models import OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, UserGamePrice, WantBid
 
@@ -63,16 +63,27 @@ class UserGamePriceSerializer(serializers.ModelSerializer):
 class WantBidSerializer(serializers.ModelSerializer):
     event_listing = serializers.PrimaryKeyRelatedField(
         queryset=EventListing.objects.all(), pk_field=serializers.IntegerField(),
+        required=False, allow_null=True,
+    )
+    combo = serializers.PrimaryKeyRelatedField(
+        queryset=Combo.objects.all(), pk_field=serializers.IntegerField(),
+        required=False, allow_null=True,
     )
 
     class Meta:
         model = WantBid
-        fields = ["id", "event_listing", "amount", "updated"]
+        fields = ["id", "event_listing", "combo", "amount", "updated"]
         read_only_fields = ["id", "updated"]
 
     def validate(self, data):
         if data.get("amount") is not None and data["amount"] < 0:
             raise serializers.ValidationError({"amount": "amount cannot be negative."})
+        el = data.get("event_listing")
+        combo = data.get("combo")
+        if bool(el) == bool(combo):
+            raise serializers.ValidationError(
+                "Provide exactly one of 'event_listing' or 'combo'."
+            )
         return data
 
 
@@ -83,29 +94,39 @@ class WantBidSerializer(serializers.ModelSerializer):
 class OfferGroupItemSerializer(serializers.ModelSerializer):
     """Read-only nested item; shows listing identity fields."""
 
-    listing_code    = serializers.CharField(
-        source="event_listing.copy.listing_code", read_only=True
-    )
-    board_game_name = serializers.CharField(
-        source="event_listing.copy.board_game.name", read_only=True
-    )
-    board_game_id   = serializers.IntegerField(
-        source="event_listing.copy.board_game.bgg_id", read_only=True
-    )
+    listing_code    = serializers.SerializerMethodField()
+    board_game_name = serializers.SerializerMethodField()
+    board_game_id   = serializers.SerializerMethodField()
     board_game_thumbnail = serializers.SerializerMethodField()
+    combo_code      = serializers.CharField(source="combo.combo_code", read_only=True)
+    combo_name      = serializers.CharField(source="combo.name", read_only=True)
+
+    def get_listing_code(self, obj):
+        return obj.event_listing.copy.listing_code if obj.event_listing_id else None
+
+    def get_board_game_name(self, obj):
+        return obj.event_listing.copy.board_game.name if obj.event_listing_id else None
+
+    def get_board_game_id(self, obj):
+        return obj.event_listing.copy.board_game.bgg_id if obj.event_listing_id else None
 
     def get_board_game_thumbnail(self, obj):
-        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        if obj.event_listing_id:
+            return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        return ""
 
     class Meta:
         model = OfferGroupItem
         fields = [
             "id",
-            "event_listing",   # id (int)
+            "event_listing",   # id (int) — null for combo items
             "listing_code",
             "board_game_name",
             "board_game_id",
             "board_game_thumbnail",
+            "combo",
+            "combo_code",
+            "combo_name",
         ]
         read_only_fields = fields
 
@@ -132,6 +153,13 @@ class OfferGroupSerializer(serializers.ModelSerializer):
         required=False,
         default=list,
     )
+    # Write-only: list of Combo ids to add/replace combo items
+    item_combo_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        default=list,
+    )
 
     class Meta:
         model = OfferGroup
@@ -145,6 +173,7 @@ class OfferGroupSerializer(serializers.ModelSerializer):
             "rules",
             "items",
             "item_listing_ids",
+            "item_combo_ids",
             "created",
             "updated",
         ]
@@ -189,23 +218,45 @@ class OfferGroupSerializer(serializers.ModelSerializer):
 
         return list(listings)
 
+    def _resolve_combos(self, combo_ids, event, user):
+        if not combo_ids:
+            return []
+        combos = list(Combo.objects.filter(id__in=combo_ids, event=event))
+        found = {c.id for c in combos}
+        missing = set(combo_ids) - found
+        if missing:
+            raise serializers.ValidationError(
+                {"item_combo_ids": f"Combo ids not found in this event: {sorted(missing)}"}
+            )
+        not_owned = [c.id for c in combos if c.owner_id != user.id]
+        if not_owned:
+            raise serializers.ValidationError(
+                {"item_combo_ids": f"Combos not owned by you: {not_owned}"}
+            )
+        return combos
+
     @transaction.atomic
     def create(self, validated_data):
         listing_ids = validated_data.pop("item_listing_ids", [])
+        combo_ids = validated_data.pop("item_combo_ids", [])
         event = validated_data["event"]
         user  = validated_data["user"]
 
         listings = self._resolve_listings(listing_ids, event, user)
+        combos = self._resolve_combos(combo_ids, event, user)
         group = OfferGroup.objects.create(**validated_data)
 
         for el in listings:
             OfferGroupItem.objects.create(offer_group=group, event_listing=el)
+        for c in combos:
+            OfferGroupItem.objects.create(offer_group=group, combo=c)
 
         return group
 
     @transaction.atomic
     def update(self, instance, validated_data):
         listing_ids = validated_data.pop("item_listing_ids", None)
+        combo_ids = validated_data.pop("item_combo_ids", None)
         event = instance.event
         user  = instance.user
 
@@ -214,12 +265,15 @@ class OfferGroupSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
-        # Replace item set only if item_listing_ids was provided
-        if listing_ids is not None:
-            listings = self._resolve_listings(listing_ids, event, user)
+        # Replace the whole item set if either target list was provided.
+        if listing_ids is not None or combo_ids is not None:
+            listings = self._resolve_listings(listing_ids or [], event, user)
+            combos = self._resolve_combos(combo_ids or [], event, user)
             instance.items.all().delete()
             for el in listings:
                 OfferGroupItem.objects.create(offer_group=instance, event_listing=el)
+            for c in combos:
+                OfferGroupItem.objects.create(offer_group=instance, combo=c)
 
         return instance
 
@@ -243,23 +297,23 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
     """
 
     # Display-only companions (derived from the listing's copy)
-    board_game_name      = serializers.CharField(
-        source="event_listing.copy.board_game.name", read_only=True
-    )
-    board_game_id        = serializers.IntegerField(
-        source="event_listing.copy.board_game_id", read_only=True
-    )
+    board_game_name      = serializers.SerializerMethodField()
+    board_game_id        = serializers.SerializerMethodField()
     board_game_thumbnail = serializers.SerializerMethodField()
-    listing_code         = serializers.CharField(
-        source="event_listing.copy.listing_code", read_only=True
-    )
+    listing_code         = serializers.SerializerMethodField()
     resolved_bid         = serializers.SerializerMethodField()
     bid_is_override      = serializers.SerializerMethodField()
 
-    # Writable FK reference
+    # Writable FK references — exactly one of {event_listing, combo}
     event_listing = serializers.PrimaryKeyRelatedField(
         queryset=EventListing.objects.select_related("copy", "copy__board_game").all(),
+        required=False, allow_null=True,
     )
+    combo = serializers.PrimaryKeyRelatedField(
+        queryset=Combo.objects.all(), required=False, allow_null=True,
+    )
+    combo_code = serializers.CharField(source="combo.combo_code", read_only=True)
+    combo_name = serializers.CharField(source="combo.name", read_only=True)
 
     class Meta:
         model = WantGroupItem
@@ -270,14 +324,35 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
             "board_game_thumbnail",
             "event_listing",        # EventListing pk int
             "listing_code",
+            "combo",                # Combo pk int
+            "combo_code",
+            "combo_name",
             "resolved_bid",
             "bid_is_override",
         ]
         read_only_fields = ["id", "board_game_name", "board_game_id", "board_game_thumbnail",
-                            "listing_code", "resolved_bid", "bid_is_override"]
+                            "listing_code", "combo_code", "combo_name",
+                            "resolved_bid", "bid_is_override"]
+
+    def get_board_game_name(self, obj):
+        if obj.event_listing_id:
+            return obj.event_listing.copy.board_game.name
+        return None
+
+    def get_board_game_id(self, obj):
+        if obj.event_listing_id:
+            return obj.event_listing.copy.board_game_id
+        return None
 
     def get_board_game_thumbnail(self, obj):
-        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        if obj.event_listing_id:
+            return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        return ""
+
+    def get_listing_code(self, obj):
+        if obj.event_listing_id:
+            return obj.event_listing.copy.listing_code
+        return None
 
     # Per-item DB lookups; want-lists are per-user and small, so N+1 here is acceptable.
     def get_resolved_bid(self, obj):
@@ -293,10 +368,23 @@ class WantGroupItemSerializer(serializers.ModelSerializer):
         event = self.context.get("event")
         if event is None or not obj.pk:
             return False
+        if obj.combo_id:
+            return WantBid.objects.filter(
+                user=obj.want_group.user, event=event, combo_id=obj.combo_id,
+            ).exists()
         return WantBid.objects.filter(
             user=obj.want_group.user, event=event,
             event_listing_id=obj.event_listing_id,
         ).exists()
+
+    def validate(self, data):
+        el = data.get("event_listing")
+        combo = data.get("combo")
+        if bool(el) == bool(combo):
+            raise serializers.ValidationError(
+                "Provide exactly one of 'event_listing' or 'combo'."
+            )
+        return data
 
 
 # ---------------------------------------------------------------------------

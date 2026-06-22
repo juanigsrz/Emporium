@@ -12,7 +12,9 @@ Serializers for F4 Trade Events:
 
 from rest_framework import serializers
 
-from .models import EventListing, EventParticipation, TradeEvent
+from django.db import transaction
+
+from .models import Combo, ComboItem, EventListing, EventParticipation, TradeEvent
 
 
 class TradeEventSerializer(serializers.ModelSerializer):
@@ -260,3 +262,119 @@ class TransitionSerializer(serializers.Serializer):
                 f"Choices: {valid_statuses}"
             )
         return value
+
+
+class ComboItemSerializer(serializers.ModelSerializer):
+    """Read-only member of a combo, with the member listing's game identity."""
+
+    event_listing = serializers.IntegerField(source="event_listing_id", read_only=True)
+    listing_code = serializers.CharField(
+        source="event_listing.copy.listing_code", read_only=True
+    )
+    board_game_id = serializers.IntegerField(
+        source="event_listing.copy.board_game_id", read_only=True
+    )
+    board_game_name = serializers.CharField(
+        source="event_listing.copy.board_game.name", read_only=True
+    )
+    board_game_thumbnail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ComboItem
+        fields = [
+            "id", "event_listing", "listing_code",
+            "board_game_id", "board_game_name", "board_game_thumbnail",
+        ]
+        read_only_fields = fields
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+
+
+class ComboSerializer(serializers.ModelSerializer):
+    """Read: combo + members. Write: name, sell_price, item_listing_ids."""
+
+    owner = serializers.PrimaryKeyRelatedField(read_only=True)
+    owner_username = serializers.SerializerMethodField()
+    items = ComboItemSerializer(many=True, read_only=True)
+    item_listing_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False, default=list,
+    )
+
+    class Meta:
+        model = Combo
+        fields = [
+            "id", "event", "owner", "owner_username", "name", "combo_code",
+            "active", "sell_price", "items", "item_listing_ids",
+            "created", "updated",
+        ]
+        read_only_fields = [
+            "id", "event", "owner", "owner_username", "combo_code",
+            "items", "created", "updated",
+        ]
+
+    def get_owner_username(self, obj):
+        return obj.owner.username
+
+    def validate_sell_price(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("sell_price must be greater than 0.")
+        return value
+
+    def _resolve_members(self, listing_ids, event, owner, instance=None):
+        if len(set(listing_ids)) < 2:
+            raise serializers.ValidationError(
+                {"item_listing_ids": "A combo needs at least 2 listings."}
+            )
+        listings = list(
+            EventListing.objects.select_related("copy")
+            .filter(id__in=listing_ids, event=event)
+        )
+        found = {el.id for el in listings}
+        missing = set(listing_ids) - found
+        if missing:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings not found in this event: {sorted(missing)}"}
+            )
+        not_owned = [el.id for el in listings if el.copy.owner_id != owner.id]
+        if not_owned:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings not owned by you: {not_owned}"}
+            )
+        clash = ComboItem.objects.filter(
+            combo__event=event, combo__owner=owner, event_listing_id__in=found
+        )
+        if instance is not None:
+            clash = clash.exclude(combo=instance)
+        clash_ids = sorted({ci.event_listing_id for ci in clash})
+        if clash_ids:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings already in another combo: {clash_ids}"}
+            )
+        return listings
+
+    @transaction.atomic
+    def create(self, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", [])
+        event = validated_data["event"]
+        owner = validated_data["owner"]
+        listings = self._resolve_members(listing_ids, event, owner)
+        combo = Combo.objects.create(**validated_data)
+        for el in listings:
+            ComboItem.objects.create(combo=combo, event_listing=el)
+        return combo
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if listing_ids is not None:
+            listings = self._resolve_members(
+                listing_ids, instance.event, instance.owner, instance=instance
+            )
+            instance.items.all().delete()
+            for el in listings:
+                ComboItem.objects.create(combo=instance, event_listing=el)
+        return instance
