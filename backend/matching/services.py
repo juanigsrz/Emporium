@@ -7,7 +7,9 @@ Idempotent — safe to call on every read.
 
 from django.contrib.auth import get_user_model
 
-from .models import Shipment, TradeAssignment, SettlementPayment
+from django.db import transaction
+
+from .models import MatchRun, Shipment, TradeAssignment, SettlementPayment
 
 
 def ensure_shipments(run):
@@ -54,3 +56,51 @@ def ensure_payments(run):
             )
         )
     SettlementPayment.objects.bulk_create(rows, ignore_conflicts=True)
+
+
+@transaction.atomic
+def apply_carryover(event):
+    """On archive: flip each traded copy to TRADED and mint a fresh ACTIVE copy
+    for its receiver. Processes the latest DONE MatchRun; idempotent via
+    MatchRun.carried_over; no-op when there is no DONE run."""
+    from copies.models import Copy
+
+    run = (
+        event.match_runs.filter(status=MatchRun.Status.DONE)
+        .order_by("-created")
+        .first()
+    )
+    if run is None or run.carried_over:
+        return
+
+    assignments = (
+        run.assignments
+        .select_related("event_listing__copy", "combo", "receiver")
+        .prefetch_related("combo__items__event_listing__copy")
+    )
+
+    for a in assignments:
+        if a.combo_id:
+            copies = [ci.event_listing.copy for ci in a.combo.items.all()]
+        elif a.event_listing_id:
+            copies = [a.event_listing.copy]
+        else:
+            copies = []
+        for copy in copies:
+            if copy.status != Copy.Status.TRADED:
+                copy.status = Copy.Status.TRADED
+                copy.save(update_fields=["status", "updated"])
+            # New Copy.save() generates a fresh listing_code (bulk_create would
+            # skip that), so create one at a time.
+            Copy.objects.create(
+                owner=a.receiver,
+                board_game=copy.board_game,
+                version=copy.version,
+                condition=copy.condition,
+                language=copy.language,
+                status=Copy.Status.ACTIVE,
+                import_source="carryover",
+            )
+
+    run.carried_over = True
+    run.save(update_fields=["carried_over", "updated"])
