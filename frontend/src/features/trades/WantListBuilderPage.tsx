@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
@@ -22,6 +23,9 @@ import {
   useDeleteWish,
   setWantBid,
   deleteWantBid,
+  listGamePrices,
+  setGamePrice,
+  deleteGamePrice,
 } from '../../api/trades'
 import type {
   OfferGroup,
@@ -30,6 +34,7 @@ import type {
   WantGroupItem,
   WantGroupItemPayload,
   TradeWish,
+  GamePrice,
 } from '../../api/trades'
 import { useCombos } from '../../api/combos'
 import type { Combo } from '../../api/combos'
@@ -1642,10 +1647,151 @@ function CapForm({ slug, username, editing, onClose }: {
 }
 
 // ============================================================
+// PRICES PANEL — per-copy bid overrides (+ per-game defaults)
+// ============================================================
+
+interface PricesPanelProps {
+  slug: string
+  username: string
+  locked?: boolean
+}
+
+function PricesPanel({ slug, locked }: PricesPanelProps) {
+  const qc = useQueryClient()
+  const { data: wantGroups = [] } = useWantGroups(slug)
+  const { data: gamePrices = [] } = useQuery({
+    queryKey: ['trades', 'game-prices', slug],
+    queryFn: () => listGamePrices(slug),
+    staleTime: 30_000,
+  })
+
+  // Unique wanted listing targets (a copy may appear in several want groups).
+  const byListing = new Map<number, WantGroupItem>()
+  for (const wg of wantGroups) {
+    for (const it of wg.items) {
+      if (it.event_listing != null && !byListing.has(it.event_listing)) {
+        byListing.set(it.event_listing, it)
+      }
+    }
+  }
+  const wantedCopies = Array.from(byListing.values())
+
+  return (
+    <div className="space-y-5">
+      <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        Set your own max <strong>bid</strong> per copy you want — it overrides your
+        canonical per-game price. This is your buy price; it never changes a copy's
+        sell price (that's the owner's).
+      </p>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">Per-copy bids</h3>
+        {wantedCopies.length === 0 ? (
+          <p className="text-xs text-moss/70">No wanted copies yet — add some in Want Groups.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {wantedCopies.map((it) => (
+              <CopyBidRow key={it.event_listing as number} slug={slug} item={it} locked={locked} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">Your per-game default prices</h3>
+        {gamePrices.length === 0 ? (
+          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Almanac view of My Wants.)</p>
+        ) : (
+          <div className="space-y-1.5">
+            {gamePrices.map((gp: GamePrice) => (
+              <GamePriceRow key={gp.id} slug={slug} gp={gp} locked={locked} onChanged={() => qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CopyBidRow({ slug, item, locked }: { slug: string; item: WantGroupItem; locked?: boolean }) {
+  const qc = useQueryClient()
+  const isOverride = item.bid_is_override === true
+  const [value, setValue] = useState(isOverride ? (item.resolved_bid ?? '') : '')
+  const [busy, setBusy] = useState(false)
+  const elId = item.event_listing as number
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteWantBid(slug, { event_listing: elId })
+      else await setWantBid(slug, { event_listing: elId, amount: v })
+      qc.invalidateQueries({ queryKey: ['trades', 'want-groups', slug] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <div className="min-w-0">
+        <span className="block truncate text-sm text-ink">{item.board_game_name}</span>
+        <span className="font-mono text-xs text-moss/70">{item.listing_code}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">bid ≤$</span>
+        <input
+          type="number" min={0} step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          placeholder={!isOverride && item.resolved_bid ? item.resolved_bid : 'default'}
+          title="Your max bid for this specific copy (overrides your per-game default; placeholder = the default)"
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
+function GamePriceRow({ slug, gp, locked, onChanged }: { slug: string; gp: GamePrice; locked?: boolean; onChanged: () => void }) {
+  const [value, setValue] = useState(gp.price)
+  const [busy, setBusy] = useState(false)
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteGamePrice(slug, gp.board_game)
+      else await setGamePrice(slug, gp.board_game, v)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <span className="truncate text-sm text-ink">{gp.board_game_name}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">$</span>
+        <input
+          type="number" min="0.01" step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // MAIN PAGE
 // ============================================================
 
-type BuilderTab = 'offers' | 'wants' | 'wishes' | 'caps'
+type BuilderTab = 'offers' | 'wants' | 'wishes' | 'caps' | 'prices'
 
 export default function WantListBuilderPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -1704,6 +1850,7 @@ export default function WantListBuilderPage() {
     { id: 'wants', label: 'Want Groups', count: wantGroupsData.length },
     { id: 'wishes', label: 'Wishes' },
     { id: 'caps', label: 'Caps' },
+    ...(event.money_enabled ? [{ id: 'prices' as BuilderTab, label: 'Prices' }] : []),
   ]
 
   const locked = event.inputs_locked
@@ -1838,6 +1985,16 @@ export default function WantListBuilderPage() {
               <p className="text-xs text-moss/70">Limit how many you receive or give from a set</p>
             </div>
             <CapsPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
+          </div>
+        )}
+
+        {activeTab === 'prices' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Prices — per-copy bids</h2>
+              <p className="text-xs text-moss/70">Your buy price overrides</p>
+            </div>
+            <PricesPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
           </div>
         )}
       </div>
