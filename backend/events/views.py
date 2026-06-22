@@ -372,6 +372,12 @@ class TradeEventViewSet(
         if copy.owner != request.user:
             raise PermissionDenied("You can only add your own copies to an event.")
 
+        if copy.status != Copy.Status.ACTIVE:
+            raise ValidationError(
+                {"copy": "This copy is not active (it may have been traded in a "
+                         "previous event) and can't be listed."}
+            )
+
         if copy.is_pending:
             raise ValidationError(
                 {"copy": "This copy is incomplete (missing language and/or condition). "
