@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
@@ -22,6 +23,9 @@ import {
   useDeleteWish,
   setWantBid,
   deleteWantBid,
+  listGamePrices,
+  setGamePrice,
+  deleteGamePrice,
 } from '../../api/trades'
 import type {
   OfferGroup,
@@ -30,9 +34,12 @@ import type {
   WantGroupItem,
   WantGroupItemPayload,
   TradeWish,
+  GamePrice,
 } from '../../api/trades'
 import { useCombos } from '../../api/combos'
 import type { Combo } from '../../api/combos'
+import { useCaps, useCreateCap, usePatchCap, useDeleteCap } from '../../api/caps'
+import type { Cap, CapKind } from '../../api/caps'
 
 // ---- Helpers ----
 
@@ -1394,10 +1401,397 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
 }
 
 // ============================================================
+// CAPS PANEL — user-defined takecap / givecap
+// ============================================================
+
+interface CapsPanelProps {
+  slug: string
+  username: string
+  locked?: boolean
+}
+
+function CapsPanel({ slug, username, locked }: CapsPanelProps) {
+  const { data: capsData, isLoading } = useCaps(slug)
+  const deleteCap = useDeleteCap()
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Cap | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const caps = capsData?.results ?? []
+
+  async function handleDelete(id: number) {
+    setError(null)
+    try {
+      await deleteCap.mutateAsync({ slug, id })
+    } catch (e) {
+      setError(extractErrorMsg(e))
+    }
+  }
+
+  if (isLoading) {
+    return <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-moss/70">
+        Caps limit how many items you receive (<strong>take</strong>) or give
+        (<strong>give</strong>) from a chosen set — across swaps and cash.
+      </p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {(showForm || editing) && !locked && (
+        <CapForm
+          key={editing?.id ?? 'new'}
+          slug={slug}
+          username={username}
+          editing={editing}
+          onClose={() => { setShowForm(false); setEditing(null) }}
+        />
+      )}
+
+      {caps.length === 0 && !showForm && !editing && (
+        <p className="text-xs text-moss/70 py-2">No caps yet.</p>
+      )}
+
+      {caps.map((cap) => (
+        <CapCard
+          key={cap.id}
+          cap={cap}
+          locked={locked}
+          onEdit={() => { setEditing(cap); setShowForm(false) }}
+          onDelete={() => handleDelete(cap.id)}
+          isDeleting={deleteCap.isPending}
+        />
+      ))}
+
+      {!locked && !showForm && !editing && (
+        <button
+          onClick={() => { setEditing(null); setShowForm(true) }}
+          className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+        >
+          + New cap
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CapCard({ cap, locked, onEdit, onDelete, isDeleting }: {
+  cap: Cap
+  locked?: boolean
+  onEdit: () => void
+  onDelete: () => void
+  isDeleting: boolean
+}) {
+  const [confirm, setConfirm] = useState(false)
+  const verb = cap.kind === 'TAKE' ? 'Receive' : 'Give'
+  return (
+    <div className="rounded-2xl border border-ink/15 bg-white p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+          {verb} at most {cap.n}
+        </span>
+        {!locked && (
+          <div className="flex gap-1 shrink-0">
+            <button onClick={onEdit} className="text-xs text-moss/70 hover:text-indigo-600 px-1.5 py-0.5 rounded">Edit</button>
+            {confirm ? (
+              <span className="flex items-center gap-1">
+                <button onClick={onDelete} disabled={isDeleting} className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded">
+                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button onClick={() => setConfirm(false)} className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded">Cancel</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirm(true)} className="text-xs text-moss/70 hover:text-red-500 px-1.5 py-0.5 rounded">Delete</button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {cap.items.map((it) =>
+          it.combo != null ? (
+            <span key={it.id} className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              🎁 {it.combo_name} <span className="font-mono text-amber-700/70">{it.combo_code}</span>
+            </span>
+          ) : (
+            <span key={it.id} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink">
+              <span className="font-mono text-moss/70">{it.listing_code}</span>
+              {it.board_game_name}
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CapForm({ slug, username, editing, onClose }: {
+  slug: string
+  username: string
+  editing: Cap | null
+  onClose: () => void
+}) {
+  const createCap = useCreateCap()
+  const patchCap = usePatchCap()
+  const { data: listingsData } = useEventListings(slug, { page_size: 200 })
+  const { data: combosData } = useCombos(slug)
+  const allListings = listingsData?.results ?? []
+  const allCombos = combosData?.results ?? []
+
+  const [kind, setKind] = useState<CapKind>(editing?.kind ?? 'TAKE')
+  const [n, setN] = useState(String(editing?.n ?? 1))
+  const [listingIds, setListingIds] = useState<Set<number>>(
+    new Set((editing?.items ?? []).filter((i) => i.event_listing != null).map((i) => i.event_listing as number))
+  )
+  const [comboIds, setComboIds] = useState<Set<number>>(
+    new Set((editing?.items ?? []).filter((i) => i.combo != null).map((i) => i.combo as number))
+  )
+  const [error, setError] = useState<string | null>(null)
+  const saving = createCap.isPending || patchCap.isPending
+
+  // GIVE: only your own items can be capped. TAKE: any item.
+  const listings = kind === 'GIVE'
+    ? allListings.filter((l) => l.copy_owner_username === username)
+    : allListings
+  const combos = kind === 'GIVE'
+    ? allCombos.filter((c) => c.owner_username === username)
+    : allCombos
+
+  function toggle(set: Set<number>, setter: (s: Set<number>) => void, id: number) {
+    const next = new Set(set)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setter(next)
+  }
+
+  async function handleSave() {
+    setError(null)
+    const nn = parseInt(n, 10)
+    if (isNaN(nn) || nn < 1) { setError('N must be at least 1.'); return }
+    if (listingIds.size + comboIds.size === 0) { setError('Pick at least one item.'); return }
+    const payload = {
+      kind, n: nn,
+      item_listing_ids: Array.from(listingIds),
+      item_combo_ids: Array.from(comboIds),
+    }
+    try {
+      if (editing) await patchCap.mutateAsync({ slug, id: editing.id, payload })
+      else await createCap.mutateAsync({ slug, payload })
+      onClose()
+    } catch (e) {
+      setError(extractErrorMsg(e))
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 space-y-3">
+      <p className="text-xs font-semibold text-indigo-700">{editing ? 'Edit cap' : 'New cap'}</p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">Kind</label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as CapKind)}
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="TAKE">Take — receive at most N</option>
+            <option value="GIVE">Give — send at most N</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">N (max)</label>
+          <input
+            type="number" min={1} value={n}
+            onChange={(e) => setN(e.target.value)}
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-ink mb-1.5">
+          Items in this cap ({listingIds.size + comboIds.size} selected)
+          {kind === 'GIVE' && <span className="ml-1 text-moss/60">— your own items only</span>}
+        </p>
+        <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto">
+          {listings.map((l: EventListing) => (
+            <label key={`l-${l.id}`} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm ${
+              listingIds.has(l.id) ? 'border-indigo-400 bg-white text-indigo-800' : 'border-ink/15 bg-white text-ink hover:border-indigo-200'
+            }`}>
+              <input type="checkbox" checked={listingIds.has(l.id)} onChange={() => toggle(listingIds, setListingIds, l.id)} />
+              <span className="font-medium">{l.board_game_name}</span>
+              <span className="font-mono text-xs text-moss/70">{l.listing_code}</span>
+            </label>
+          ))}
+          {combos.map((c) => (
+            <label key={`c-${c.id}`} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm ${
+              comboIds.has(c.id) ? 'border-amber-400 bg-white text-amber-800' : 'border-ink/15 bg-white text-ink hover:border-amber-200'
+            }`}>
+              <input type="checkbox" checked={comboIds.has(c.id)} onChange={() => toggle(comboIds, setComboIds, c.id)} />
+              <span className="font-medium">🎁 {c.name}</span>
+              <span className="font-mono text-xs text-moss/70">{c.combo_code}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={handleSave} disabled={saving} className="rounded-xl border-2 border-ink bg-indigo-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm disabled:opacity-60">
+          {saving ? 'Saving…' : editing ? 'Save' : 'Create cap'}
+        </button>
+        <button onClick={onClose} className="rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// PRICES PANEL — per-copy bid overrides (+ per-game defaults)
+// ============================================================
+
+interface PricesPanelProps {
+  slug: string
+  username: string
+  locked?: boolean
+}
+
+function PricesPanel({ slug, locked }: PricesPanelProps) {
+  const qc = useQueryClient()
+  const { data: wantGroups = [] } = useWantGroups(slug)
+  const { data: gamePrices = [] } = useQuery({
+    queryKey: ['trades', 'game-prices', slug],
+    queryFn: () => listGamePrices(slug),
+    staleTime: 30_000,
+  })
+
+  // Unique wanted listing targets (a copy may appear in several want groups).
+  const byListing = new Map<number, WantGroupItem>()
+  for (const wg of wantGroups) {
+    for (const it of wg.items) {
+      if (it.event_listing != null && !byListing.has(it.event_listing)) {
+        byListing.set(it.event_listing, it)
+      }
+    }
+  }
+  const wantedCopies = Array.from(byListing.values())
+
+  return (
+    <div className="space-y-5">
+      <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        Set your own max <strong>bid</strong> per copy you want — it overrides your
+        canonical per-game price. This is your buy price; it never changes a copy's
+        sell price (that's the owner's).
+      </p>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">Per-copy bids</h3>
+        {wantedCopies.length === 0 ? (
+          <p className="text-xs text-moss/70">No wanted copies yet — add some in Want Groups.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {wantedCopies.map((it) => (
+              <CopyBidRow key={it.event_listing as number} slug={slug} item={it} locked={locked} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">Your per-game default prices</h3>
+        {gamePrices.length === 0 ? (
+          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Almanac view of My Wants.)</p>
+        ) : (
+          <div className="space-y-1.5">
+            {gamePrices.map((gp: GamePrice) => (
+              <GamePriceRow key={gp.id} slug={slug} gp={gp} locked={locked} onChanged={() => qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CopyBidRow({ slug, item, locked }: { slug: string; item: WantGroupItem; locked?: boolean }) {
+  const qc = useQueryClient()
+  const isOverride = item.bid_is_override === true
+  const [value, setValue] = useState(isOverride ? (item.resolved_bid ?? '') : '')
+  const [busy, setBusy] = useState(false)
+  const elId = item.event_listing as number
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteWantBid(slug, { event_listing: elId })
+      else await setWantBid(slug, { event_listing: elId, amount: v })
+      qc.invalidateQueries({ queryKey: ['trades', 'want-groups', slug] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <div className="min-w-0">
+        <span className="block truncate text-sm text-ink">{item.board_game_name}</span>
+        <span className="font-mono text-xs text-moss/70">{item.listing_code}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">bid ≤$</span>
+        <input
+          type="number" min={0} step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          placeholder={!isOverride && item.resolved_bid ? item.resolved_bid : 'default'}
+          title="Your max bid for this specific copy (overrides your per-game default; placeholder = the default)"
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
+function GamePriceRow({ slug, gp, locked, onChanged }: { slug: string; gp: GamePrice; locked?: boolean; onChanged: () => void }) {
+  const [value, setValue] = useState(gp.price)
+  const [busy, setBusy] = useState(false)
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteGamePrice(slug, gp.board_game)
+      else await setGamePrice(slug, gp.board_game, v)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <span className="truncate text-sm text-ink">{gp.board_game_name}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">$</span>
+        <input
+          type="number" min="0.01" step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // MAIN PAGE
 // ============================================================
 
-type BuilderTab = 'offers' | 'wants' | 'wishes'
+type BuilderTab = 'offers' | 'wants' | 'wishes' | 'caps' | 'prices'
 
 export default function WantListBuilderPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -1455,6 +1849,8 @@ export default function WantListBuilderPage() {
     { id: 'offers', label: 'Offer Groups', count: offerGroupsData.length },
     { id: 'wants', label: 'Want Groups', count: wantGroupsData.length },
     { id: 'wishes', label: 'Wishes' },
+    { id: 'caps', label: 'Caps' },
+    ...(event.money_enabled ? [{ id: 'prices' as BuilderTab, label: 'Prices' }] : []),
   ]
 
   const locked = event.inputs_locked
@@ -1579,6 +1975,26 @@ export default function WantListBuilderPage() {
               </div>
             )}
             <WishesPanel slug={slug!} offerGroups={offerGroupsData} wantGroups={wantGroupsData} locked={locked} />
+          </div>
+        )}
+
+        {activeTab === 'caps' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Caps — take / give limits</h2>
+              <p className="text-xs text-moss/70">Limit how many you receive or give from a set</p>
+            </div>
+            <CapsPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
+          </div>
+        )}
+
+        {activeTab === 'prices' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Prices — per-copy bids</h2>
+              <p className="text-xs text-moss/70">Your buy price overrides</p>
+            </div>
+            <PricesPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
           </div>
         )}
       </div>
