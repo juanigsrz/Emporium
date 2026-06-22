@@ -974,6 +974,7 @@ function MyCombosSection({ event, username }: MyCombosSectionProps) {
 
       {(showForm || editing) && !locked && (
         <ComboForm
+          key={editing?.id ?? 'new'}
           slug={event.slug}
           moneyEnabled={event.money_enabled}
           myListings={myListings}
@@ -1024,12 +1025,14 @@ function ComboCard({ combo, locked, onEdit, onDelete, deletePending }: {
           <div className="flex shrink-0 gap-1">
             <button
               onClick={onEdit}
+              aria-label={`Edit combo ${combo.name}`}
               className="rounded-full border border-ink/20 px-2 py-0.5 text-xs text-moss"
             >
               Edit
             </button>
             <button
               onClick={() => setConfirming(true)}
+              aria-label={`Remove combo ${combo.name}`}
               className="rounded-full border border-red-300 px-2 py-0.5 text-xs text-red-600"
             >
               Remove
@@ -1176,7 +1179,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
       <div className="flex gap-2">
         <button
           onClick={handleSave}
-          disabled={saving || selected.size < 2}
+          disabled={saving || selected.size < 2 || name.trim() === ''}
           className="rounded-full border-2 border-ink bg-fern px-3 py-1 text-xs font-semibold text-cream disabled:opacity-50"
         >
           {saving ? 'Saving…' : editing ? 'Save' : 'Create combo'}
