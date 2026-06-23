@@ -1256,10 +1256,12 @@ function useEditor(model: PageModel): {
 interface VisualModeProps {
   myListings: EventListing[]
   editor: Editor
+  combos: Combo[]
 }
 
-function VisualMode({ myListings, editor }: VisualModeProps) {
+function VisualMode({ myListings, editor, combos }: VisualModeProps) {
   if (myListings.length === 0) return null
+  const comboById = new Map(combos.map((c) => [c.id, c]))
 
   return (
     <div className="space-y-3">
@@ -1279,34 +1281,55 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
             </div>
 
             {/* Give → receive: offered copy, then the wanted games as big thumbnails (× to remove). */}
-            <div className="flex items-center gap-3 overflow-x-auto">
-              <GameThumb
-                src={listing.board_game_thumbnail}
-                alt={listing.board_game_name ?? ''}
-                className="h-16 w-16 shrink-0"
-              />
-              <svg className="h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+            <div className="flex items-start gap-3 overflow-x-auto">
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                <GameThumb
+                  src={listing.board_game_thumbnail}
+                  alt={listing.board_game_name ?? ''}
+                  className="h-32 w-32"
+                />
+                <span className="w-32 truncate text-center text-xs text-ink" title={listing.board_game_name}>
+                  {listing.board_game_name}
+                </span>
+              </div>
+              <svg className="mt-12 h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
               {myWants.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {myWants.map((g) => (
-                    <div key={g.gameId} className="relative shrink-0">
-                      <GameThumb src={g.thumbnail} alt={g.gameName ?? ''} className="h-16 w-16" />
-                      <button
-                        type="button"
-                        onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
-                        aria-label={`Remove ${g.gameName}`}
-                        title={`Remove ${g.gameName}`}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                <div className="flex flex-wrap items-start gap-3">
+                  {myWants.map((g) => {
+                    const combo = g.gameId >= COMBO_GAME_OFFSET
+                      ? comboById.get(g.gameId - COMBO_GAME_OFFSET)
+                      : undefined
+                    return (
+                      <div key={g.gameId} className="relative flex w-32 shrink-0 flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
+                          aria-label={`Remove ${g.gameName}`}
+                          title={`Remove ${g.gameName}`}
+                          className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                        {combo ? (
+                          <div className="flex h-32 w-32 flex-wrap content-center items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 p-1">
+                            {combo.items.map((it) => (
+                              <GameThumb key={it.id} src={it.board_game_thumbnail} alt={it.board_game_name} className="h-14 w-14" />
+                            ))}
+                          </div>
+                        ) : (
+                          <GameThumb src={g.thumbnail} alt={g.gameName ?? ''} className="h-32 w-32" />
+                        )}
+                        <span className="w-32 truncate text-center text-xs text-ink" title={g.gameName}>
+                          {g.gameName}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
-                <span className="text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
+                <span className="mt-12 text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
               )}
             </div>
           </div>
@@ -1782,7 +1805,7 @@ export default function MyWantsPage() {
                 combos={combos}
               />
             )}
-            {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
+            {view === 'visual' && <VisualMode myListings={myListings} editor={editor} combos={combos} />}
             {view === 'grid' && (
               <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} combos={combos} />
             )}
