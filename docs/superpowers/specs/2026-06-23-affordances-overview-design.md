@@ -39,8 +39,10 @@
     confirm — no change.
   - Matching (`MatchRunPage` main view, header ~L1388): breadcrumb only, no back
     button.
-  - Organizer manage (`ManageEventPage`, L32): button-pill `<BackButton>` (plus a
-    redundant `← {event.name}` text Link at L53).
+  - Organizer manage (`ManageEventPage`): the organizer-managing view already uses
+    a **text** back link (`← {event.name}`, L53). The only button-pill
+    `<BackButton>` (L32) is in the *non-organizer* error guard — out of scope.
+    **Part C is already satisfied; no change.**
 - Current state of #10: both `ShippingOverviewTab` and `PaymentsOverviewTab`
   already paginate the "All shipments"/"All payments" tables. Usernames in the
   per-user rollup and in the table rows are plain text (not links).
@@ -103,15 +105,13 @@ page header block), add `<BackButton to={`/events/${slug}`}>Back to event</BackB
 (`BackButton` is already imported). Place it so it reads as a proper back button
 in the header (consistent with the error-state back buttons already present).
 
-### C. Organizer manage back = text
+### C. Organizer manage back = text — already satisfied
 
-In `ManageEventPage`, replace the button-pill `<BackButton to={`/events/${slug}`}>Back</BackButton>`
-(L32) with a lightweight **text** back link (same visual family as the existing
-`← {event.name}` link at L53), e.g.
-`<Link to={`/events/${slug}`} className="inline-flex items-center gap-1 text-sm font-medium text-moss hover:text-ink">← Back</Link>`.
-Remove the now-unused `BackButton` import from `ManageEventPage` if nothing else
-uses it. (Matching gets the button; the manage page stays text — the deliberate
-contrast.)
+The organizer-managing view in `ManageEventPage` already renders a **text** back
+link (`← {event.name}`, L53). The only button-pill `<BackButton>` there (L32) is
+in the non-organizer error guard, which is out of scope. **No change.** (Matching
+gets the button per Part B; the manage page is already text — the deliberate
+contrast the spec wanted.)
 
 ## Part 10 — Overview username links
 
@@ -154,7 +154,6 @@ Manual checklist:
   button + modal; Leave button restyle), `frontend/src/features/trades/MyWantsPage.tsx`
   (advanced-builder button + modal; auto-tick restyle),
   `frontend/src/features/matching/MatchRunPage.tsx` (back button),
-  `frontend/src/features/events/ManageEventPage.tsx` (text back link),
   `frontend/src/features/matching/PaymentsOverviewTab.tsx` (username links),
   `frontend/src/features/matching/ShippingOverviewTab.tsx` (username links).
 
