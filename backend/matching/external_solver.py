@@ -208,10 +208,11 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
     """
     from events.models import EventParticipation
     from trades.pricing import (
-        load_bids, load_combo_bids, load_game_prices,
+        load_bids, load_combo_bids, load_combo_members, load_game_prices,
         resolve_ask, resolve_ask_target, resolve_bid,
     )
     combo_bids = load_combo_bids(event)
+    combo_members = load_combo_members(event)
 
     # Preload pricing rows once; resolve_ask/resolve_bid below run per item.
     bids = load_bids(event)
@@ -276,7 +277,7 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
             elif ogi.event_listing and ogi.event_listing.active:
                 give_codes.add(ogi.event_listing.copy.listing_code)
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, event, it, bids, game_prices, combo_bids)
+            bid = resolve_bid(w.user, event, it, bids, game_prices, combo_bids, combo_members)
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)
