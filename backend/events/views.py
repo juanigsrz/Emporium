@@ -463,7 +463,11 @@ class TradeEventViewSet(
 
         min_rating = request.query_params.get("min_rating")
         if min_rating:
-            qs = qs.filter(average__gte=float(min_rating))
+            from accounts.models import GameRating
+            rated_ids = GameRating.objects.filter(
+                user=request.user, value__gte=float(min_rating)
+            ).values_list("board_game_id", flat=True)
+            qs = qs.filter(bgg_id__in=list(rated_ids))
 
         is_expansion = request.query_params.get("is_expansion")
         if is_expansion in ("true", "false"):
