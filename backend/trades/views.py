@@ -395,6 +395,7 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ser = UserGamePriceSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         board_game = ser.validated_data["board_game"]
@@ -406,6 +407,7 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         bgg_id = request.query_params.get("board_game")
         if not bgg_id:
             raise ValidationError({"board_game": "Required query parameter."})
@@ -433,6 +435,7 @@ class WantBidView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
@@ -456,6 +459,7 @@ class WantBidView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         combo = request.query_params.get("combo")
         if combo:
             try:

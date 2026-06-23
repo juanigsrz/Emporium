@@ -15,6 +15,7 @@ from django.contrib.auth import get_user_model
 from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, permissions, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -79,6 +80,28 @@ class ProfileMeView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        data = serializer.validated_data
+        locked_fields = ("latitude", "longitude", "max_trade_distance_km")
+        changing_existing = any(
+            f in data and getattr(instance, f) is not None and data[f] != getattr(instance, f)
+            for f in locked_fields
+        )
+        if changing_existing:
+            from events.models import EventParticipation, TradeEvent
+            in_active = (
+                EventParticipation.objects.filter(user=self.request.user)
+                .exclude(event__status=TradeEvent.Status.ARCHIVED)
+                .exists()
+            )
+            if in_active:
+                raise PermissionDenied(
+                    "Your location is locked while you're in an active event; "
+                    "you can change it once your events are archived."
+                )
+        serializer.save()
 
 
 class ProfileDetailView(generics.RetrieveAPIView):
