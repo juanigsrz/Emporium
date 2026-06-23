@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useShippingOverview, useShippingSummary } from '../../api/shipping'
 import type { Shipment } from '../../api/shipping'
 import { GameThumb } from '../../components/GameThumb'
@@ -50,7 +51,7 @@ export function ShippingOverviewTab({ slug }: { slug: string }) {
               const behind = t.out_sent < t.out_total || t.in_received < t.in_total
               return (
                 <div key={t.username} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="w-28 truncate font-semibold text-ink">{t.username}</span>
+                  <Link to={`/u/${t.username}`} className="w-28 truncate font-semibold text-indigo-500 hover:underline">{t.username}</Link>
                   <span className="text-xs text-moss">sending {t.out_sent}/{t.out_total}</span>
                   <span className="text-xs text-moss">receiving {t.in_received}/{t.in_total}</span>
                   {behind && <span className="ml-auto text-xs font-medium text-amber-600" title="Behind">⚠ behind</span>}
@@ -89,7 +90,11 @@ export function ShippingOverviewTab({ slug }: { slug: string }) {
                 <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-9 w-9" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">{s.board_game_name}</p>
-                  <p className="text-xs text-moss">{s.giver_username} → {s.receiver_username}</p>
+                  <p className="text-xs text-moss">
+                    <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline">{s.giver_username}</Link>
+                    {' → '}
+                    <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline">{s.receiver_username}</Link>
+                  </p>
                 </div>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold ${STATUS_PILL[s.status]}`}>
                   {label(s.status)}
