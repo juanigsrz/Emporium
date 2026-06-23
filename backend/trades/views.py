@@ -539,3 +539,30 @@ class TradeCapDetailView(EventScopedMixin, APIView):
         self._assert_editable(event)
         cap.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ImportTradesView(EventScopedMixin, APIView):
+    """POST /api/events/{slug}/import-trades/ — import the user's prices + wants
+    from a previous event they joined. Body: {"from_event": "<source slug>"}."""
+
+    def post(self, request, slug):
+        target = self._get_event(slug)
+        self._assert_editable(target)
+
+        from_slug = request.data.get("from_event")
+        if not from_slug:
+            raise ValidationError({"from_event": "This field is required."})
+        if from_slug == slug:
+            raise ValidationError({"from_event": "Choose a different event."})
+
+        from events.models import EventParticipation, TradeEvent
+        source = get_object_or_404(TradeEvent, slug=from_slug)
+
+        if not EventParticipation.objects.filter(event=target, user=request.user).exists():
+            raise PermissionDenied("Join this event before importing into it.")
+        if not EventParticipation.objects.filter(event=source, user=request.user).exists():
+            raise ValidationError({"from_event": "You did not participate in that event."})
+
+        from .services import import_user_trades
+        summary = import_user_trades(request.user, source, target)
+        return Response(summary, status=status.HTTP_200_OK)

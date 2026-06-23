@@ -17,6 +17,7 @@ from django.urls import path
 
 from .views import (
     GamePriceView,
+    ImportTradesView,
     OfferGroupDetailView,
     OfferGroupListCreateView,
     TradeCapDetailView,
@@ -84,5 +85,11 @@ urlpatterns = [
         "events/<slug:slug>/caps/<int:pk>/",
         TradeCapDetailView.as_view(),
         name="trade-cap-detail",
+    ),
+    # Cross-event import
+    path(
+        "events/<slug:slug>/import-trades/",
+        ImportTradesView.as_view(),
+        name="import-trades",
     ),
 ]
