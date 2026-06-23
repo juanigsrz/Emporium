@@ -1673,20 +1673,22 @@ export default function MyWantsPage() {
             </p>
           </div>
 
-          {view === 'almanac' && (
-            <GameBrowse
-              slug={slug!}
-              editor={editor}
-              myListings={myListings}
-              username={user?.username}
-              customWantGroups={customWantGroups}
-              moneyEnabled={event.money_enabled}
-            />
-          )}
-          {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
-          {view === 'grid' && (
-            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} />
-          )}
+          <div className={event.inputs_locked ? 'pointer-events-none opacity-60' : undefined}>
+            {view === 'almanac' && (
+              <GameBrowse
+                slug={slug!}
+                editor={editor}
+                myListings={myListings}
+                username={user?.username}
+                customWantGroups={customWantGroups}
+                moneyEnabled={event.money_enabled}
+              />
+            )}
+            {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
+            {view === 'grid' && (
+              <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} />
+            )}
+          </div>
         </>
       )}
 
