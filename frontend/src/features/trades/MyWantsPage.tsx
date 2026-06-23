@@ -1126,8 +1126,6 @@ interface VisualModeProps {
 }
 
 function VisualMode({ myListings, editor }: VisualModeProps) {
-  const [addingFor, setAddingFor] = useState<number | null>(null)
-
   if (myListings.length === 0) return null
 
   return (
@@ -1135,119 +1133,49 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
       {myListings.map((listing) => {
         const groups = groupTargetsByGame(editor.targets)
         const myWants = groups.filter((g) => groupIsOn(editor, listing.id, g))
-        const addable = groups.filter((g) => !groupIsOn(editor, listing.id, g))
         return (
           <div key={listing.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {listing.board_game_name}
-                  </p>
-                  <p className="font-mono text-xs text-moss/70">{listing.listing_code}</p>
-                </div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">{listing.board_game_name}</p>
+                <p className="font-mono text-xs text-moss/70">{listing.listing_code}</p>
               </div>
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
                 wants {myWants.length}
               </span>
             </div>
 
-            {/* Give → receive: offered copy on the left, wanted games on the right. */}
-            <div className="mb-3 flex items-center gap-2 overflow-x-auto">
-              <div className="flex shrink-0 items-center gap-1">
-                <GameThumb
-                  src={listing.board_game_thumbnail}
-                  alt={listing.board_game_name ?? ''}
-                  className="h-12 w-12"
-                />
-              </div>
+            {/* Give → receive: offered copy, then the wanted games as big thumbnails (× to remove). */}
+            <div className="flex items-center gap-3 overflow-x-auto">
+              <GameThumb
+                src={listing.board_game_thumbnail}
+                alt={listing.board_game_name ?? ''}
+                className="h-16 w-16 shrink-0"
+              />
               <svg className="h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
               {myWants.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="flex flex-wrap items-center gap-2">
                   {myWants.map((g) => (
-                    <GameThumb
-                      key={g.gameId}
-                      src={g.thumbnail}
-                      alt={g.gameName ?? ''}
-                      className="h-12 w-12"
-                    />
+                    <div key={g.gameId} className="relative shrink-0">
+                      <GameThumb src={g.thumbnail} alt={g.gameName ?? ''} className="h-16 w-16" />
+                      <button
+                        type="button"
+                        onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
+                        aria-label={`Remove ${g.gameName}`}
+                        title={`Remove ${g.gameName}`}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
               ) : (
-                <span className="text-xs text-moss/40">nothing yet</span>
+                <span className="text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
               )}
             </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {myWants.map((g) => {
-                const specific = g.copyTargets.length > 0
-                return (
-                  <span
-                    key={g.gameId}
-                    className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700"
-                  >
-                    <span className="max-w-[12rem] truncate">{g.gameName}</span>
-                    <span className={specific ? 'text-blue-500' : 'text-purple-400'}>
-                      ({groupBadge(g)})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
-                      className="text-purple-400 hover:text-purple-700"
-                      aria-label={`Remove ${g.gameName}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                )
-              })}
-              {myWants.length === 0 && (
-                <span className="text-xs text-moss/70">No wants yet — add the games you'd accept.</span>
-              )}
-            </div>
-
-            {addingFor === listing.id ? (
-              <div className="mt-3">
-                {addable.length > 0 ? (
-                  <>
-                    <p className="mb-1 text-xs text-moss/70">Add a want this item would accept:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {addable.slice(0, 24).map((g) => (
-                        <button
-                          key={g.gameId}
-                          type="button"
-                          onClick={() => toggleGroup(editor, listing.id, g)}
-                          className="rounded-full border border-ink/15 px-2 py-1 text-xs text-moss hover:border-purple-300 hover:text-purple-700"
-                        >
-                          + {g.gameName}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-moss/70">
-                    Every want is already on this item — use “Browse games” above to add more.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setAddingFor(null)}
-                  className="mt-2 text-xs text-moss/70 hover:text-moss"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAddingFor(listing.id)}
-                className="mt-3 rounded-xl border border-dashed border-ink/15 px-3 py-1.5 text-xs font-medium text-moss/70 hover:border-purple-300 hover:text-purple-500"
-              >
-                + Add want
-              </button>
-            )}
           </div>
         )
       })}
@@ -1277,6 +1205,15 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
       else s.add(key)
       return s
     })
+
+  const { data: listingsData } = useEventListings(slug, { page_size: 500 })
+  const askByListing = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const el of listingsData?.results ?? []) {
+      if (el.resolved_ask != null && el.resolved_ask !== '') m.set(el.id, Number(el.resolved_ask))
+    }
+    return m
+  }, [listingsData])
 
   if (editor.targets.length === 0) {
     return (
@@ -1337,6 +1274,10 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
             const specific = g.copyTargets.length > 0
+            const askValues = g.copyTargets
+              .map((t) => askByListing.get(t.listingId))
+              .filter((v): v is number => v != null)
+            const minAsk = askValues.length ? Math.min(...askValues) : null
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1384,6 +1325,11 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
                         />
                       </div>
                     )}
+                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
+                      <div className="mt-0.5 text-xs text-moss/70">
+                        ask: {minAsk != null ? `$${minAsk.toFixed(2)}` : '—'}
+                      </div>
+                    )}
                   </th>
                   {myListings.map((l) => {
                     const on = groupIsOn(editor, l.id, g)
@@ -1417,7 +1363,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
                       <div className="text-xs">
                         <span className="px-3 py-1 font-medium text-moss">
                           {specific
-                            ? 'Specific copies you selected (refine in “Browse games” above):'
+                            ? 'Specific copies you selected (refine in "Browse games" above):'
                             : "Copies you'd be matched to receive:"}
                         </span>
                         <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable />
