@@ -1385,6 +1385,8 @@ export default function MatchRunPage() {
         <span className="text-moss">Matching</span>
       </div>
 
+      <BackButton to={`/events/${slug}`}>Back to event</BackButton>
+
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
