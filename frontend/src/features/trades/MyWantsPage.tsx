@@ -49,6 +49,8 @@ interface Target {
   thumbnail?: string | null
   /** Set when this target is a Combo (not a listing). */
   comboId?: number
+  /** Effective bid for a wished combo (resolved_bid), for read-only display. */
+  bid?: string | null
 }
 
 // A canonical-game row in the want views: one game and its specific-copy
@@ -173,6 +175,7 @@ function buildModel(
                 gameId: COMBO_GAME_OFFSET + item.combo,
                 gameName: `🎁 ${item.combo_name ?? 'Combo'}`,
                 thumbnail: null,
+                bid: item.resolved_bid ?? null,
               })
             }
             continue
