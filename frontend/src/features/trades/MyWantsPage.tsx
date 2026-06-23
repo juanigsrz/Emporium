@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 
 import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
 import type { EventListing } from '../../api/events'
@@ -9,6 +9,7 @@ import type { Combo } from '../../api/combos'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
 import { useMyRatings, ratingMap, useSetRating, useDeleteRating } from '../../api/ratings'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 import {
   useOfferGroups,
@@ -1264,7 +1265,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-xl border px-2 py-1 text-xs"
+          className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           onClick={() => {
             for (const g of groupTargetsByGame(editor.targets)) {
               const wantRating = ratings.get(g.gameId)
@@ -1490,6 +1491,8 @@ type ViewMode = 'almanac' | 'visual' | 'grid'
 
 export default function MyWantsPage() {
   const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
+  const [confirmAdvanced, setConfirmAdvanced] = useState(false)
   const { user } = useAuthStore()
   const qc = useQueryClient()
 
@@ -1595,6 +1598,18 @@ export default function MyWantsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-8 sm:px-6">
+      {confirmAdvanced && (
+        <ConfirmDialog
+          title="Open advanced builder?"
+          body="The advanced X-to-Y builder is a manual editor for power users. Your current wants are saved; you can come back any time."
+          confirmLabel="Open builder"
+          onConfirm={() => {
+            setConfirmAdvanced(false)
+            navigate(`/events/${slug}/builder`)
+          }}
+          onCancel={() => setConfirmAdvanced(false)}
+        />
+      )}
       <BackButton to={`/events/${slug}`}>Back to {event.name}</BackButton>
 
       <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
@@ -1607,12 +1622,13 @@ export default function MyWantsPage() {
               For each item you offer, pick the games you'd accept in return.
             </p>
           </div>
-          <Link
-            to={`/events/${slug}/builder`}
-            className="text-xs text-moss/70 underline hover:text-indigo-600"
+          <button
+            type="button"
+            onClick={() => setConfirmAdvanced(true)}
+            className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
             Advanced (X-to-Y) builder
-          </Link>
+          </button>
         </div>
       </div>
 
