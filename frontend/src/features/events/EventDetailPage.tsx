@@ -981,7 +981,7 @@ function MyCombosSection({ event, username }: MyCombosSectionProps) {
         {!locked && !showForm && !editing && myListings.length >= 2 && (
           <button
             onClick={() => { setEditing(null); setShowForm(true) }}
-            className="rounded-full border-2 border-ink bg-fern px-3 py-1 text-xs font-semibold text-cream"
+            className="rounded-full border-2 border-ink bg-butter px-3 py-1 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5"
           >
             + New combo
           </button>
@@ -1203,7 +1203,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
         <button
           onClick={handleSave}
           disabled={saving || selected.size < 2 || name.trim() === ''}
-          className="rounded-full border-2 border-ink bg-fern px-3 py-1 text-xs font-semibold text-cream disabled:opacity-50"
+          className="rounded-full border-2 border-ink bg-butter px-3 py-1 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
         >
           {saving ? 'Saving…' : editing ? 'Save' : 'Create combo'}
         </button>
@@ -1271,7 +1271,7 @@ function ImportTradesSection({ event }: { event: TradeEvent; username: string })
         <button
           onClick={handleImport}
           disabled={!fromSlug || busy}
-          className="rounded-full border-2 border-ink bg-fern px-3 py-1.5 text-xs font-semibold text-cream disabled:opacity-50"
+          className="rounded-full border-2 border-ink bg-butter px-3 py-1.5 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
         >
           {busy ? 'Importing…' : 'Import'}
         </button>
