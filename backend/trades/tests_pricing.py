@@ -105,6 +105,8 @@ class ResolveBidTests(MatchingTestBase):
 class GamePriceEndpointTests(MatchingTestBase):
     def setUp(self):
         super().setUp()
+        self.event.status = "WANTLIST_OPEN"
+        self.event.save(update_fields=["status"])
         self.client.force_authenticate(user=self.user_a)
         self.url = f"/api/events/{self.slug}/game-prices/"
 
@@ -151,6 +153,8 @@ class GamePriceEndpointTests(MatchingTestBase):
 class WantBidEndpointTests(MatchingTestBase):
     def setUp(self):
         super().setUp()
+        self.event.status = "WANTLIST_OPEN"
+        self.event.save(update_fields=["status"])
         self.client.force_authenticate(user=self.user_a)
         self.url = f"/api/events/{self.slug}/want-bids/"
 
@@ -194,6 +198,8 @@ class WantBidEndpointTests(MatchingTestBase):
 class SellPricePatchTests(MatchingTestBase):
     def setUp(self):
         super().setUp()
+        self.event.status = "WANTLIST_OPEN"
+        self.event.save(update_fields=["status"])
         self.url = f"/api/events/{self.slug}/listings/{self.el_a1.id}/"
 
     def test_owner_sets_sell_price(self):

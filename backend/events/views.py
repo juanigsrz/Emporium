@@ -413,6 +413,8 @@ class TradeEventViewSet(
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # PATCH — only sell_price is editable via this route (never copy/active)
+        if event.inputs_locked:
+            raise PermissionDenied("Prices are locked — this event has moved to matching.")
         data = {"sell_price": request.data.get("sell_price")} if "sell_price" in request.data else {}
         ser = EventListingSerializer(
             listing, data=data, partial=True, context={"request": request}
