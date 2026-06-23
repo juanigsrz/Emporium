@@ -94,6 +94,30 @@ function groupBadge(g: GameGroup): string {
   return `${n} cop${n === 1 ? 'y' : 'ies'}`
 }
 
+// Grid rows = canonical-game groups from real game/listing targets, plus a row
+// for each member game of any WISHED combo (so the combo is reachable in its
+// dropdown). Combos never get their own row.
+function buildGridRows(editor: Editor, combos: Combo[], myListings: EventListing[]): GameGroup[] {
+  const gameGroups = groupTargetsByGame(
+    editor.targets.filter((t) => t.comboId == null && t.gameId < COMBO_GAME_OFFSET)
+  )
+  const byGame = new Map<number, GameGroup>(gameGroups.map((g) => [g.gameId, g]))
+  for (const c of combos) {
+    if (!myListings.some((l) => editor.isOn(l.id, comboTargetKey(c.id)))) continue
+    for (const it of c.items) {
+      if (!byGame.has(it.board_game_id)) {
+        byGame.set(it.board_game_id, {
+          gameId: it.board_game_id,
+          gameName: it.board_game_name,
+          thumbnail: it.board_game_thumbnail,
+          copyTargets: [],
+        })
+      }
+    }
+  }
+  return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
+}
+
 function listingTargetKey(listingId: number): string {
   return `L:${listingId}`
 }
@@ -1303,9 +1327,10 @@ interface GridModeProps {
   username?: string
   ratings: Map<number, number>
   moneyEnabled: boolean
+  combos: Combo[]
 }
 
-function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }: GridModeProps) {
+function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, combos }: GridModeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -1324,6 +1349,8 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
     return m
   }, [listingsData])
 
+  const rows = buildGridRows(editor, combos, myListings)
+
   if (editor.targets.length === 0) {
     return (
       <div className="rounded-xl bg-gray-50 px-3 py-6 text-center text-sm text-moss/70">
@@ -1341,7 +1368,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
           type="button"
           className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           onClick={() => {
-            for (const g of groupTargetsByGame(editor.targets)) {
+            for (const g of rows) {
               const wantRating = ratings.get(g.gameId)
               if (wantRating == null) continue
               for (const l of myListings) {
@@ -1379,7 +1406,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
           </tr>
         </thead>
         <tbody>
-          {groupTargetsByGame(editor.targets).map((g) => {
+          {rows.map((g) => {
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
             const specific = g.copyTargets.length > 0
@@ -1475,7 +1502,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
                             ? 'Specific copies you selected (refine in "Browse games" above):'
                             : "Copies you'd be matched to receive:"}
                         </span>
-                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable combos={combos} moneyEnabled={moneyEnabled} />
                       </div>
                     </td>
                   </tr>
@@ -1757,7 +1784,7 @@ export default function MyWantsPage() {
             )}
             {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
             {view === 'grid' && (
-              <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} />
+              <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} combos={combos} />
             )}
           </div>
         </>
