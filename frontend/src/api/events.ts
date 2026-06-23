@@ -58,6 +58,9 @@ export interface TradeEvent {
   regional_restrictions: string
   trade_policies: string
   algorithm_settings: Record<string, unknown>
+  // Cover photo + cached reverse-geocoded place name
+  image_url: string
+  center_place: string
   // Location gate (organizer-writable)
   require_location: boolean
   center_latitude: number | null
@@ -83,6 +86,8 @@ export interface TradeEventListItem {
   status: EventStatus
   money_enabled: boolean
   max_money_per_user: string | null
+  image_url: string
+  center_place: string
   require_location: boolean
   center_latitude: number | null
   center_longitude: number | null
@@ -106,6 +111,7 @@ export interface EventCreatePayload {
   wantlist_close_at?: string | null
   money_enabled?: boolean
   max_money_per_user?: string | null
+  image_url?: string
   require_location?: boolean
   center_latitude?: number | null
   center_longitude?: number | null
@@ -175,6 +181,7 @@ export interface EventsListParams {
   organizer?: string
   search?: string
   page?: number
+  joined?: boolean
 }
 
 // ---- Query keys ----
@@ -200,6 +207,7 @@ export async function fetchEvents(
   if (params.organizer) p.organizer = params.organizer
   if (params.search) p.search = params.search
   if (params.page && params.page > 1) p.page = String(params.page)
+  if (params.joined) p.joined = '1'
   const { data } = await apiClient.get<PaginatedResponse<TradeEventListItem>>('/events/', {
     params: p,
   })
