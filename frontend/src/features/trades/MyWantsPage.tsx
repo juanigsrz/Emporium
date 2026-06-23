@@ -1206,6 +1206,15 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
       return s
     })
 
+  const { data: listingsData } = useEventListings(slug, { page_size: 500 })
+  const askByListing = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const el of listingsData?.results ?? []) {
+      if (el.resolved_ask != null && el.resolved_ask !== '') m.set(el.id, Number(el.resolved_ask))
+    }
+    return m
+  }, [listingsData])
+
   if (editor.targets.length === 0) {
     return (
       <div className="rounded-xl bg-gray-50 px-3 py-6 text-center text-sm text-moss/70">
@@ -1265,6 +1274,10 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
             const specific = g.copyTargets.length > 0
+            const askValues = g.copyTargets
+              .map((t) => askByListing.get(t.listingId))
+              .filter((v): v is number => v != null)
+            const minAsk = askValues.length ? Math.min(...askValues) : null
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1310,6 +1323,11 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled }:
                           placeholder="price"
                           className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                         />
+                      </div>
+                    )}
+                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
+                      <div className="mt-0.5 text-xs text-moss/70">
+                        ask: {minAsk != null ? `$${minAsk.toFixed(2)}` : '—'}
                       </div>
                     )}
                   </th>
