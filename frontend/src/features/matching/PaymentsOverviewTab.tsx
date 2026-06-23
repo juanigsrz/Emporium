@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePaymentsOverview, usePaymentsSummary } from '../../api/payments'
 import type { SettlementPayment } from '../../api/payments'
 
@@ -49,7 +50,7 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
               const behind = u.owe_paid < u.owe_total || u.due_confirmed < u.due_total
               return (
                 <div key={u.username} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="w-28 truncate font-semibold text-ink">{u.username}</span>
+                  <Link to={`/u/${u.username}`} className="w-28 truncate font-semibold text-indigo-500 hover:underline">{u.username}</Link>
                   <span className="text-xs text-moss">paying {u.owe_paid}/{u.owe_total}</span>
                   <span className="text-xs text-moss">receiving {u.due_confirmed}/{u.due_total}</span>
                   {behind && <span className="ml-auto text-xs font-medium text-amber-600" title="Behind">⚠ behind</span>}
@@ -86,7 +87,9 @@ export function PaymentsOverviewTab({ slug }: { slug: string }) {
               <div key={p.id} className="flex items-center gap-3 px-3 py-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-ink">
-                    {p.from_username} → {p.to_username}
+                    <Link to={`/u/${p.from_username}`} className="text-indigo-500 hover:underline">{p.from_username}</Link>
+                    {' → '}
+                    <Link to={`/u/${p.to_username}`} className="text-indigo-500 hover:underline">{p.to_username}</Link>
                   </p>
                 </div>
                 <span className="text-sm font-bold text-ink">${p.amount}</span>

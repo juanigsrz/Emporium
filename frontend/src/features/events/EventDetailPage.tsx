@@ -28,6 +28,7 @@ import type { Combo } from '../../api/combos'
 import { useCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
 import { useMyRatings, ratingMap } from '../../api/ratings'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { useAuthStore } from '../../store/auth'
 import BackButton from '../../components/BackButton'
 import { StatusBadge } from './StatusBadge'
@@ -181,7 +182,7 @@ function JoinLeaveButton({
             {canLeave && (
               <button
                 onClick={() => setConfirmLeave(true)}
-                className="text-xs font-medium text-moss hover:text-red-500 transition-colors"
+                className="rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
               >
                 Leave
               </button>
@@ -744,6 +745,7 @@ function MyListingCard({
   const [draft, setDraft] = useState(savedValue)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   const dirty = draft.trim() !== savedValue
 
@@ -769,6 +771,25 @@ function MyListingCard({
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border-2 border-ink/10 bg-parchment p-3">
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove listing?"
+          body={
+            <>
+              This removes <span className="font-semibold text-ink">{listing.board_game_name}</span>{' '}
+              (<span className="font-mono">{listing.listing_code}</span>) from the event.
+            </>
+          }
+          confirmLabel={removePending ? 'Removing…' : 'Remove'}
+          destructive
+          pending={removePending}
+          onConfirm={() => {
+            onRemove(listing.id)
+            setConfirmRemove(false)
+          }}
+          onCancel={() => setConfirmRemove(false)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-start gap-2">
         <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-ink/10 bg-cream">
@@ -781,9 +802,9 @@ function MyListingCard({
           <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
         </div>
         <button
-          onClick={() => onRemove(listing.id)}
+          onClick={() => setConfirmRemove(true)}
           disabled={removePending}
-          className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
+          className="shrink-0 rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
           aria-label="Remove listing"
         >
           Remove
