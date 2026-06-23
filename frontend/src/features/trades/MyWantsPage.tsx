@@ -130,8 +130,6 @@ function buildModel(
   wantGroups: WantGroup[],
   wishes: { offer_group: number; want_group: number }[],
   gamePrices: GamePrice[],
-  combos: Combo[],
-  username: string | undefined
 ): PageModel {
   const wantGroupById = new Map(wantGroups.map((wg) => [wg.id, wg]))
   const wantGroupIdByOffer = new Map(wishes.map((w) => [w.offer_group, w.want_group]))
@@ -201,25 +199,6 @@ function buildModel(
     baseMatrix.set(listing.id, set)
   }
 
-  // Surface every active combo (not the user's own) as a wantable target row,
-  // even if not yet wanted. Its own one-row group (synthetic gameId) renders in
-  // the visual/grid views; baseMatrix above already marks the wanted ones.
-  for (const c of combos) {
-    if (c.owner_username === username) continue
-    const key = comboTargetKey(c.id)
-    if (!baseTargets.has(key)) {
-      baseTargets.set(key, {
-        key,
-        listingId: 0,
-        comboId: c.id,
-        label: c.combo_code,
-        gameId: COMBO_GAME_OFFSET + c.id,
-        gameName: `🎁 ${c.name}`,
-        thumbnail: c.items[0]?.board_game_thumbnail ?? null,
-      })
-    }
-  }
-
   return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
 }
 
@@ -241,6 +220,7 @@ interface GameBrowseProps {
   username?: string
   customWantGroups: WantGroup[]
   moneyEnabled: boolean
+  combos: Combo[]
 }
 
 interface RatingPriceRowProps {
@@ -486,7 +466,7 @@ function WantGroupControls({ slug, bggId, username, customWantGroups }: WantGrou
   )
 }
 
-function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled }: GameBrowseProps) {
+function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled, combos }: GameBrowseProps) {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
@@ -713,6 +693,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       editor={editor}
                       myListings={myListings}
                       selectable
+                      combos={combos}
+                      moneyEnabled={moneyEnabled}
                     />
                   </div>
                 )}
@@ -826,9 +808,11 @@ interface GameCopiesProps {
   editor?: Editor
   myListings?: EventListing[]
   selectable?: boolean
+  combos?: Combo[]
+  moneyEnabled?: boolean
 }
 
-function GameCopies({ slug, bggId, username, editor, myListings, selectable }: GameCopiesProps) {
+function GameCopies({ slug, bggId, username, editor, myListings, selectable, combos, moneyEnabled }: GameCopiesProps) {
   const { data, isLoading } = useEventListings(slug, { board_game: bggId, page_size: 200 })
   const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
@@ -855,6 +839,42 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
       gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
     })
     acting.forEach((ml) => editor!.toggle(ml.id, key, next))
+  }
+
+  const comboRows = (combos ?? []).filter(
+    (c) => c.owner_username !== username && c.items.some((it) => it.board_game_id === bggId)
+  )
+
+  const isComboWanted = (comboId: number) =>
+    !!editor && !!myListings &&
+    myListings.some((ml) => editor.isOn(ml.id, comboTargetKey(comboId)))
+
+  function maxMemberBid(c: Combo): string | null {
+    if (!editor) return null
+    const vals = c.items
+      .map((it) => Number(editor.priceForGame(it.board_game_id)))
+      .filter((v) => Number.isFinite(v) && v > 0)
+    return vals.length ? Math.max(...vals).toFixed(2) : null
+  }
+
+  function effBidFor(c: Combo): string | null {
+    const wished = editor?.targets.find((t) => t.comboId === c.id)
+    return wished?.bid ?? maxMemberBid(c)
+  }
+
+  function toggleCombo(c: Combo) {
+    if (!editor || !myListings) return
+    const next = !isComboWanted(c.id)
+    const group = groupTargetsByGame(editor.targets).find((g) => g.gameId === bggId)
+    const offering = group ? myListings.filter((ml) => groupIsOn(editor, ml.id, group)) : []
+    const acting = offering.length ? offering : myListings
+    const key = comboTargetKey(c.id)
+    editor.addTarget({
+      key, listingId: 0, comboId: c.id, label: c.combo_code,
+      gameId: COMBO_GAME_OFFSET + c.id, gameName: `🎁 ${c.name}`,
+      thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+    })
+    acting.forEach((ml) => editor.toggle(ml.id, key, next))
   }
 
   if (isLoading) return <p className="px-3 py-2 text-xs text-moss/70">Loading copies…</p>
@@ -925,6 +945,57 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
             })}
           </ul>
         </>
+      )}
+      {canSelect && comboRows.length > 0 && (
+        <div className="mt-2">
+          <p className="mb-1 text-[11px] font-medium text-amber-700/80">
+            Combos including this game:
+          </p>
+          <ul className="flex flex-col gap-1">
+            {comboRows.map((c) => {
+              const wanted = isComboWanted(c.id)
+              const eff = effBidFor(c)
+              return (
+                <li
+                  key={`combo-${c.id}`}
+                  className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
+                    wanted ? 'border-amber-300 bg-amber-50' : 'border-ink/15 bg-white'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={wanted}
+                    onChange={() => toggleCombo(c)}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-ink/20 text-amber-600 focus:ring-amber-500"
+                    aria-label={`Want combo ${c.combo_code}`}
+                  />
+                  <span className="flex shrink-0 -space-x-1">
+                    {c.items.map((it) =>
+                      it.board_game_thumbnail ? (
+                        <img
+                          key={it.id}
+                          src={it.board_game_thumbnail}
+                          alt=""
+                          title={it.board_game_name}
+                          className="h-6 w-6 rounded border border-amber-300 object-cover"
+                          loading="lazy"
+                        />
+                      ) : null
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink" title={c.name}>
+                    🎁 {c.name}
+                  </span>
+                  {moneyEnabled && (
+                    <span className="shrink-0 font-mono text-amber-700/80">
+                      {eff != null ? `$${eff}` : 'barter'}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       )}
       {ownCount > 0 && (
         <p className="mt-1 text-[11px] text-moss/70">
@@ -1517,8 +1588,8 @@ export default function MyWantsPage() {
   const myListings = useMemo(() => listingsData?.results ?? [], [listingsData])
 
   const model = useMemo(
-    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices, combos, user?.username),
-    [myListings, offerGroups, wantGroups, wishes, gamePrices, combos, user?.username]
+    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices),
+    [myListings, offerGroups, wantGroups, wishes, gamePrices]
   )
 
   const customWantGroups = useMemo(() => {
@@ -1681,6 +1752,7 @@ export default function MyWantsPage() {
                 username={user?.username}
                 customWantGroups={customWantGroups}
                 moneyEnabled={event.money_enabled}
+                combos={combos}
               />
             )}
             {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
