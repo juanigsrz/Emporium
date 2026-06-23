@@ -92,10 +92,16 @@ class TradeEventViewSet(
         qs = TradeEvent.objects.select_related("organizer").all()
         params = self.request.query_params
 
-        # ?status=
+        # ?status= + archived default-hide (list only)
         status_filter = params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        elif self.action == "list":
+            qs = qs.exclude(status=TradeEvent.Status.ARCHIVED)
+
+        # ?joined=1 — events the requesting user participates in (list only)
+        if self.action == "list" and params.get("joined") in ("1", "true") and self.request.user.is_authenticated:
+            qs = qs.filter(participations__user=self.request.user).distinct()
 
         # ?organizer= (by user id or username)
         organizer = params.get("organizer")

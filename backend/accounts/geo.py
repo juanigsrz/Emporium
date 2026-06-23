@@ -58,3 +58,20 @@ def geocode_search(query: str, limit: int = 5):
         {"display_name": d["display_name"], "lat": float(d["lat"]), "lon": float(d["lon"])}
         for d in data
     ]
+
+
+def reverse_geocode(lat, lng):
+    """Return a place display_name for coords, or None. Best-effort (never raises)."""
+    try:
+        resp = requests.get(
+            f"{settings.NOMINATIM_BASE_URL}/reverse",
+            params={"lat": lat, "lon": lng, "format": "jsonv2"},
+            headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:  # noqa: BLE001 — geocoding is best-effort
+        logger.warning("Nominatim reverse_geocode(%s,%s) failed: %s", lat, lng, exc)
+        return None
+    return data.get("display_name") or None

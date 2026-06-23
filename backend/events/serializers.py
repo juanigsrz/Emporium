@@ -14,6 +14,8 @@ from rest_framework import serializers
 
 from django.db import transaction
 
+from accounts.geo import reverse_geocode
+
 from .models import Combo, ComboItem, EventListing, EventParticipation, TradeEvent
 
 
@@ -49,6 +51,8 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "shipping_rules",
             "regional_restrictions",
             "trade_policies",
+            "image_url",
+            "center_place",
             "algorithm_settings",
             "allowed_transitions",
             "participants_count",
@@ -64,6 +68,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "organizer",
             "organizer_username",
             "status",
+            "center_place",
             "allowed_transitions",
             "participants_count",
             "is_organizer",
@@ -105,6 +110,26 @@ class TradeEventSerializer(serializers.ModelSerializer):
         if user is None:
             return False
         return obj.participations.filter(user=user).exists()
+
+    @staticmethod
+    def _resolve_center_place(validated_data, instance):
+        coords_changed = "center_latitude" in validated_data or "center_longitude" in validated_data
+        if not coords_changed:
+            return
+        lat = validated_data.get("center_latitude", getattr(instance, "center_latitude", None))
+        lng = validated_data.get("center_longitude", getattr(instance, "center_longitude", None))
+        if lat is not None and lng is not None:
+            validated_data["center_place"] = reverse_geocode(lat, lng) or ""
+        else:
+            validated_data["center_place"] = ""
+
+    def create(self, validated_data):
+        self._resolve_center_place(validated_data, None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        self._resolve_center_place(validated_data, instance)
+        return super().update(instance, validated_data)
 
 
 class EventParticipationSerializer(serializers.ModelSerializer):
