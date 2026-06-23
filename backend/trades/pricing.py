@@ -13,8 +13,9 @@ Resolve effective money prices from the per-game default + overrides.
         ?? None  (no bid)
 
 `target` is a WantGroupItem (or any object exposing `.event_listing`).
-Combo targets: `resolve_ask_target`/`resolve_bid` read `combo.sell_price` and the
-explicit `WantBid(user, combo)` respectively — no per-game fallback for combos.
+Combo targets: `resolve_ask_target` reads `combo.sell_price` (no fallback);
+`resolve_bid` returns the explicit `WantBid(user, combo)` override else the
+highest `UserGamePrice` over the combo's member games else None.
 
 Callers that invoke these helpers in a loop should pre-load related rows to
 avoid N+1: select_related("copy") on listings passed to resolve_ask, and
@@ -61,6 +62,20 @@ def load_combo_bids(event):
     }
 
 
+def load_combo_members(event):
+    """Preload combo membership: combo_id -> [member board_game_id, ...]."""
+    from events.models import ComboItem
+    members = {}
+    rows = (
+        ComboItem.objects
+        .filter(combo__event=event)
+        .values_list("combo_id", "event_listing__copy__board_game_id")
+    )
+    for cid, bgid in rows:
+        members.setdefault(cid, []).append(bgid)
+    return members
+
+
 def load_game_prices(event):
     """Preload all UserGamePrices for an event: (user_id, board_game_id) -> price.
 
@@ -98,23 +113,46 @@ def resolve_ask_target(target):
     return resolve_ask(target)
 
 
-def resolve_bid(user, event, target, bids=None, game_prices=None, combo_bids=None):
+def resolve_bid(user, event, target, bids=None, game_prices=None, combo_bids=None,
+                combo_members=None):
     """Effective buy bid for a user's want target, or None if no bid.
 
-    Pass preloaded bids/game_prices/combo_bids maps to skip per-item DB lookups
-    in bulk loops. A combo target has no per-game fallback — its bid is the
-    explicit WantBid(user, combo) only.
+    Pass preloaded bids/game_prices/combo_bids/combo_members maps to skip
+    per-item DB lookups in bulk loops. A combo target returns the explicit
+    WantBid(user, combo) override, else the highest UserGamePrice over the
+    combo's member games, else None.
     """
     combo_id = getattr(target, "combo_id", None)
     if combo_id:
         if combo_bids is not None:
-            return combo_bids.get((user.id, combo_id))
-        return (
-            WantBid.objects
-            .filter(user=user, event=event, combo_id=combo_id)
-            .values_list("amount", flat=True)
-            .first()
-        )
+            override = combo_bids.get((user.id, combo_id))
+        else:
+            override = (
+                WantBid.objects
+                .filter(user=user, event=event, combo_id=combo_id)
+                .values_list("amount", flat=True)
+                .first()
+            )
+        if override is not None:
+            return override
+        # Fallback: highest of the user's per-game bids over the combo's member
+        # games (None if they priced none of them).
+        if combo_members is not None:
+            bgids = combo_members.get(combo_id, [])
+        else:
+            from events.models import ComboItem
+            bgids = list(
+                ComboItem.objects
+                .filter(combo_id=combo_id)
+                .values_list("event_listing__copy__board_game_id", flat=True)
+            )
+        prices = []
+        for bgid in bgids:
+            p = (game_prices.get((user.id, bgid)) if game_prices is not None
+                 else _game_default(user.id, event.id, bgid))
+            if p is not None:
+                prices.append(p)
+        return max(prices) if prices else None
     if bids is not None:
         override = bids.get((user.id, target.event_listing_id))
     else:

@@ -132,6 +132,36 @@ class ComboPricingTests(TestCase):
         wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
         self.assertEqual(resolve_bid(self.wisher, self.event, wi), Decimal("35.00"))
 
+    def test_resolve_bid_combo_falls_back_to_max_member_price(self):
+        from trades.models import UserGamePrice, WantGroup, WantGroupItem
+        UserGamePrice.objects.create(
+            user=self.wisher, event=self.event, board_game=self.bg1, price="10.00"
+        )
+        UserGamePrice.objects.create(
+            user=self.wisher, event=self.event, board_game=self.bg2, price="18.00"
+        )
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="w")
+        wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        self.assertEqual(resolve_bid(self.wisher, self.event, wi), Decimal("18.00"))
+
+    def test_resolve_bid_combo_override_beats_member_price(self):
+        from trades.models import UserGamePrice, WantGroup, WantGroupItem
+        UserGamePrice.objects.create(
+            user=self.wisher, event=self.event, board_game=self.bg1, price="10.00"
+        )
+        WantBid.objects.create(
+            user=self.wisher, event=self.event, combo=self.combo, amount="3.00"
+        )
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="w2")
+        wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        self.assertEqual(resolve_bid(self.wisher, self.event, wi), Decimal("3.00"))
+
+    def test_resolve_bid_combo_none_when_no_member_price(self):
+        from trades.models import WantGroup, WantGroupItem
+        wg = WantGroup.objects.create(event=self.event, user=self.wisher, name="w3")
+        wi = WantGroupItem.objects.create(want_group=wg, combo=self.combo)
+        self.assertIsNone(resolve_bid(self.wisher, self.event, wi))
+
     def test_want_group_item_serializer_resolved_bid_for_combo(self):
         """WantGroupItemSerializer surfaces resolved_bid for a combo want item."""
         from trades.models import WantGroup, WantGroupItem
