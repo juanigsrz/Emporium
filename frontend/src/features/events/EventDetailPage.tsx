@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   useEvent,
+  useEvents,
   useEventListings,
   useJoinEvent,
   useLeaveEvent,
@@ -21,6 +22,7 @@ import {
   EVENT_STATUS_LABELS,
 } from '../../api/events'
 import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
+import { importTrades } from '../../api/trades'
 import { useCombos, useCreateCombo, usePatchCombo, useDeleteCombo } from '../../api/combos'
 import type { Combo } from '../../api/combos'
 import { useCopies } from '../../api/copies'
@@ -1195,6 +1197,70 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
   )
 }
 
+// ---- Import from a previous event ----
+
+function ImportTradesSection({ event }: { event: TradeEvent; username: string }) {
+  const qc = useQueryClient()
+  const { data: eventsData } = useEvents({})
+  const [fromSlug, setFromSlug] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  if (event.inputs_locked) return null
+
+  const others = (eventsData?.results ?? []).filter(
+    (e) => e.is_participant && e.slug !== event.slug
+  )
+  if (others.length === 0) return null
+
+  async function handleImport() {
+    if (!fromSlug) return
+    setBusy(true); setMsg(null); setErr(null)
+    try {
+      const s = await importTrades(event.slug, fromSlug)
+      setMsg(`Imported ${s.prices} price${s.prices !== 1 ? 's' : ''} and ${s.want_groups} want group${s.want_groups !== 1 ? 's' : ''}.`)
+      qc.invalidateQueries({ queryKey: ['trades', 'want-groups', event.slug] })
+      qc.invalidateQueries({ queryKey: ['trades', 'game-prices', event.slug] })
+    } catch (e: unknown) {
+      setErr(extractErrorMsg(e) ?? 'Import failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
+      <h3 className="font-display text-base font-bold text-ink mb-2">Import from a previous event</h3>
+      <p className="mb-3 text-xs text-moss/80">
+        Copy your per-game prices and your wants (matched by game) from another
+        event you joined. Best-effort — copies that are gone are skipped.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={fromSlug}
+          onChange={(e) => setFromSlug(e.target.value)}
+          className="rounded-xl border-2 border-ink/15 bg-parchment px-3 py-1.5 text-sm"
+        >
+          <option value="">Choose an event…</option>
+          {others.map((e) => (
+            <option key={e.slug} value={e.slug}>{e.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={handleImport}
+          disabled={!fromSlug || busy}
+          className="rounded-full border-2 border-ink bg-fern px-3 py-1.5 text-xs font-semibold text-cream disabled:opacity-50"
+        >
+          {busy ? 'Importing…' : 'Import'}
+        </button>
+      </div>
+      {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </section>
+  )
+}
+
 // ---- Deadline row helper ----
 
 function DeadlineRow({ label, isoDate }: { label: string; isoDate: string | null }) {
@@ -1426,6 +1492,9 @@ export default function EventDetailPage() {
       )}
       {token && event.is_participant && user && (
         <MyCombosSection event={event} username={user.username} />
+      )}
+      {token && event.is_participant && user && (
+        <ImportTradesSection event={event} username={user.username} />
       )}
 
       {/* Matching section link */}

@@ -239,6 +239,24 @@ export async function deleteWantBid(
   await apiClient.delete(`/events/${slug}/want-bids/`, { params: target })
 }
 
+// ---- Cross-event import ----
+
+export interface ImportTradesSummary {
+  prices: number
+  want_groups: number
+}
+
+export async function importTrades(
+  targetSlug: string,
+  fromEvent: string
+): Promise<ImportTradesSummary> {
+  const { data } = await apiClient.post<ImportTradesSummary>(
+    `/events/${targetSlug}/import-trades/`,
+    { from_event: fromEvent }
+  )
+  return data
+}
+
 // ---- Raw helpers (for sequential orchestration outside React hooks) ----
 // Used by MyWantsPage to lazily create the offer/want/wish trio per item and
 // batch-PATCH want lists on Save. Same endpoints as the hooks above.
