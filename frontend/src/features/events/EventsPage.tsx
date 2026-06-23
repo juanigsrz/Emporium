@@ -120,6 +120,16 @@ function EventCard({ event }: { event: TradeEventListItem }) {
       to={`/events/${event.slug}`}
       className="group flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-3xl border-2 border-ink bg-cream p-4 shadow-card transition-transform hover:-translate-y-0.5"
     >
+      {event.image_url ? (
+        <img
+          src={event.image_url}
+          alt=""
+          className="h-20 w-full shrink-0 rounded-2xl object-cover sm:h-16 sm:w-16"
+          loading="lazy"
+        />
+      ) : (
+        <div className="hidden h-16 w-16 shrink-0 rounded-2xl bg-parchment sm:block" aria-hidden="true" />
+      )}
       {/* Left: title, description, meta */}
       <div className="min-w-0 flex-1">
         <h3 className="font-display text-base font-bold text-ink truncate leading-snug">
@@ -164,6 +174,11 @@ function EventCard({ event }: { event: TradeEventListItem }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
               Location-gated{event.max_distance_km ? ` (${event.max_distance_km} km)` : ''}
+              {(event.center_place || (event.center_latitude != null && event.center_longitude != null)) && (
+                <span className="text-moss/60">
+                  · {event.center_place || `${event.center_latitude}, ${event.center_longitude}`}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -673,6 +688,9 @@ export default function EventsPage() {
   }
 
   const { data, isLoading, isError, isFetching } = useEvents(queryParams)
+  const { data: joinedData } = useEvents({ joined: true })
+  const joinedEvents = token ? (joinedData?.results ?? []) : []
+  const joinedSlugs = new Set(joinedEvents.map((e) => e.slug))
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => setSearchInput(e.target.value),
     []
@@ -779,12 +797,22 @@ export default function EventsPage() {
         </div>
       ) : (
         <>
+          {joinedEvents.length > 0 && (
+            <div className="mb-6">
+              <h2 className="mb-2 text-sm font-semibold text-ink">Your events</h2>
+              <div className="grid grid-cols-1 gap-3">
+                {joinedEvents.map((event) => (
+                  <EventCard key={event.slug} event={event} />
+                ))}
+              </div>
+            </div>
+          )}
           <div
             className={`space-y-3 transition-opacity ${
               isFetching ? 'opacity-60' : 'opacity-100'
             }`}
           >
-            {data!.results.map((event) => (
+            {data!.results.filter((e) => !joinedSlugs.has(e.slug)).map((event) => (
               <EventCard key={event.id} event={event} />
             ))}
           </div>

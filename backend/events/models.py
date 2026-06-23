@@ -99,6 +99,10 @@ class TradeEvent(models.Model):
     max_distance_km       = models.PositiveIntegerField(null=True, blank=True)
     trade_policies        = models.TextField(blank=True)
 
+    # Cover image (URL only; no binary upload) + cached reverse-geocoded center name.
+    image_url    = models.CharField(max_length=500, blank=True, default="")
+    center_place = models.CharField(max_length=255, blank=True, default="")
+
     # Solver configuration
     algorithm_settings = models.JSONField(default=dict)
 

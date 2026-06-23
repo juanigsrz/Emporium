@@ -613,6 +613,40 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 
       </div>
 
+      {totalPages > 1 && (
+        <div className="mb-2 flex items-center justify-end gap-2 text-xs">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-xl border border-ink/20 px-2 py-1 disabled:opacity-40"
+          >
+            Prev
+          </button>
+          <span className="text-moss">Page</span>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={page}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              if (v >= 1 && v <= totalPages) setPage(v)
+            }}
+            className="no-spinner w-14 rounded border border-ink/20 px-1.5 py-0.5 text-center"
+            aria-label="Jump to page"
+          />
+          <span className="text-moss">/ {totalPages}</span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded-xl border border-ink/20 px-2 py-1 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      )}
       {games.length === 0 ? (
         <p className="px-1 py-6 text-center text-sm text-moss/70">
           {isFetching ? 'Loading games…' : 'No games with copies match.'}
