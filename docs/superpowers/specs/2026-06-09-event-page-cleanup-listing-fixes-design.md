@@ -5,7 +5,7 @@
 **Area:** Event detail page (`frontend/src/features/events/EventDetailPage.tsx`)
 
 This is the first of three independent specs carved out of a larger QOL request.
-Specs B (Profile BGG hub + location autocomplete) and C (Almanac tab + enriched
+Specs B (Profile BGG hub + location autocomplete) and C (Catalog tab + enriched
 dropdown) are out of scope here and get their own cycles. Coupling to remember:
 **B before C** (Profile must host the BGG buttons before C strips them from My
 Wants). Spec A is fully independent of both.

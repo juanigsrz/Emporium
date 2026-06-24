@@ -1,14 +1,14 @@
-# Event Browse + Almanac (#7, #9) — Design
+# Event Browse + Catalog (#7, #9) — Design
 
 ## Summary
 
 - **#7 Event browsing:** event cover photo (URL), hide archived events from the
   default list, show the event's center as a place name (reverse-geocoded) next to
   the distance, and pin the user's joined events at the top.
-- **#9 Almanac:** fix the min-rating filter to use the user's **personal** rating,
+- **#9 Catalog:** fix the min-rating filter to use the user's **personal** rating,
   and add top-of-list pagination (next-page button + jump-to-page).
 
-**Repo:** Emporium. **Implementation:** two plans — 3a (event browse), 3b (almanac).
+**Repo:** Emporium. **Implementation:** two plans — 3a (event browse), 3b (catalog).
 
 ## Background
 
@@ -21,7 +21,7 @@
 - The events list `TradeEventViewSet.get_queryset` filters by `?status=`; nothing
   excludes archived by default. `TradeEventListItem`/`TradeEvent` serializers
   expose `center_latitude`/`center_longitude`/`is_participant`.
-- The almanac (`GameBrowse` in `MyWantsPage`) calls the event `games` endpoint;
+- The catalog (`GameBrowse` in `MyWantsPage`) calls the event `games` endpoint;
   its `min_rating` currently filters `average__gte` — `average` is the **BGG**
   rating, not the user's. Personal ratings are `accounts.GameRating(user,
   board_game, value)`.
@@ -60,7 +60,7 @@
 - `api/events.ts`: add `image_url` + `center_place` to the event types and the
   create/patch payload.
 
-## Part 3b — Almanac (#9)
+## Part 3b — Catalog (#9)
 
 ### Backend (`games` endpoint, `events/views.py`)
 
@@ -80,7 +80,7 @@ an empty result — correct.)
 
 ### Frontend (`GameBrowse` pagination)
 
-The almanac grid already paginates with controls at the bottom. Add, **above the
+The catalog grid already paginates with controls at the bottom. Add, **above the
 results**: a "Next page" button (disabled on the last page) and a **jump-to-page**
 number input (1..totalPages) that sets `page`. Reuse the existing `page` /
 `totalPages` state. The existing min-rating filter input is unchanged (only its

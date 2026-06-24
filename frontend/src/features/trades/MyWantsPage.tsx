@@ -668,11 +668,11 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
               <div
                 key={g.bgg_id}
                 className={`flex flex-col overflow-hidden rounded-2xl border ${
-                  wanted ? 'border-purple-300 ring-1 ring-purple-200' : 'border-ink/15'
+                  wanted ? 'border-purple-400 ring-2 ring-purple-300' : 'border-ink/20'
                 }`}
               >
                 <div className="flex gap-2 p-2">
-                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100">
+                  <div className="h-32 w-32 shrink-0 overflow-hidden rounded bg-gray-100">
                     {(g.thumbnail || g.image_url) ? (
                       <img src={g.thumbnail || g.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : null}
@@ -690,7 +690,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       className="mt-0.5 text-[11px] font-medium text-indigo-500 hover:text-indigo-700"
                       aria-expanded={open}
                     >
-                      {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'} {open ? '▲' : '▼'}
+                      {/* {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'} {open ? '▲' : '▼'} */}
+                      Expand {open ? '▲' : '▼'}
                     </button>
                   </div>
                 </div>
@@ -775,7 +776,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       : 'border-ink/10 text-moss hover:bg-indigo-50 hover:text-indigo-600'
                   }`}
                 >
-                  {wanted ? 'Any copy ✓' : '+ Want any copy'}
+                  {wanted ? 'Wanted ✓' : '+ Want any copy'}
                 </button>
               </div>
             )
@@ -1061,7 +1062,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
       <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
-            <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-12 w-12" />
+            <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-32 w-32" />
             <div className="min-w-0">
               <h3 className="truncate text-base font-semibold text-ink">
                 {copy ? copy.board_game_name : 'Copy details'}
@@ -1329,7 +1330,7 @@ function VisualMode({ myListings, editor, combos }: VisualModeProps) {
                   })}
                 </div>
               ) : (
-                <span className="mt-12 text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
+                <span className="mt-12 text-xs text-moss/70">No wants yet — add games in the Catalog view.</span>
               )}
             </div>
           </div>
@@ -1611,7 +1612,7 @@ async function persistChanges(
 // MAIN PAGE
 // ============================================================
 
-type ViewMode = 'almanac' | 'visual' | 'grid'
+type ViewMode = 'catalog' | 'visual' | 'grid'
 
 export default function MyWantsPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -1656,7 +1657,7 @@ export default function MyWantsPage() {
   const { data: ratingsData = [] } = useMyRatings()
   const rmap = useMemo(() => ratingMap(ratingsData), [ratingsData])
 
-  const [view, setView] = useState<ViewMode>('almanac')
+  const [view, setView] = useState<ViewMode>('catalog')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -1725,7 +1726,7 @@ export default function MyWantsPage() {
       {confirmAdvanced && (
         <ConfirmDialog
           title="Open advanced builder?"
-          body="The advanced X-to-Y builder is a manual editor for power users. Your current wants are saved; you can come back any time."
+          body="The advanced wishlist builder is a manual editor for power users. Your current wants are saved; you can come back any time."
           confirmLabel="Open builder"
           onConfirm={() => {
             setConfirmAdvanced(false)
@@ -1751,14 +1752,14 @@ export default function MyWantsPage() {
             onClick={() => setConfirmAdvanced(true)}
             className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
-            Advanced (X-to-Y) builder
+            Advanced wishlist builder
           </button>
         </div>
       </div>
 
       {event.inputs_locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          This event is locked for matching — want lists can no longer be edited.
+          This event is locked for matching, want lists can no longer be edited.
         </div>
       )}
 
@@ -1775,7 +1776,7 @@ export default function MyWantsPage() {
           {/* Mode tabs */}
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex rounded-2xl border border-ink/15 bg-white p-0.5">
-              {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
+              {(['catalog', 'visual', 'grid'] as ViewMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setView(m)}
@@ -1794,7 +1795,7 @@ export default function MyWantsPage() {
           </div>
 
           <div className={event.inputs_locked ? 'pointer-events-none opacity-60' : undefined}>
-            {view === 'almanac' && (
+            {view === 'catalog' && (
               <GameBrowse
                 slug={slug!}
                 editor={editor}

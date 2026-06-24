@@ -59,7 +59,7 @@
 
   /* Warm, slim scrollbars. */
   * {
-    scrollbar-width: thin;
+    scrollbar-width: auto;
     scrollbar-color: #cabd9f transparent;   /* parchment-stone thumb */
   }
   *::-webkit-scrollbar { width: 11px; height: 11px; }

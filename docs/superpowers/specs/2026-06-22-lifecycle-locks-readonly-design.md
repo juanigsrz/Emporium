@@ -31,7 +31,7 @@ the read-only state visible:
   `PATCH /api/profiles/me/`). No lock today. `EventParticipation` (events app)
   records which events a user joined.
 - `MyWantsPage` shows a "locked for matching" banner and hides the save bar when
-  locked, but its three views (`GameBrowse` almanac, `VisualMode`, `GridMode`)
+  locked, but its three views (`GameBrowse` catalog, `VisualMode`, `GridMode`)
   don't receive a `locked` prop and keep their inputs/buttons interactive.
 
 ## #2 Price lock (backend)
@@ -73,7 +73,7 @@ participation check only when a real change to an existing value is detected.
 In `MyWantsPage`, thread `locked = event.inputs_locked` into the three view
 components and make their controls read-only when locked:
 
-- `GameBrowse` (almanac): disable the rating/price inputs (`RatingPriceRow`), the
+- `GameBrowse` (catalog): disable the rating/price inputs (`RatingPriceRow`), the
   "Want" / per-card toggle buttons, and the `WantGroupControls` add-to-group
   controls; apply a greyed style.
 - `VisualMode`: disable the per-item "Add want" and the remove (×) buttons.
@@ -94,7 +94,7 @@ hidden save bar already exist; this completes the read-only affordance.
   an active event → 403; a non-distance field edit during an active event → 200.
 
 **Frontend (#8):** typecheck + lint + manual checklist (open My Wants on a
-`MATCHING` event → almanac/visual/grid controls are visibly disabled; on a
+`MATCHING` event → catalog/visual/grid controls are visibly disabled; on a
 `WANTLIST_OPEN` event they're interactive).
 
 ## Files

@@ -228,7 +228,7 @@ git commit -m "feat(events): hide min-ask spinner, block min-ask <= 0"
 ### Task 5: Manual verification
 
 - [ ] Grid view (money event): each want-game row shows a `$` price input that saves via the Save bar.
-- [ ] Rating + price inputs (almanac, grid, min-rating filter, event Min. ask) show no step arrows.
+- [ ] Rating + price inputs (catalog, grid, min-rating filter, event Min. ask) show no step arrows.
 - [ ] Entering `0` as a per-game price and clicking Save → blocked with "Price must be greater than $0."; same for the event Min. ask.
 
 ---

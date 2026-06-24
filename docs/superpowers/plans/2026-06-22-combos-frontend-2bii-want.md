@@ -14,7 +14,7 @@
 
 **Lint baseline:** repo `npm run lint` already fails on pre-existing `frontend/src/features/copies/CopyForm.tsx:15`. Gate per task = changed file clean via `npx eslint <file> --ext ts,tsx` (exit 0).
 
-**Out of scope (noted follow-ups):** combo *bids* in the visual builder (its money UI is per-game `UserGamePrice`; combos have no game — the inputs don't map; combo bids can be added later via the advanced builder or a dedicated control); an advanced-builder combo *want picker* (adding a combo to a want group through `WantGroupEditor` — the visual builder already lets you want combos); GameBrowse/almanac combo surfacing (combos appear in the visual + grid views).
+**Out of scope (noted follow-ups):** combo *bids* in the visual builder (its money UI is per-game `UserGamePrice`; combos have no game — the inputs don't map; combo bids can be added later via the advanced builder or a dedicated control); an advanced-builder combo *want picker* (adding a combo to a want group through `WantGroupEditor` — the visual builder already lets you want combos); GameBrowse/catalog combo surfacing (combos appear in the visual + grid views).
 
 ---
 
@@ -325,7 +325,7 @@ With dev server + backend, as a user who has ≥1 listing in an event where ANOT
 - Toggle the combo on for one of your items → the unsaved-changes bar appears → Save. Reload: the combo stays wanted (persisted as a `WantGroupItem.combo`).
 - Toggle it off → Save → reload: no longer wanted.
 - Your OWN combos do NOT appear as wantable targets.
-- (Almanac view: combos are not surfaced there — known; visual/grid cover wanting. Combo rows show no price input effect — combo bids are out of scope this slice.)
+- (Catalog view: combos are not surfaced there — known; visual/grid cover wanting. Combo rows show no price input effect — combo bids are out of scope this slice.)
 
 - [ ] **Step 6: Commit**
 
@@ -655,7 +655,7 @@ git commit -m "feat(combos-fe): render + preserve combo want-items in the advanc
 - Combo modeled as its own group (synthetic gameId), rendered by existing visual/grid views, survives `reset()` (built into `baseTargets`) → Task 2 ✔
 - Own combos excluded → Task 2 (`c.owner_username === username` skip) ✔
 - Advanced builder shows + preserves combo want-items → Task 3 ✔
-- Combo bids / advanced combo *picker* / almanac surfacing → explicitly deferred (stated) ✔
+- Combo bids / advanced combo *picker* / catalog surfacing → explicitly deferred (stated) ✔
 - Verify via build + targeted eslint + manual → every task ✔
 
 **Placeholder scan:** none.

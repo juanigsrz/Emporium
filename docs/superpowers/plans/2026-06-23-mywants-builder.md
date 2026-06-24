@@ -84,7 +84,7 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
                   ))}
                 </div>
               ) : (
-                <span className="text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
+                <span className="text-xs text-moss/70">No wants yet — add games in the Catalog view.</span>
               )}
             </div>
           </div>
@@ -117,8 +117,8 @@ Expected: exit 0.
   wanted-game thumbnails; no text chip list and no "+ Add want" field.
 - Clicking a wanted thumbnail's × removes that game from the item's wish (the
   "wants N" count + thumbnails update); the save bar appears; Save persists.
-- Empty item shows "No wants yet — add games in the Almanac view."
-- Adding wants still works from the Almanac view.
+- Empty item shows "No wants yet — add games in the Catalog view."
+- Adding wants still works from the Catalog view.
 
 - [ ] **Step 4: Commit**
 
@@ -223,7 +223,7 @@ git commit -m "feat(mywants): grid — show seller ask beside the bid per wanted
 
 **Spec coverage:**
 - #4 visual: bigger thumbnails, × per wanted thumbnail removes the game, drop
-  text chip list + add-want picker, empty-state points to Almanac → Task 1 ✔
+  text chip list + add-want picker, empty-state points to Catalog → Task 1 ✔
 - #6 grid: per-row minimum `resolved_ask` shown beside the bid, money-only,
   combo rows excluded → Task 2 ✔
 - Verify build + lint + manual → both tasks ✔

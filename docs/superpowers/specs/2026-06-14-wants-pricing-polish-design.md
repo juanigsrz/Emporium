@@ -7,8 +7,8 @@ backend validators (`trades/serializers.py`, `events/serializers.py`) + backend 
 
 ## Problem
 
-1. **F1** — The want-list builder's Grid view has no per-game price field (the Almanac
-   view does). The Almanac price field's only defect is that it accepts 0 (covered by F3).
+1. **F1** — The want-list builder's Grid view has no per-game price field (the Catalog
+   view does). The Catalog price field's only defect is that it accepts 0 (covered by F3).
 2. **F2** — Number inputs for rating and price show native step arrows, which behave
    inconsistently; they should be hidden.
 3. **F3** — Ask prices can be set to 0, so a user can accidentally give a game away or
@@ -25,7 +25,7 @@ backend validators (`trades/serializers.py`, `events/serializers.py`) + backend 
 
 - WantBid per-want overrides (not edited in these flows).
 - Hiding spinners on unrelated numeric inputs (e.g. create-event max money/distance).
-- Changing the Almanac price field beyond the >0 rule and hidden spinners.
+- Changing the Catalog price field beyond the >0 rule and hidden spinners.
 
 ## F1 — Grid view price field
 
@@ -37,7 +37,7 @@ In `MyWantsPage.tsx`:
   row label cell), when `moneyEnabled` render a compact price input below/after the game
   name, wired to the existing staged editor:
   `value={editor.priceForGame(g.gameId)}`, `onChange={(e) => editor.setMoney(g.gameId, e.target.value)}`.
-  Use the same `min="0.01" step="0.01"` + `no-spinner` styling as the Almanac price.
+  Use the same `min="0.01" step="0.01"` + `no-spinner` styling as the Catalog price.
   (Negative synthetic gameIds `< 0` cannot be priced — guard by only rendering the input
   when `g.gameId >= 0`, mirroring the persist-time `if (gameId < 0) continue`.)
 - Changes persist through the existing Save bar (no new save path).

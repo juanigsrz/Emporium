@@ -264,16 +264,17 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
 
         {/* Top: thumbnail + listing code + status + game link */}
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <GameThumb src={copy.board_game_thumbnail} alt={copy.board_game_name} className="h-8 w-8" />
+          <GameThumb src={copy.board_game_thumbnail} alt={copy.board_game_name} className="h-24 w-24" />
+          <span className="ml-auto max-w-[60%] truncate text-m font-bold text-ink">
+            {copy.board_game_name}
+          </span>
           <span className="font-mono text-xs text-moss border border-ink/10 rounded-full px-2 py-0.5">
             #{copy.listing_code}
           </span>
           <span className={`text-xs border rounded-full px-2 py-0.5 font-semibold ${statusClass}`}>
             {copy.status.charAt(0) + copy.status.slice(1).toLowerCase()}
           </span>
-          <span className="ml-auto max-w-[60%] truncate text-sm font-bold text-ink">
-            {copy.board_game_name}
-          </span>
+          
         </div>
 
         {/* Condition + language + edition */}
@@ -578,7 +579,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
                         onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name, thumbnail: g.thumbnail })}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-sage/30"
                       >
-                        <GameThumb src={g.thumbnail} alt={g.name} className="h-8 w-8" />
+                        <GameThumb src={g.thumbnail} alt={g.name} className="h-16 w-16" />
                         <span className="flex-1 truncate text-ink">{g.name}</span>
                         <span className="shrink-0 text-xs text-moss/70">{g.year_published ?? ''}</span>
                       </button>
@@ -590,7 +591,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               <div className="mb-4 flex items-center gap-2 rounded-xl border-2 border-ink/15 bg-sage/30 px-3 py-2">
-                <GameThumb src={picked.thumbnail} alt={picked.name} className="h-8 w-8" />
+                <GameThumb src={picked.thumbnail} alt={picked.name} className="h-24 w-24" />
                 <span className="text-sm font-semibold text-ink">{picked.name}</span>
                 <button
                   type="button"

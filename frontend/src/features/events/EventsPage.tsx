@@ -128,7 +128,7 @@ function EventCard({ event }: { event: TradeEventListItem }) {
           loading="lazy"
         />
       ) : (
-        <div className="hidden h-16 w-16 shrink-0 rounded-2xl bg-parchment sm:block" aria-hidden="true" />
+        <div className="hidden h-24 w-24 shrink-0 rounded-2xl bg-parchment sm:block" aria-hidden="true" />
       )}
       {/* Left: title, description, meta */}
       <div className="min-w-0 flex-1">

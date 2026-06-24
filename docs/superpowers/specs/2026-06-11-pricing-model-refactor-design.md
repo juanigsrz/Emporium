@@ -20,19 +20,19 @@ The solver export papers over this: ask = `min(money_amount)` across a listing's
 group membership.
 
 Users also have no easy place to set/see prices. Most users want to set one price
-per game and have it apply to every copy — entered in the Almanac (game-browse)
+per game and have it apply to every copy — entered in the Catalog (game-browse)
 view.
 
 ## Decisions (from brainstorming)
 
-1. **Almanac price = stored per-game default**, not a one-shot bulk write. Saved
+1. **Catalog price = stored per-game default**, not a one-shot bulk write. Saved
    per user, per event, per game; auto-applies to current and future copies/wants
    unless a specific copy/want overrides it.
 2. **Buy side keeps a per-want override** on top of the per-game default (for the
    advanced X-to-Y builder).
 3. `UserGamePrice` is **event-scoped** (matches `money_enabled` and per-event
    budgets).
-4. Almanac edits the **default only**; existing per-copy/per-want overrides
+4. Catalog edits the **default only**; existing per-copy/per-want overrides
    persist (override wins). "Applies to every copy" holds for the common case
    where copies carry no override. No "wipe overrides" action in v1.
 5. Per-copy **barter-only opt-out** while a game default exists (a sentinel
@@ -108,7 +108,7 @@ the ask resolution is unambiguously event-scoped.
   unique key.
 - **`WantBid` upsert:** keyed by target (`board_game` or `event_listing`),
   scoped to `request.user`.
-- **Reads:** the My Listings, Almanac game-view, and builder list endpoints
+- **Reads:** the My Listings, Catalog game-view, and builder list endpoints
   return the **resolved** ask/bid plus an `is_override` flag, so the UI can show
   the effective price and whether it comes from a per-copy/per-want override or
   the game default.
@@ -126,7 +126,7 @@ the ask resolution is unambiguously event-scoped.
 
 - **My Listings in This Event** (`EventDetailPage` / `HomePage`): a per-copy
   `sell_price` input column.
-- **Almanac** (`MyWantsPage` + catalog game detail): one per-game price field
+- **Catalog** (`MyWantsPage` + catalog game detail): one per-game price field
   bound to `UserGamePrice`. Reuse the existing `baseMoneyByGame` plumbing in
   `MyWantsPage`; extend it to the sell side and persist server-side.
 - **Advanced X-to-Y builder** (`WantListBuilderPage`): Wishes tab gets a

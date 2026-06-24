@@ -458,7 +458,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 - [ ] **Step 8: Verify build + lint pass, and manually confirm browse**
 
 Run: `cd frontend && npm run build && npm run lint`
-Expected: PASS. Manual: expand a game card in the Almanac view → a combo containing that game appears as a checkbox row with member thumbnails; ticking it under either member game wishes the same combo; money events show the effective bid.
+Expected: PASS. Manual: expand a game card in the Catalog view → a combo containing that game appears as a checkbox row with member thumbnails; ticking it under either member game wishes the same combo; money events show the effective bid.
 
 - [ ] **Step 9: Commit**
 
@@ -644,7 +644,7 @@ function VisualMode({ myListings, editor, combos }: VisualModeProps) {
                   })}
                 </div>
               ) : (
-                <span className="mt-12 text-xs text-moss/70">No wants yet — add games in the Almanac view.</span>
+                <span className="mt-12 text-xs text-moss/70">No wants yet — add games in the Catalog view.</span>
               )}
             </div>
 ```
@@ -673,4 +673,4 @@ git commit -m "feat(combos): visual view renders combos as labeled member-thumb 
 
 - [ ] Backend: `cd backend && python manage.py test trades matching -v 1` → PASS.
 - [ ] Frontend: `cd frontend && npm run build && npm run lint` → PASS; `grep -rn "bg-fern" src` prints nothing.
-- [ ] Manual walkthrough in a money-enabled event: combo buttons readable; Almanac dropdown lets you wish a combo under each member game; grid shows wished games only with combos in member dropdowns; visual view shows the combo as a labeled outlined cluster; an un-overridden wished combo's displayed bid equals the max member-game bid.
+- [ ] Manual walkthrough in a money-enabled event: combo buttons readable; Catalog dropdown lets you wish a combo under each member game; grid shows wished games only with combos in member dropdowns; visual view shows the combo as a labeled outlined cluster; an un-overridden wished combo's displayed bid equals the max member-game bid.

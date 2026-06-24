@@ -14,7 +14,7 @@ so the displayed combo price matches what the solver actually bids.
 - A wisher can want a combo. The wisher's bid override lives in `WantBid(combo)`.
   `WantGroupItemSerializer.resolved_bid` already surfaces the resolved value.
 - FE state lives in `frontend/src/features/trades/MyWantsPage.tsx`, which has three
-  views: **almanac** (browse game cards, each expands to a copy dropdown via
+  views: **catalog** (browse game cards, each expands to a copy dropdown via
   `GameCopies`), **visual** (one card per my-item, wanted items as thumbnails), and
   **grid** (rows = wished games, cols = my items; each row expands to `GameCopies`).
 - Combo CRUD UI ("My Combos in This Event") lives in

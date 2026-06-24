@@ -1,4 +1,4 @@
-"""Distance + geocoding helpers. No GeoDjango — plain floats + haversine."""
+"""Distance + geocoding helpers. No GeoDjango, plain floats + haversine."""
 
 import logging
 import math
@@ -49,7 +49,7 @@ def geocode_search(query: str, limit: int = 5):
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception as exc:  # noqa: BLE001 — geocoding is best-effort
+    except Exception as exc:  # noqa: BLE001, geocoding is best-effort
         # Log so silent failures (e.g. Nominatim 403 on a blocked User-Agent) are
         # diagnosable instead of looking like "no results".
         logger.warning("Nominatim geocode_search(%r) failed: %s", query, exc)
@@ -71,7 +71,7 @@ def reverse_geocode(lat, lng):
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception as exc:  # noqa: BLE001 — geocoding is best-effort
+    except Exception as exc:  # noqa: BLE001, geocoding is best-effort
         logger.warning("Nominatim reverse_geocode(%s,%s) failed: %s", lat, lng, exc)
         return None
     return data.get("display_name") or None

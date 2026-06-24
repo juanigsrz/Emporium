@@ -7,7 +7,7 @@ Two frontend-only improvements to `MyWantsPage`:
 - **#4 Visual rework:** make the visual view a clean, at-a-glance picture of each
   item's wishes — bigger wanted-game thumbnails, each with a × to remove that
   game from the wish; drop the redundant text-chip list and the inline add-want
-  field. Adding wants happens in the Almanac view.
+  field. Adding wants happens in the Catalog view.
 - **#6 Grid ask:** in the grid, show the seller-side **ask** for each wanted game
   next to the user's existing **bid**, so both sides are visible at once.
 
@@ -20,7 +20,7 @@ eslint + manual checklist (no test runner). One spec, one plan.
 `{key,listingId,gameId,gameName,thumbnail,comboId?}`, grouped by game via
 `groupTargetsByGame`):
 
-- **Almanac** (`GameBrowse`): browse event games, add wants (the add surface).
+- **Catalog** (`GameBrowse`): browse event games, add wants (the add surface).
 - **Visual** (`VisualMode`): per my-listing, an offered-copy thumbnail → arrow →
   the wanted-game thumbnails, then a text chip list of those wants, then a "+ Add
   want" inline picker.
@@ -46,9 +46,9 @@ Rework the per-listing card:
   the badge + × button) — the thumbnails now carry the remove affordance.
 - **Remove** the inline "+ Add want" picker (the `addingFor` state, the `addable`
   list, the `+ {gameName}` buttons, and the "+ Add want" / "Done" buttons).
-  Wants are added from the Almanac view.
+  Wants are added from the Catalog view.
 - Keep the header (item name/code + "wants N"), the give→receive row, and the
-  empty-state ("No wants yet — add games in the Almanac view.").
+  empty-state ("No wants yet — add games in the Catalog view.").
 
 Net: `VisualMode` no longer needs the `addingFor` state. The card becomes
 offered-copy → big wanted-game thumbnails (each ×-removable).
@@ -73,7 +73,7 @@ Frontend only: `npm run build` (tsc) + `npx eslint src/features/trades/MyWantsPa
 
 - **#4:** Visual view shows larger wanted-game thumbnails; clicking a thumbnail's
   × removes that game from that item's wish (the count + thumbnails update; Save
-  persists). No text chip list, no add-want field. Adding still works in Almanac.
+  persists). No text chip list, no add-want field. Adding still works in Catalog.
 - **#6:** In money-enabled grid, each wanted-game row shows `ask: $X` (the
   cheapest available copy's ask) next to the bid input; barter/none shows `—`;
   combo rows show no ask.
@@ -84,7 +84,7 @@ Frontend only: `npm run build` (tsc) + `npx eslint src/features/trades/MyWantsPa
 
 ## Out of scope
 
-- Adding wants from the visual view (moved to Almanac).
+- Adding wants from the visual view (moved to Catalog).
 - Per-copy ask breakdown / ask ranges (show the minimum; per-copy asks remain in
-  the Almanac and the grid's expanded copy rows).
+  the Catalog and the grid's expanded copy rows).
 - Backend changes (`resolved_ask` already provided by the listings API).

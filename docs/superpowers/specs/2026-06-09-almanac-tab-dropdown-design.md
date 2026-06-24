@@ -1,4 +1,4 @@
-# Spec C — Almanac tab + enriched per-game dropdown
+# Spec C — Catalog tab + enriched per-game dropdown
 
 **Date:** 2026-06-09
 **Status:** Approved (design)
@@ -10,12 +10,12 @@ Third of three specs from a larger QOL request. **Spec A** (event page) and **Sp
 
 ## Problem
 
-The "My Wants" page bundles game discovery (the paginated `GameBrowse` "almanac")
-above two refinement views (Visual, Grid), and the almanac's per-game expand only
-lists copies. Users want the almanac as its own primary section and richer per-game
+The "My Wants" page bundles game discovery (the paginated `GameBrowse` "catalog")
+above two refinement views (Visual, Grid), and the catalog's per-game expand only
+lists copies. Users want the catalog as its own primary section and richer per-game
 controls there:
 
-1. The almanac (`GameBrowse`) should be its own tab — the default — since it is the
+1. The catalog (`GameBrowse`) should be its own tab — the default — since it is the
    most-used surface. Visual and Grid become refinement-only views.
 2. The per-game expand dropdown should let you, for that canonical game: set a
    rating, set a buy-price (the max you'll pay), and add the game to one of your
@@ -25,8 +25,8 @@ controls there:
 
 ## Decisions (from brainstorming)
 
-- **Tabs:** `almanac | visual | grid`, default `almanac`. New games are added only in
-  the Almanac; Visual and Grid operate on already-added wants.
+- **Tabs:** `catalog | visual | grid`, default `catalog`. New games are added only in
+  the Catalog; Visual and Grid operate on already-added wants.
 - **Rating:** saves immediately (POST upsert / DELETE), with a small success tick;
   independent of the want-list Save bar.
 - **Buy-price:** shown only when `event.money_enabled`; the field is **disabled until
@@ -41,7 +41,7 @@ controls there:
 
 ## Goals (success criteria)
 
-- Almanac is its own default tab; Visual and Grid no longer render the browse panel.
+- Catalog is its own default tab; Visual and Grid no longer render the browse panel.
 - The two BGG buttons are gone from My Wants; no dead imports remain.
 - Expand a game card → set/clear its rating (persists immediately).
 - Want a game → the buy-price field enables; set a price, Save → `money_amount` is
@@ -92,7 +92,7 @@ export function useDeleteRating() {
   when `event.money_enabled` (parse: `'' → null`, else `Number`); omits money when the
   event has money disabled (unchanged from today for those events).
 
-### Almanac dropdown controls (`GameBrowse` expanded card)
+### Catalog dropdown controls (`GameBrowse` expanded card)
 
 In the expanded section (where `GameCopies` renders), add a per-game controls row:
 
@@ -111,8 +111,8 @@ In the expanded section (where `GameCopies` renders), add a per-game controls ro
 
 ### Tab restructure (`MyWantsPage` main component)
 
-- `type ViewMode = 'almanac' | 'visual' | 'grid'`; default `'almanac'`.
-- Tab bar lists all three; `GameBrowse` renders under `almanac`, `VisualMode` under
+- `type ViewMode = 'catalog' | 'visual' | 'grid'`; default `'catalog'`.
+- Tab bar lists all three; `GameBrowse` renders under `catalog`, `VisualMode` under
   `visual`, `GridMode` under `grid`.
 - Remove the "Import ratings from BGG" block and its hooks/state.
 - Inside `GameBrowse`, remove the "Sync BGG wishlist" button and the BGG sync
@@ -134,7 +134,7 @@ In the expanded section (where `GameCopies` renders), add a per-game controls ro
 
 No frontend test harness. Verify with `npm run build` + `npm run lint`, plus manual:
 
-- Almanac is the default tab; Visual and Grid no longer show the browse panel.
+- Catalog is the default tab; Visual and Grid no longer show the browse panel.
 - "Import ratings from BGG" and "Sync BGG wishlist" are absent from My Wants.
 - Expand a card → set a rating (persists across reload), clear it (gone).
 - Before wanting a game, the price field is disabled; after wanting it (any-copy or a

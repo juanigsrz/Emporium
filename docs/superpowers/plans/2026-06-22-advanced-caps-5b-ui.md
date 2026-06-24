@@ -550,7 +550,7 @@ function PricesPanel({ slug, username, locked }: PricesPanelProps) {
       <div>
         <h3 className="text-sm font-semibold text-ink mb-2">Your per-game default prices</h3>
         {gamePrices.length === 0 ? (
-          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Almanac view of My Wants.)</p>
+          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Catalog view of My Wants.)</p>
         ) : (
           <div className="space-y-1.5">
             {gamePrices.map((gp: GamePrice) => (

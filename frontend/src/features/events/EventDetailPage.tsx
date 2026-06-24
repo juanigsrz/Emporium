@@ -792,7 +792,7 @@ function MyListingCard({
       )}
       {/* Header */}
       <div className="flex items-start gap-2">
-        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-ink/10 bg-cream">
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-ink/10 bg-cream">
           {listing.board_game_thumbnail ? (
             <img src={listing.board_game_thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : null}
@@ -896,8 +896,8 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
 
       {event.money_enabled && (
         <p className="mb-3 rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          The <strong>Min. ask</strong> is the lowest price you're willing to sell each game for —
-          you won't be matched below it. Leave it blank to use your copy's default price.
+          The <strong>Min. ask</strong> is the lowest price you're willing to sell each game for, 
+          you won't be matched below it. Leave it blank to not put it up for sale.
         </p>
       )}
 
@@ -1071,7 +1071,7 @@ function ComboCard({ combo, locked, onEdit, onDelete, deletePending }: {
             className="flex items-center gap-1 rounded-full border border-ink/15 bg-cream px-2 py-0.5 text-xs text-moss"
           >
             {it.board_game_thumbnail && (
-              <img src={it.board_game_thumbnail} alt="" className="h-4 w-4 rounded object-cover" loading="lazy" />
+              <img src={it.board_game_thumbnail} alt="" className="h-8 w-8 rounded object-cover" loading="lazy" />
             )}
             <span className="max-w-[8rem] truncate">{it.board_game_name}</span>
           </span>
@@ -1190,7 +1190,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
                 onChange={() => toggle(l.id)}
               />
               {l.board_game_thumbnail && (
-                <img src={l.board_game_thumbnail} alt="" className="h-5 w-5 rounded object-cover" loading="lazy" />
+                <img src={l.board_game_thumbnail} alt="" className="h-8 w-8 rounded object-cover" loading="lazy" />
               )}
               <span className="truncate">{l.board_game_name}</span>
               <span className="ml-auto font-mono text-moss/60">{l.listing_code}</span>
@@ -1487,10 +1487,11 @@ export default function EventDetailPage() {
           <div>
             <p className="text-sm font-bold text-ink">My Wants</p>
             <p className="text-xs text-moss mt-0.5">
-              For each item you offer, pick the games you'd accept in return.{' '}
+              For each item you offer, pick the games you'd accept in return.{/*
               <Link to={`/events/${event.slug}/builder`} className="font-semibold underline decoration-coral decoration-2 underline-offset-2 hover:text-ink">
                 Advanced X-to-Y builder
               </Link>
+              */}
             </p>
           </div>
           <Link
@@ -1502,21 +1503,6 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Money budget (participant only, when money is enabled) */}
-      {token && event.money_enabled && event.is_participant && user && (
-        <ParticipantBudgetCard event={event} username={user.username} />
-      )}
-
-      {/* My listings (participant only) */}
-      {token && event.is_participant && user && (
-        <MyListingsSection event={event} username={user.username} />
-      )}
-      {token && event.is_participant && user && (
-        <MyCombosSection event={event} username={user.username} />
-      )}
-      {token && event.is_participant && user && (
-        <ImportTradesSection event={event} username={user.username} />
-      )}
 
       {/* Matching section link */}
       {(['MATCHING', 'MATCH_REVIEW', 'FINALIZATION', 'SHIPPING', 'ARCHIVED'] as EventStatus[]).includes(event.status) && (
@@ -1537,6 +1523,23 @@ export default function EventDetailPage() {
           </Link>
         </div>
       )}
+
+      {/* Money budget (participant only, when money is enabled) */}
+      {token && event.money_enabled && event.is_participant && user && (
+        <ParticipantBudgetCard event={event} username={user.username} />
+      )}
+
+      {/* My listings (participant only) */}
+      {token && event.is_participant && user && (
+        <MyListingsSection event={event} username={user.username} />
+      )}
+      {token && event.is_participant && user && (
+        <MyCombosSection event={event} username={user.username} />
+      )}
+      {token && event.is_participant && user && (
+        <ImportTradesSection event={event} username={user.username} />
+      )}
+
 
     </div>
   )

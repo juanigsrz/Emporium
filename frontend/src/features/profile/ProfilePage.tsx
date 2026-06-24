@@ -84,9 +84,9 @@ const profileSchema = z.object({
   display_name: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
   bgg_username: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
   bio: z.string().max(500, 'Max 500 characters').optional().or(z.literal('')),
+  avatar_url: z.string().url('Enter a valid URL').optional().or(z.literal('')),
   location: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
   region: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
-  avatar_url: z.string().url('Enter a valid URL').optional().or(z.literal('')),
   max_trade_distance_km: z.string().optional(),
 })
 
@@ -124,9 +124,9 @@ function ProfileEdit() {
       display_name: '',
       bgg_username: '',
       bio: '',
+      avatar_url: '',
       location: '',
       region: '',
-      avatar_url: '',
     },
   })
 
@@ -165,9 +165,9 @@ function ProfileEdit() {
         display_name: profile.display_name ?? '',
         bgg_username: profile.bgg_username ?? '',
         bio: profile.bio ?? '',
+        avatar_url: profile.avatar_url ?? '',
         location: profile.location ?? '',
         region: profile.region ?? '',
-        avatar_url: profile.avatar_url ?? '',
         max_trade_distance_km: profile.max_trade_distance_km != null
           ? String(profile.max_trade_distance_km)
           : '',
@@ -185,9 +185,9 @@ function ProfileEdit() {
       display_name: values.display_name,
       bgg_username: values.bgg_username,
       bio: values.bio,
+      avatar_url: values.avatar_url,
       location: values.location,
       region: values.region,
-      avatar_url: values.avatar_url,
       max_trade_distance_km: dist,
       ...(pickedCoords.current ? { latitude: pickedCoords.current.lat, longitude: pickedCoords.current.lon } : {}),
     })
@@ -197,9 +197,9 @@ function ProfileEdit() {
     { name: 'display_name', label: 'Display name' },
     { name: 'bgg_username', label: 'BoardGameGeek username' },
     { name: 'bio', label: 'Bio', multiline: true },
+    { name: 'avatar_url', label: 'Avatar URL' },
     { name: 'location', label: 'Location' },
     { name: 'region', label: 'Region' },
-    { name: 'avatar_url', label: 'Avatar URL' },
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -314,7 +314,7 @@ function ProfileEdit() {
               Geocoded: {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
             </span>
           ) : (
-            <span>Location not geocoded yet — save a location to resolve coordinates.</span>
+            <span>Location not geocoded yet, save a location to resolve coordinates.</span>
           )}
         </div>
 
@@ -599,7 +599,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-ink mb-6">My Account</h1>
+      <h1 className="text-3xl font-bold text-ink mb-6">My Account</h1>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-ink/15 mb-6 overflow-x-auto">
@@ -607,7 +607,7 @@ export default function ProfilePage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+            className={`px-6 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               tab === key
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-moss hover:text-ink'

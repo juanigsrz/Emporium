@@ -362,7 +362,7 @@ git commit -m "feat(locks): freeze profile location/distance while in an active 
 In `frontend/src/features/trades/MyWantsPage.tsx`, the three views render as:
 
 ```tsx
-          {view === 'almanac' && (
+          {view === 'catalog' && (
             <GameBrowse
               slug={slug!}
               editor={editor}
@@ -384,7 +384,7 @@ hides):
 
 ```tsx
           <div className={event.inputs_locked ? 'pointer-events-none opacity-60' : undefined}>
-            {view === 'almanac' && (
+            {view === 'catalog' && (
               <GameBrowse
                 slug={slug!}
                 editor={editor}
@@ -410,11 +410,11 @@ Expected: exit 0.
 
 - [ ] **Step 3: Manual QA checklist**
 
-- Open My Wants on a `WANTLIST_OPEN` event → almanac/visual/grid controls are
+- Open My Wants on a `WANTLIST_OPEN` event → catalog/visual/grid controls are
   fully interactive (rating/price inputs, Want buttons, grid toggles).
 - Open My Wants on a `MATCHING` (or later) event → the view area is greyed
   (`opacity-60`) and clicks/typing in those controls do nothing (`pointer-events-none`);
-  the "locked for matching" banner shows above. The mode tabs (almanac/visual/grid)
+  the "locked for matching" banner shows above. The mode tabs (catalog/visual/grid)
   remain clickable (they're outside the wrapper — switching views to read is fine).
 
 - [ ] **Step 4: Commit**

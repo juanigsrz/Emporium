@@ -114,7 +114,7 @@ export default function ManageEventPage() {
 
           {/* Want groups (Y) */}
           <section className="rounded-3xl border-2 border-ink bg-cream p-4 shadow-card">
-            <h2 className="mb-2 font-display text-sm font-bold text-ink">Want groups — receive at least Y</h2>
+            <h2 className="mb-2 font-display text-sm font-bold text-ink">Want groups — receive any Y items</h2>
             {subs.data.want_groups.map((g) => (
               <div key={g.id} className="flex items-center justify-between gap-2 py-1">
                 <span className="truncate text-sm text-ink">{g.name}</span>

@@ -389,7 +389,7 @@ function OfferGroupForm({ slug, myListings, moneyEnabled, existing, onSave, onCa
                 <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
                 {moneyEnabled && selectedIds.has(listing.id) && (
                   <span className="ml-auto text-xs text-moss/70 italic">
-                    Sell price set in My Listings / Almanac
+                    Sell price set in My Listings / Catalog
                   </span>
                 )}
               </label>
@@ -595,7 +595,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
         <div>
           <span className="text-sm font-semibold text-ink">{group.name}</span>
           <span className="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
-            Receive at least {group.min_receive}
+            Receive any {group.min_receive} items
           </span>
         </div>
         {!locked && (
@@ -939,7 +939,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
         </div>
         <div>
           <label className="block text-xs font-medium text-ink mb-1">
-            Min receive (Y) — receive at least this many
+            Min receive (Y) — receive any Y items
           </label>
           <input
             type="number"
@@ -1228,7 +1228,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
                   <option value="">Select want group…</option>
                   {wantGroups.map((wg) => (
                     <option key={wg.id} value={wg.id}>
-                      {wg.name} (receive at least {wg.min_receive})
+                      {wg.name} (receive any {wg.min_receive} items)
                     </option>
                   ))}
                 </select>
@@ -1248,7 +1248,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
                 </span>
                 <span className="font-semibold text-purple-700">{wg.name}</span>
                 <span className="ml-2 text-moss/70">
-                  — give up to {og.max_give}, receive at least {wg.min_receive}
+                  — give any {og.max_give} items, receive any {wg.min_receive} items
                 </span>
               </div>
             )
@@ -1319,7 +1319,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
             </span>
           </div>
           <p className="text-xs text-moss/70">
-            Give up to <strong>{wish.max_give}</strong> → Receive at least <strong>{wish.min_receive}</strong>
+            Give any <strong>{wish.max_give}</strong> items → Receive any <strong>{wish.min_receive}</strong> items
           </p>
 
           {(offerItems.length > 0 || wantItems.length > 0) && (
@@ -1436,7 +1436,7 @@ function CapsPanel({ slug, username, locked }: CapsPanelProps) {
     <div className="space-y-3">
       <p className="text-xs text-moss/70">
         Caps limit how many items you receive (<strong>take</strong>) or give
-        (<strong>give</strong>) from a chosen set — across swaps and cash.
+        (<strong>give</strong>) from a chosen set, across swaps and cash.
       </p>
       {error && <p className="text-xs text-red-600">{error}</p>}
 
@@ -1595,8 +1595,8 @@ function CapForm({ slug, username, editing, onClose }: {
             onChange={(e) => setKind(e.target.value as CapKind)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="TAKE">Take — receive at most N</option>
-            <option value="GIVE">Give — send at most N</option>
+            <option value="TAKE">Take: receive any N items</option>
+            <option value="GIVE">Give: send any N items</option>
           </select>
         </div>
         <div>
@@ -1700,7 +1700,7 @@ function PricesPanel({ slug, locked }: PricesPanelProps) {
       <div>
         <h3 className="text-sm font-semibold text-ink mb-2">Your per-game default prices</h3>
         {gamePrices.length === 0 ? (
-          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Almanac view of My Wants.)</p>
+          <p className="text-xs text-moss/70">No per-game prices set. (Set them in the Catalog view of My Wants.)</p>
         ) : (
           <div className="space-y-1.5">
             {gamePrices.map((gp: GamePrice) => (
@@ -1877,13 +1877,13 @@ export default function WantListBuilderPage() {
           A <span className="font-semibold text-purple-600">Want Group</span> is a list of
           games/listings you want, with a min-receive (Y).{' '}
           A <span className="font-semibold text-green-600">Wish</span> links them:{' '}
-          "Give up to X → Receive at least Y."
+          "Give any X items → Receive any Y items."
           {event.money_enabled && (
             <>
               {' '}
               <span className="font-semibold text-emerald-700">Money:</span> set the most
               you'll <em>pay</em> for a wanted game here. Your sell price is set in My
-              Listings / Almanac. A money trade happens only when a buyer's max ≥ a seller's min.
+              Listings / Catalog. A money trade happens only when a buyer's max ≥ a seller's min.
             </>
           )}
         </div>
@@ -1891,7 +1891,7 @@ export default function WantListBuilderPage() {
 
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          This event is locked for matching — want lists can no longer be edited.
+          This event is locked for matching, want lists can no longer be edited.
         </div>
       )}
 

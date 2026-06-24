@@ -1,14 +1,14 @@
-# Almanac Tab + Enriched Dropdown Implementation Plan
+# Catalog Tab + Enriched Dropdown Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the almanac (`GameBrowse`) its own default tab and add per-game rating, buy-price, and add-to-want-group controls to its expand dropdown; thread per-game money through the staged save; remove the two BGG buttons (now in Profile).
+**Goal:** Make the catalog (`GameBrowse`) its own default tab and add per-game rating, buy-price, and add-to-want-group controls to its expand dropdown; thread per-game money through the staged save; remove the two BGG buttons (now in Profile).
 
 **Architecture:** Almost entirely in `frontend/src/features/trades/MyWantsPage.tsx`, plus one new hook in `frontend/src/api/ratings.ts`. Per-game money is staged in the existing `useEditor` (a `moneyByGame` map seeded from current want-item amounts) and written in `persistChanges`. Rating set/clear and add-to-want-group persist immediately via their own mutations.
 
 **Tech Stack:** React 18 + TanStack Query v5 + Tailwind. No frontend test harness — verify with `npm run build` (tsc) + `npm run lint` (`--max-warnings 0`). Backend untouched.
 
-**Spec:** `docs/superpowers/specs/2026-06-09-almanac-tab-dropdown-design.md`
+**Spec:** `docs/superpowers/specs/2026-06-09-catalog-tab-dropdown-design.md`
 
 **Depends on:** Spec B (the BGG buttons removed here are re-homed in the Profile).
 
@@ -21,7 +21,7 @@
   - `PageModel` + `buildModel`: add `baseMoneyByGame`.
   - `useEditor` + `Editor` interface: add `moneyByGame` / `setMoney` / `priceForGame`; fold money into `dirtyCount`, `changedListingIds`, `reset`.
   - `persistChanges`: write `money_amount` per item (gated on `money_enabled`).
-  - Main page: `ViewMode` adds `'almanac'` (default); 3-tab bar; remove the "Import ratings from BGG" block + its hooks; pass `customWantGroups` + `moneyEnabled` to `GameBrowse`.
+  - Main page: `ViewMode` adds `'catalog'` (default); 3-tab bar; remove the "Import ratings from BGG" block + its hooks; pass `customWantGroups` + `moneyEnabled` to `GameBrowse`.
   - `GameBrowse`: remove the "Sync BGG wishlist" button + its sync state/hooks; render new `GameCardControls` in the expanded card.
   - New `GameCardControls` component (rating + price + add-to-want-group).
 
@@ -303,11 +303,11 @@ git commit -m "feat: stage per-game buy-price in want editor and persist"
 
 ---
 
-### Task 3: Almanac tab + remove BGG buttons
+### Task 3: Catalog tab + remove BGG buttons
 
 **Files:** Modify `frontend/src/features/trades/MyWantsPage.tsx`
 
-- [ ] **Step 1: Widen `ViewMode` and default to almanac**
+- [ ] **Step 1: Widen `ViewMode` and default to catalog**
 
 Change:
 
@@ -318,13 +318,13 @@ type ViewMode = 'visual' | 'grid'
 to:
 
 ```ts
-type ViewMode = 'almanac' | 'visual' | 'grid'
+type ViewMode = 'catalog' | 'visual' | 'grid'
 ```
 
 And change the default:
 
 ```ts
-  const [view, setView] = useState<ViewMode>('almanac')
+  const [view, setView] = useState<ViewMode>('catalog')
 ```
 
 - [ ] **Step 2: Remove the "Import ratings from BGG" block and its state/hooks**
@@ -396,10 +396,10 @@ with:
 
 ```tsx
             <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
-              {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
+              {(['catalog', 'visual', 'grid'] as ViewMode[]).map((m) => (
 ```
 
-- [ ] **Step 4: Render `GameBrowse` only under the Almanac tab**
+- [ ] **Step 4: Render `GameBrowse` only under the Catalog tab**
 
 Replace the render block:
 
@@ -421,7 +421,7 @@ Replace the render block:
 with (add `customWantGroups` + `moneyEnabled`, gate by tab):
 
 ```tsx
-          {view === 'almanac' && (
+          {view === 'catalog' && (
             <GameBrowse
               slug={slug!}
               editor={editor}
@@ -554,7 +554,7 @@ Expected: both PASS, zero warnings.
 
 ```bash
 git add frontend/src/features/trades/MyWantsPage.tsx
-git commit -m "feat: almanac as own default tab; remove BGG buttons from My Wants"
+git commit -m "feat: catalog as own default tab; remove BGG buttons from My Wants"
 ```
 
 ---
@@ -844,7 +844,7 @@ Expected: both PASS. Fix any TS errors (e.g., `WantGroupItemPayload` already imp
 
 ```bash
 git add frontend/src/features/trades/MyWantsPage.tsx
-git commit -m "feat: per-game rating, buy-price, add-to-want-group in almanac dropdown"
+git commit -m "feat: per-game rating, buy-price, add-to-want-group in catalog dropdown"
 ```
 
 ---
@@ -863,7 +863,7 @@ Expected: all pass.
 
 - [ ] **Step 3: Manual (run skill / dev server + backend, as a participant with listings)**
 
-- [ ] Almanac is the default tab; switching to Visual/Grid hides the browse panel; switching back shows it.
+- [ ] Catalog is the default tab; switching to Visual/Grid hides the browse panel; switching back shows it.
 - [ ] "Import ratings from BGG" and "Sync BGG wishlist" no longer appear on My Wants.
 - [ ] Expand a game card → set a rating (1–10) → blur persists it; reload shows it; "×" clears it.
 - [ ] Before wanting a game, the "Pay up to $" field is disabled; after wanting it (any-copy toggle or a specific copy), the field enables.
@@ -877,7 +877,7 @@ Expected: all pass.
 ## Self-Review
 
 **Spec coverage:**
-- Almanac own default tab; Visual/Grid refine → Task 3 (Steps 1, 3, 4). ✓
+- Catalog own default tab; Visual/Grid refine → Task 3 (Steps 1, 3, 4). ✓
 - Remove both BGG buttons + dead imports → Task 3 (Steps 2, 6, 8). ✓
 - Rating set/clear inline, immediate → Task 4 (`GameCardControls`, `useSetRating`/`useDeleteRating` Task 1). ✓
 - Buy-price gated on wanted, staged, money-enabled only → Task 4 (price input `disabled={!wanted}`, `moneyEnabled` guard) + Task 2 (editor/persist). ✓

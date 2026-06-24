@@ -342,13 +342,13 @@ class WantBid(models.Model):
 # ---------------------------------------------------------------------------
 
 class TradeCap(models.Model):
-    """A user-defined cap: receive (TAKE) or give (GIVE) at most N of a listed
+    """A user-defined cap: receive (TAKE) or give (GIVE) any N items of a listed
     set of items (event listings and/or combos). Emitted to the solver as a
     `takecap`/`givecap` directive."""
 
     class Kind(models.TextChoices):
-        TAKE = "TAKE", "Take (receive at most N)"
-        GIVE = "GIVE", "Give (send at most N)"
+        TAKE = "TAKE", "Take (receive any N items)"
+        GIVE = "GIVE", "Give (send any N items)"
 
     event = models.ForeignKey(
         "events.TradeEvent", on_delete=models.CASCADE, related_name="trade_caps"

@@ -8,11 +8,11 @@
 
 **Tech Stack:** Django/DRF (backend, `manage.py test`); React/TS (frontend, `npm run build` + eslint + manual).
 
-**Spec:** `docs/superpowers/specs/2026-06-23-event-browse-almanac-design.md` (Part 3a).
+**Spec:** `docs/superpowers/specs/2026-06-23-event-browse-catalog-design.md` (Part 3a).
 
 **Repo for all tasks:** `/home/juanigsrz/Desktop/Emporium`. Backend cwd `backend/` (interpreter `./.venv/bin/python`); frontend cwd `frontend/`. FE lint baseline: ignore the pre-existing `CopyForm.tsx:15` warning; gate on the changed file via `npx eslint <file>`.
 
-**This is Plan 3a of 2** (3b = almanac).
+**This is Plan 3a of 2** (3b = catalog).
 
 ---
 

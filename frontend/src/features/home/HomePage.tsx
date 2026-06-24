@@ -21,16 +21,18 @@ export default function HomePage() {
     <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
       {/* Hero */}
       <header className="relative">
+        {/*
         <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-sage/60 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-moss">
           <span className="h-2 w-2 rounded-full bg-coral" />
-          The trade almanac
+          Emporium
         </p>
+        */}
         <h1 className="max-w-3xl text-4xl font-bold text-ink sm:text-6xl">
           Trade board games the way the&nbsp;math&nbsp;intends.
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-moss">
-          List the games you own, build a want list, and let the solver weave the
-          longest, fairest chains of trades — cardboard for cardboard, no haggling.
+          List the games you own, build wishlists, and let the solver weave the
+          longest, fairest chains of trades.
         </p>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -40,7 +42,9 @@ export default function HomePage() {
           >
             Browse events
           </a>
+          
           {/* Status — slim inline strip (live backend health) */}
+          {/*
           <span className="inline-flex items-center gap-2 rounded-2xl border-2 border-ink/15 bg-cream px-3.5 py-2.5 text-xs font-semibold shadow-sm">
             {isLoading && (
               <>
@@ -56,6 +60,7 @@ export default function HomePage() {
                 </span>
               </>
             )}
+            
             {data && (
               <>
                 <span
@@ -69,6 +74,7 @@ export default function HomePage() {
               </>
             )}
           </span>
+          */}
         </div>
       </header>
 
