@@ -62,7 +62,7 @@ class EventScopedMixin:
 
     def _assert_editable(self, event):
         if event.inputs_locked:
-            raise PermissionDenied("Want lists are locked — this event has moved to matching.")
+            raise PermissionDenied("Want lists are locked, this event has moved to matching.")
 
     def _serializer_context(self, request, event):
         return {"request": request, "event": event}

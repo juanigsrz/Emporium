@@ -361,7 +361,7 @@ class TradeEventViewSet(
 
     def _listings_create(self, request, event):
         if event.inputs_locked:
-            raise PermissionDenied("Listings are locked — this event has moved to matching.")
+            raise PermissionDenied("Listings are locked, this event has moved to matching.")
 
         copy_id = request.data.get("copy")
         if not copy_id:
@@ -414,13 +414,13 @@ class TradeEventViewSet(
 
         if request.method == "DELETE":
             if event.inputs_locked:
-                raise PermissionDenied("Listings are locked — this event has moved to matching.")
+                raise PermissionDenied("Listings are locked, this event has moved to matching.")
             listing.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # PATCH — only sell_price is editable via this route (never copy/active)
         if event.inputs_locked:
-            raise PermissionDenied("Prices are locked — this event has moved to matching.")
+            raise PermissionDenied("Prices are locked, this event has moved to matching.")
         data = {"sell_price": request.data.get("sell_price")} if "sell_price" in request.data else {}
         ser = EventListingSerializer(
             listing, data=data, partial=True, context={"request": request}

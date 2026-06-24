@@ -39,7 +39,7 @@ class ComboMixin:
 
     def _assert_editable(self, event):
         if event.inputs_locked:
-            raise PermissionDenied("Combos are locked — this event has moved to matching.")
+            raise PermissionDenied("Combos are locked, this event has moved to matching.")
 
     def _ctx(self, request, event):
         return {"request": request, "event": event}
