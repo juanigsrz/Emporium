@@ -9,6 +9,9 @@ Creates:
     - an EventParticipation + active EventListing for every copy (= "submitted")
     - one OfferGroup + WantGroup + TradeWish trio per listing, plus optional
       money bids/asks, so the event has real wishes to match
+    - a few Combos (base game + expansion bundles) each offered as base /
+      expansion / bundle, with matching demand wishes (the combos feature)
+    - 1-2 N-to-M wishes per trader (max_give 2-3 / min_receive 2-3)
 
 Usage:
     python manage.py seed_test_event
@@ -50,7 +53,7 @@ from django.db import transaction
 
 from catalog.models import BoardGame, BoardGameVersion
 from copies.models import Copy
-from events.models import EventListing, EventParticipation, TradeEvent
+from events.models import Combo, ComboItem, EventListing, EventParticipation, TradeEvent
 from trades.models import (
     OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, WantBid,
 )
@@ -85,6 +88,10 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--wants-max", type=int, default=4, help="Max want targets per listing."
+        )
+        parser.add_argument(
+            "--combos", type=int, default=3,
+            help="Number of base+expansion combos to seed (0 disables).",
         )
         parser.add_argument(
             "--money-cap", type=float, default=50.0,
@@ -335,6 +342,168 @@ class Command(BaseCommand):
         WantBid.objects.bulk_create(want_bids, batch_size=BATCH)
         n_money_wants = len(want_bids)
 
+        # --- combos + N-to-M (advanced wishes) ------------------------------
+        # All draws below happen AFTER the existing ones, so a given --seed still
+        # reproduces the per-listing data unchanged; only the extra rows are new.
+        pool_by_id = {g.bgg_id: g for g in pool}
+
+        # Expansions aren't in the ranked pool, so pull a few popular ones here.
+        n_combos = min(opts["combos"], len(traders))
+        expansions = list(
+            BoardGame.objects.filter(is_expansion=True).order_by("-users_rated")[:n_combos]
+        )
+        n_combos = min(n_combos, len(expansions))
+        combo_owners = traders[:n_combos]
+
+        # One expansion Copy + active listing per combo owner. TEST- listing_code
+        # so --reset cleans them up alongside the main copies.
+        exp_copies = [
+            Copy(
+                owner=owner, board_game=exp_game, version=None,
+                condition=rng.choice([c.value for c in Copy.Condition]),
+                language=rng.choice(LANGUAGES), edition="",
+                status=Copy.Status.ACTIVE,
+                listing_code=f"TEST-{copy_counter + i:06d}",
+            )
+            for i, (owner, exp_game) in enumerate(zip(combo_owners, expansions))
+        ]
+        copy_counter += len(exp_copies)
+        Copy.objects.bulk_create(exp_copies, batch_size=BATCH)
+        exp_listings = EventListing.objects.bulk_create(
+            [EventListing(event=event, copy=c, active=True) for c in exp_copies],
+            batch_size=BATCH,
+        )
+
+        # Accumulate advanced wishes, then insert with the same PK-after-insert
+        # pattern used above. Specs are ("listing", EventListing) | ("combo", Combo).
+        adv_offer_groups = []
+        adv_want_groups = []
+        adv_plan = []          # (offer_specs, want_specs, offer_group, want_group)
+        combo_bid_specs = []   # (user, combo)
+
+        def queue_wish(user, offer_specs, want_specs, max_give, min_receive, name):
+            og = OfferGroup(event=event, user=user, name=name[:120], max_give=max_give)
+            wg = WantGroup(
+                event=event, user=user, name=f"Wants: {name}"[:120],
+                min_receive=min_receive, duplicate_protection=False,
+            )
+            adv_offer_groups.append(og)
+            adv_want_groups.append(wg)
+            adv_plan.append((offer_specs, want_specs, og, wg))
+
+        def others_listings(user_id):
+            """Listings owned by everyone except user_id, keyed by game (for wants)."""
+            owned = games_by_owner.get(user_id, set())
+            return [g for g in all_games_sorted if g not in owned]
+
+        combos = []   # (combo, owner)
+        for owner, exp_game, el_exp in zip(combo_owners, expansions, exp_listings):
+            owner_listings = listings_by_owner.get(owner.id)
+            if not owner_listings:
+                continue
+            base = owner_listings[0]
+            base_game = pool_by_id[base.copy.board_game_id]
+            priced = money_enabled and rng.random() < 0.6
+            combo = Combo.objects.create(
+                event=event, owner=owner,
+                name=f"{base_game.name} + {exp_game.name}",
+                sell_price=(round(rng.uniform(money_cap * 0.5, money_cap), 2) if priced else None),
+            )
+            ComboItem.objects.create(combo=combo, event_listing=base)
+            ComboItem.objects.create(combo=combo, event_listing=el_exp)
+            combos.append((combo, owner))
+
+            # Offer side: give the base alone, the expansion alone, OR the bundle.
+            # max_give=1 + the per-member givecap keep a copy from leaving twice.
+            cands = others_listings(owner.id)
+            if cands:
+                wants = [
+                    rng.choice(listings_by_game[g])
+                    for g in rng.sample(cands, min(2, len(cands)))
+                ]
+                queue_wish(
+                    owner,
+                    [("listing", base), ("listing", el_exp), ("combo", combo)],
+                    [("listing", w) for w in wants],
+                    max_give=1, min_receive=1,
+                    name=f"Combo offer {combo.combo_code}",
+                )
+
+            # Demand side: a different trader offers one copy and wants the bundle.
+            others = [t for t in traders if t.id != owner.id and listings_by_owner.get(t.id)]
+            if others:
+                wisher = rng.choice(others)
+                give = rng.choice(listings_by_owner[wisher.id])
+                queue_wish(
+                    wisher, [("listing", give)], [("combo", combo)],
+                    max_give=1, min_receive=1,
+                    name=f"Want combo {combo.combo_code}",
+                )
+                if money_enabled and combo.sell_price is not None:
+                    combo_bid_specs.append((wisher, combo))
+
+        # N-to-M: 1-2 multi-give/multi-receive wishes per trader.
+        n_ntom = 0
+        for u in traders:
+            owner_listings = listings_by_owner.get(u.id, [])
+            cands = others_listings(u.id)
+            if len(owner_listings) < 2 or len(cands) < 2:
+                continue
+            for _ in range(rng.randint(1, 2)):
+                x = min(rng.randint(2, 3), len(owner_listings))
+                y = min(rng.randint(2, 3), len(cands))
+                if x < 2 or y < 2:
+                    continue
+                give_listings = rng.sample(owner_listings, x)
+                want_games = rng.sample(cands, min(y + 1, len(cands)))
+                want_listings = [rng.choice(listings_by_game[g]) for g in want_games]
+                queue_wish(
+                    u,
+                    [("listing", el) for el in give_listings],
+                    [("listing", w) for w in want_listings],
+                    max_give=x, min_receive=y,
+                    name=f"{u.username} {x}-to-{y}",
+                )
+                n_ntom += 1
+
+        OfferGroup.objects.bulk_create(adv_offer_groups, batch_size=BATCH)
+        WantGroup.objects.bulk_create(adv_want_groups, batch_size=BATCH)
+
+        adv_offer_items, adv_want_items, adv_wishes = [], [], []
+        for offer_specs, want_specs, og, wg in adv_plan:
+            for kind, obj in offer_specs:
+                adv_offer_items.append(
+                    OfferGroupItem(offer_group_id=og.id, event_listing_id=obj.id)
+                    if kind == "listing" else
+                    OfferGroupItem(offer_group_id=og.id, combo_id=obj.id)
+                )
+            for kind, obj in want_specs:
+                adv_want_items.append(
+                    WantGroupItem(want_group_id=wg.id, event_listing_id=obj.id)
+                    if kind == "listing" else
+                    WantGroupItem(want_group_id=wg.id, combo_id=obj.id)
+                )
+            adv_wishes.append(
+                TradeWish(
+                    event=event, user_id=og.user_id,
+                    offer_group_id=og.id, want_group_id=wg.id, active=True,
+                )
+            )
+        OfferGroupItem.objects.bulk_create(adv_offer_items, batch_size=BATCH)
+        WantGroupItem.objects.bulk_create(adv_want_items, batch_size=BATCH)
+        TradeWish.objects.bulk_create(adv_wishes, batch_size=BATCH)
+        n_wishes += len(adv_wishes)
+
+        combo_bids = []
+        for user, combo in combo_bid_specs:
+            combo_bids.append(
+                WantBid(
+                    user_id=user.id, event_id=event.id, combo_id=combo.id,
+                    amount=round(rng.uniform(money_cap * 0.5, money_cap), 2),
+                )
+            )
+        WantBid.objects.bulk_create(combo_bids, batch_size=BATCH)
+
         # --- report ---------------------------------------------------------
         distinct_games = len({c.board_game_id for c in copies})
         self.stdout.write(self.style.SUCCESS(f"Seeded event '{event.slug}' ({event.status})"))
@@ -343,7 +512,9 @@ class Command(BaseCommand):
             f"  traders:     {len(traders)}  ({TRADER_PREFIX}01..{TRADER_PREFIX}{n_users:02d}, password: {PASSWORD})\n"
             f"  copies:      {total_copies} submitted listings\n"
             f"  game pool:   {len(pool)} games, {distinct_games} distinct games actually listed\n"
-            f"  wishes:      {n_wishes} (one per listing)\n"
+            f"  wishes:      {n_wishes} ({n_wishes - len(adv_wishes)} per-listing + {len(adv_wishes)} advanced)\n"
+            f"  combos:      {len(combos)} base/expansion bundles (offered base/expansion/bundle)\n"
+            f"  N-to-M:      {n_ntom} multi-give/multi-receive wishes\n"
             f"  money:       {'enabled, cap ' + str(round(money_cap, 2)) if money_enabled else 'disabled'}"
             f"{', ' + str(n_money_wants) + ' buy bids, ' + str(n_money_offers) + ' sell asks' if money_enabled else ''}\n"
             f"  frontend:    /events/{event.slug}\n"
