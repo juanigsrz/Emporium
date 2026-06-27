@@ -332,6 +332,7 @@ const editEventSchema = z.object({
   shipping_rules: z.string().max(2000).optional(),
   regional_restrictions: z.string().max(2000).optional(),
   trade_policies: z.string().max(2000).optional(),
+  image_url: z.string().max(500).optional(),
   submissions_open_at: z.string().optional(),
   submissions_close_at: z.string().optional(),
   wantlist_close_at: z.string().optional(),
@@ -373,6 +374,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       shipping_rules: event.shipping_rules ?? '',
       regional_restrictions: event.regional_restrictions ?? '',
       trade_policies: event.trade_policies ?? '',
+      image_url: event.image_url ?? '',
       submissions_open_at: toLocalDatetimeValue(event.submissions_open_at),
       submissions_close_at: toLocalDatetimeValue(event.submissions_close_at),
       wantlist_close_at: toLocalDatetimeValue(event.wantlist_close_at),
@@ -386,6 +388,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
   })
   const moneyEnabled = watch('money_enabled')
   const requireLocation = watch('require_location')
+  const imageUrl = watch('image_url')
 
   async function onSubmit(values: EditEventFormValues) {
     setServerError(null)
@@ -398,6 +401,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           shipping_rules: values.shipping_rules || undefined,
           regional_restrictions: values.regional_restrictions || undefined,
           trade_policies: values.trade_policies || undefined,
+          image_url: values.image_url ?? '',
           submissions_open_at: values.submissions_open_at
             ? new Date(values.submissions_open_at).toISOString()
             : null,
@@ -466,6 +470,22 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             <div>
               <label className="block text-sm font-semibold text-ink mb-1">Description</label>
               <textarea {...register('description')} rows={3} className={`${inputCls(false)} resize-none`} />
+            </div>
+
+            {/* Cover image URL */}
+            <div>
+              <label className="block text-sm font-semibold text-ink mb-1">Cover image URL</label>
+              <input
+                {...register('image_url')}
+                placeholder="https://example.com/cover.jpg"
+                className={inputCls(!!errors.image_url)}
+              />
+              {errors.image_url && (
+                <p className="mt-1 text-xs text-red-600">{errors.image_url.message}</p>
+              )}
+              {imageUrl ? (
+                <img src={imageUrl} alt="" className="mt-2 h-24 w-full rounded-xl border-2 border-ink/10 object-cover" />
+              ) : null}
             </div>
 
             <div className="space-y-3">
