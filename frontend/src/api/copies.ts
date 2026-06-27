@@ -33,6 +33,7 @@ export interface Copy {
   photo_urls: string[]
   status: CopyStatus
   is_pending: boolean
+  in_active_event: boolean
   import_source: string
   created: string
   updated: string

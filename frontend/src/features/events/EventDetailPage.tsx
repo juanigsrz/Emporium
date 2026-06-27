@@ -753,12 +753,14 @@ function MyListingCard({
   myRating,
   onRemove,
   removePending,
+  locked,
 }: {
   event: TradeEvent
   listing: EventListing
   myRating?: number
   onRemove: (listingId: number) => void
   removePending: boolean
+  locked: boolean
 }) {
   const qc = useQueryClient()
   const savedValue = listing.ask_is_override ? (listing.resolved_ask ?? '') : ''
@@ -821,14 +823,16 @@ function MyListingCard({
           <span className="block truncate text-sm font-semibold text-ink">{listing.board_game_name}</span>
           <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
         </div>
-        <button
-          onClick={() => setConfirmRemove(true)}
-          disabled={removePending}
-          className="shrink-0 rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-          aria-label="Remove listing"
-        >
-          Remove
-        </button>
+        {!locked && (
+          <button
+            onClick={() => setConfirmRemove(true)}
+            disabled={removePending}
+            className="shrink-0 rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            aria-label="Remove listing"
+          >
+            Remove
+          </button>
+        )}
       </div>
 
       {/* Detail chips */}
@@ -899,6 +903,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
     (l: EventListing) => l.copy_owner_username === username
   )
   const myListingCopyIds = new Set(myListings.map((l) => l.copy_id))
+  const locked = event.submissions_locked
 
   async function handleRemove(listingId: number) {
     setRemoveError(null)
@@ -922,10 +927,16 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
       )}
 
       {/* Add form */}
-      <div className="mb-4">
-        <p className="text-xs text-moss mb-2">Add one of your active copies:</p>
-        <AddListingForm slug={event.slug} existingCopyIds={myListingCopyIds} />
-      </div>
+      {locked ? (
+        <p className="mb-4 rounded-xl border-2 border-ink/10 bg-parchment px-3 py-2 text-xs text-moss">
+          Listings are locked — want-lists have opened, so copies can no longer be added or removed.
+        </p>
+      ) : (
+        <div className="mb-4">
+          <p className="text-xs text-moss mb-2">Add one of your active copies:</p>
+          <AddListingForm slug={event.slug} existingCopyIds={myListingCopyIds} />
+        </div>
+      )}
 
       {/* Current listings */}
       {isLoading ? (
@@ -948,6 +959,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
                 myRating={myRatings.get(listing.board_game_id)}
                 onRemove={handleRemove}
                 removePending={removeListing.isPending}
+                locked={locked}
               />
             ))}
           </div>
@@ -980,7 +992,7 @@ function MyCombosSection({ event, username }: MyCombosSectionProps) {
     (l: EventListing) => l.copy_owner_username === username
   )
   const combos = combosData?.results ?? []
-  const locked = event.inputs_locked
+  const locked = event.submissions_locked
 
   const usedListingIds = new Set<number>()
   for (const c of combos) for (const it of c.items) usedListingIds.add(it.event_listing)

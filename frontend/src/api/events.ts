@@ -72,6 +72,7 @@ export interface TradeEvent {
   is_organizer: boolean
   is_participant: boolean
   inputs_locked: boolean
+  submissions_locked: boolean
   created: string
   updated: string
 }
