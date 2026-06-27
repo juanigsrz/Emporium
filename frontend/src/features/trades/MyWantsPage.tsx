@@ -297,7 +297,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <div className="flex items-center gap-1.5">
-        <span className="text-moss">My rating</span>
+        <span className="text-moss">Personal rating</span>
         <input
           type="number"
           min={1}
@@ -330,7 +330,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 
       {moneyEnabled && (
         <div className="flex items-center gap-1.5">
-          <span className="text-moss">Price $</span>
+          <span className="text-moss">Default bidding price $</span>
           <input
             type="number"
             min="0.01"
@@ -1364,15 +1364,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
       return s
     })
 
-  const { data: listingsData } = useEventListings(slug, { page_size: 500 })
-  const askByListing = useMemo(() => {
-    const m = new Map<number, number>()
-    for (const el of listingsData?.results ?? []) {
-      if (el.resolved_ask != null && el.resolved_ask !== '') m.set(el.id, Number(el.resolved_ask))
-    }
-    return m
-  }, [listingsData])
-
   const rows = buildGridRows(editor, combos, myListings)
 
   if (editor.targets.length === 0) {
@@ -1418,6 +1409,11 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                 key={l.id}
                 className="sticky top-0 z-20 border-b border-r border-ink/15 bg-gray-50 px-1 py-2 align-bottom"
               >
+                {moneyEnabled && l.resolved_ask != null && (
+                  <div className="mb-1 text-center text-[10px] font-semibold text-emerald-700">
+                    ${Number(l.resolved_ask).toFixed(2)}
+                  </div>
+                )}
                 <div className="mx-auto h-28 w-8">
                   <div className="flex h-full -rotate-180 items-center justify-center [writing-mode:vertical-rl]">
                     <span className="truncate text-xs font-medium text-moss" title={l.board_game_name}>
@@ -1434,10 +1430,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
             const specific = g.copyTargets.length > 0
-            const askValues = g.copyTargets
-              .map((t) => askByListing.get(t.listingId))
-              .filter((v): v is number => v != null)
-            const minAsk = askValues.length ? Math.min(...askValues) : null
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1473,7 +1465,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                     </span>
                     {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
                       <div className="mt-1 flex items-center gap-1 text-xs">
-                        <span className="text-moss">$</span>
+                        <span className="text-moss">Default bidding price $</span>
                         <input
                           type="number"
                           min="0.01"
@@ -1483,11 +1475,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                           placeholder="price"
                           className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                         />
-                      </div>
-                    )}
-                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
-                      <div className="mt-0.5 text-xs text-moss/70">
-                        ask: {minAsk != null ? `$${minAsk.toFixed(2)}` : '—'}
                       </div>
                     )}
                   </th>
