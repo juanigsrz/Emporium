@@ -97,13 +97,13 @@ function groupBadge(g: GameGroup): string {
 // Grid rows = canonical-game groups from real game/listing targets, plus a row
 // for each member game of any WISHED combo (so the combo is reachable in its
 // dropdown). Combos never get their own row.
-function buildGridRows(editor: Editor, combos: Combo[], myListings: EventListing[]): GameGroup[] {
+function buildGridRows(editor: Editor, combos: Combo[], columns: OfferColumn[]): GameGroup[] {
   const gameGroups = groupTargetsByGame(
     editor.targets.filter((t) => t.comboId == null && t.gameId < COMBO_GAME_OFFSET)
   )
   const byGame = new Map<number, GameGroup>(gameGroups.map((g) => [g.gameId, g]))
   for (const c of combos) {
-    if (!myListings.some((l) => editor.isOn(l.id, comboTargetKey(c.id)))) continue
+    if (!columns.some((col) => editor.isOn(col.id, comboTargetKey(c.id)))) continue
     for (const it of c.items) {
       if (!byGame.has(it.board_game_id)) {
         byGame.set(it.board_game_id, {
@@ -134,13 +134,60 @@ function cellKey(listingId: number, targetKey: string): string {
   return `${listingId}::${targetKey}`
 }
 
+// ---- Offer columns: an offered item is either a listing I own or one of MY
+// combos. The grid/catalog matrix keys columns by a number; combo columns are
+// shifted by COMBO_COL_OFFSET so they never collide with a listing id. (This is
+// the column-space twin of COMBO_GAME_OFFSET, which lives in the row/game space.)
+
+const COMBO_COL_OFFSET = 2_000_000_000
+
+function comboColId(comboId: number): number {
+  return COMBO_COL_OFFSET + comboId
+}
+
+interface OfferColumn {
+  id: number                   // matrix key: listing.id OR comboColId(combo.id)
+  isCombo: boolean
+  name: string                 // board_game_name | combo.name
+  code: string                 // listing_code   | combo_code
+  thumbnail?: string | null
+  listingId?: number           // when !isCombo
+  comboId?: number             // when isCombo
+  resolvedAsk?: string | null  // listings only (Grid money header)
+  boardGameId?: number         // listings only (rating auto-tick / per-game price)
+}
+
+function listingColumn(l: EventListing): OfferColumn {
+  return {
+    id: l.id,
+    isCombo: false,
+    name: l.board_game_name,
+    code: l.listing_code,
+    thumbnail: l.board_game_thumbnail,
+    listingId: l.id,
+    resolvedAsk: l.resolved_ask,
+    boardGameId: l.board_game_id,
+  }
+}
+
+function comboColumn(c: Combo): OfferColumn {
+  return {
+    id: comboColId(c.id),
+    isCombo: true,
+    name: c.name,
+    code: c.combo_code,
+    thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+    comboId: c.id,
+  }
+}
+
 // ---- Derive page model from the loaded trade objects ----
 
 interface PageModel {
-  /** For each of my listings, the want-group that holds its 1-to-1 want list (if any). */
-  wantGroupByListing: Map<number, WantGroup>
-  offerGroupByListing: Map<number, OfferGroup>
-  /** listingId -> set of target keys currently in its want list (server truth). */
+  /** For each offer column, the want-group that holds its 1-to-1 want list (if any). */
+  wantGroupByCol: Map<number, WantGroup>
+  offerGroupByCol: Map<number, OfferGroup>
+  /** column id -> set of target keys currently in its want list (server truth). */
   baseMatrix: Map<number, Set<string>>
   /** All want targets referenced by any of my lists, keyed for dedupe. */
   baseTargets: Map<string, Target>
@@ -149,7 +196,7 @@ interface PageModel {
 }
 
 function buildModel(
-  myListings: EventListing[],
+  columns: OfferColumn[],
   offerGroups: OfferGroup[],
   wantGroups: WantGroup[],
   wishes: { offer_group: number; want_group: number }[],
@@ -158,17 +205,18 @@ function buildModel(
   const wantGroupById = new Map(wantGroups.map((wg) => [wg.id, wg]))
   const wantGroupIdByOffer = new Map(wishes.map((w) => [w.offer_group, w.want_group]))
 
-  // Pick the single-listing, X=1 offer group for each of my listings.
-  const offerGroupByListing = new Map<number, OfferGroup>()
+  // Pick the single-item, X=1 offer group for each offer column (listing or combo).
+  const offerGroupByCol = new Map<number, OfferGroup>()
   for (const og of offerGroups) {
     if (og.max_give === 1 && og.items.length === 1) {
-      const lid = og.items[0].event_listing
-      if (lid == null) continue  // combo offer item: not a per-listing trio
-      if (!offerGroupByListing.has(lid)) offerGroupByListing.set(lid, og)
+      const it = og.items[0]
+      const colId = it.event_listing ?? (it.combo != null ? comboColId(it.combo) : null)
+      if (colId == null) continue
+      if (!offerGroupByCol.has(colId)) offerGroupByCol.set(colId, og)
     }
   }
 
-  const wantGroupByListing = new Map<number, WantGroup>()
+  const wantGroupByCol = new Map<number, WantGroup>()
   const baseMatrix = new Map<number, Set<string>>()
   const baseTargets = new Map<string, Target>()
   // Per-game price comes from UserGamePrice rows (keyed by bgg id), not want items.
@@ -176,14 +224,14 @@ function buildModel(
     gamePrices.map((gp) => [gp.board_game, gp.price])
   )
 
-  for (const listing of myListings) {
-    const og = offerGroupByListing.get(listing.id)
+  for (const col of columns) {
+    const og = offerGroupByCol.get(col.id)
     const set = new Set<string>()
     if (og) {
       const wgId = wantGroupIdByOffer.get(og.id)
       const wg = wgId != null ? wantGroupById.get(wgId) : undefined
       if (wg) {
-        wantGroupByListing.set(listing.id, wg)
+        wantGroupByCol.set(col.id, wg)
         for (const item of wg.items) {
           if (item.combo != null) {
             const key = comboTargetKey(item.combo)
@@ -220,10 +268,10 @@ function buildModel(
         }
       }
     }
-    baseMatrix.set(listing.id, set)
+    baseMatrix.set(col.id, set)
   }
 
-  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
+  return { wantGroupByCol, offerGroupByCol, baseMatrix, baseTargets, baseMoneyByGame }
 }
 
 // ============================================================
@@ -240,7 +288,7 @@ const BROWSE_PAGE_SIZE = 12
 interface GameBrowseProps {
   slug: string
   editor: Editor
-  myListings: EventListing[]
+  columns: OfferColumn[]
   username?: string
   customWantGroups: WantGroup[]
   moneyEnabled: boolean
@@ -490,7 +538,7 @@ function WantGroupControls({ slug, bggId, username, customWantGroups }: WantGrou
   )
 }
 
-function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled, combos }: GameBrowseProps) {
+function GameBrowse({ slug, editor, columns, username, customWantGroups, moneyEnabled, combos }: GameBrowseProps) {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
@@ -532,16 +580,16 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   const isWanted = useCallback(
     (bggId: number) => {
       const group = groupByGame.get(bggId)
-      return group ? myListings.some((l) => groupIsOn(editor, l.id, group)) : false
+      return group ? columns.some((col) => groupIsOn(editor, col.id, group)) : false
     },
-    [editor, myListings, groupByGame]
+    [editor, columns, groupByGame]
   )
 
   async function toggleWant(g: { bgg_id: number; name: string }) {
     const group = groupByGame.get(g.bgg_id)
-    if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
+    if (group && columns.some((col) => groupIsOn(editor, col.id, group))) {
       // Already wanted — clear every target for this game.
-      myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
+      columns.forEach((col) => groupKeys(group).forEach((k) => editor.toggle(col.id, k, false)))
       return
     }
     // Stage every other-owned, in-range copy as an accepted target, but offer NO
@@ -582,8 +630,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
       }
     }
     const items = new Set<number>()
-    for (const l of myListings) {
-      if (Array.from(keys).some((k) => editor.isOn(l.id, k))) items.add(l.id)
+    for (const col of columns) {
+      if (Array.from(keys).some((k) => editor.isOn(col.id, k))) items.add(col.id)
     }
     setWantKeys(keys)
     setOfferItems(items)
@@ -592,15 +640,15 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 
   // Toggle one of my items in/out of the offering set, additively re-applying it
   // across the currently-wanted copies. Never touches `wantKeys`.
-  function toggleOfferItem(listing: EventListing) {
-    const adding = !offerItems.has(listing.id)
+  function toggleOfferItem(col: OfferColumn) {
+    const adding = !offerItems.has(col.id)
     setOfferItems((prev) => {
       const next = new Set(prev)
-      if (adding) next.add(listing.id)
-      else next.delete(listing.id)
+      if (adding) next.add(col.id)
+      else next.delete(col.id)
       return next
     })
-    wantKeys.forEach((key) => editor.toggle(listing.id, key, adding))
+    wantKeys.forEach((key) => editor.toggle(col.id, key, adding))
   }
 
   // Toggle one copy/combo in/out of the wanted set, offered by every item already
@@ -775,21 +823,21 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                         Your items that offer this game:
                       </p>
                       <ul className="max-h-40 space-y-0.5 overflow-y-auto">
-                        {myListings.map((l) => {
-                          const on = offerItems.has(l.id)
+                        {columns.map((col) => {
+                          const on = offerItems.has(col.id)
                           return (
-                            <li key={l.id}>
+                            <li key={col.id}>
                               <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
                                 <input
                                   type="checkbox"
                                   checked={on}
-                                  onChange={() => toggleOfferItem(l)}
+                                  onChange={() => toggleOfferItem(col)}
                                   className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
                                 />
-                                <span className="truncate text-ink" title={l.board_game_name}>
-                                  {l.board_game_name}
+                                <span className="truncate text-ink" title={col.name}>
+                                  {col.isCombo ? `🎁 ${col.name}` : col.name}
                                 </span>
-                                <span className="ml-auto shrink-0 font-mono text-moss/70">{l.listing_code}</span>
+                                <span className={`ml-auto shrink-0 font-mono ${col.isCombo ? 'text-amber-600' : 'text-moss/70'}`}>{col.code}</span>
                               </label>
                             </li>
                           )
@@ -801,7 +849,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       bggId={g.bgg_id}
                       username={username}
                       editor={editor}
-                      myListings={myListings}
+                      columns={columns}
                       selectable
                       combos={combos}
                       moneyEnabled={moneyEnabled}
@@ -875,7 +923,7 @@ interface GameCopiesProps {
   bggId: number
   username?: string
   editor?: Editor
-  myListings?: EventListing[]
+  columns?: OfferColumn[]
   selectable?: boolean
   combos?: Combo[]
   moneyEnabled?: boolean
@@ -886,7 +934,7 @@ interface GameCopiesProps {
   onToggleTarget?: (t: Target) => void
 }
 
-function GameCopies({ slug, bggId, username, editor, myListings, selectable, combos, moneyEnabled, selectedKeys, onToggleTarget }: GameCopiesProps) {
+function GameCopies({ slug, bggId, username, editor, columns, selectable, combos, moneyEnabled, selectedKeys, onToggleTarget }: GameCopiesProps) {
   const { data, isLoading } = useEventListings(slug, { board_game: bggId, page_size: 200 })
   const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
@@ -894,12 +942,12 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   const ownCount = all.length - others.length
 
   const controlled = !!(selectable && onToggleTarget && selectedKeys)
-  const canSelect = controlled || !!(selectable && editor && myListings && myListings.length > 0)
+  const canSelect = controlled || !!(selectable && editor && columns && columns.length > 0)
   const isCopyWanted = (listingId: number) =>
     controlled
       ? selectedKeys!.has(listingTargetKey(listingId))
-      : !!editor && !!myListings &&
-        myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
+      : !!editor && !!columns &&
+        columns.some((col) => editor.isOn(col.id, listingTargetKey(listingId)))
 
   function toggleCopy(l: EventListing) {
     if (l.owner_too_far) return
@@ -910,20 +958,19 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
       })
       return
     }
-    if (!editor || !myListings) return
+    if (!editor || !columns) return
     const next = !isCopyWanted(l.id)
-    // Act only on the items already offering this game; if none offer it yet,
+    // Act only on the columns already offering this game; if none offer it yet,
     // clicking a copy stages it but assigns no item (tick an item above first).
     const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
-    const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
-    const acting = offering
+    const acting = group ? columns.filter((col) => groupIsOn(editor!, col.id, group)) : []
 
     const key = listingTargetKey(l.id)
     editor.addTarget({
       key, listingId: l.id, label: l.listing_code,
       gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
     })
-    acting.forEach((ml) => editor!.toggle(ml.id, key, next))
+    acting.forEach((col) => editor!.toggle(col.id, key, next))
   }
 
   const comboRows = (combos ?? []).filter(
@@ -933,8 +980,8 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   const isComboWanted = (comboId: number) =>
     controlled
       ? selectedKeys!.has(comboTargetKey(comboId))
-      : !!editor && !!myListings &&
-        myListings.some((ml) => editor.isOn(ml.id, comboTargetKey(comboId)))
+      : !!editor && !!columns &&
+        columns.some((col) => editor.isOn(col.id, comboTargetKey(comboId)))
 
   function maxMemberBid(c: Combo): string | null {
     if (!editor) return null
@@ -958,18 +1005,17 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
       })
       return
     }
-    if (!editor || !myListings) return
+    if (!editor || !columns) return
     const next = !isComboWanted(c.id)
     const group = groupTargetsByGame(editor.targets).find((g) => g.gameId === bggId)
-    const offering = group ? myListings.filter((ml) => groupIsOn(editor, ml.id, group)) : []
-    const acting = offering
+    const acting = group ? columns.filter((col) => groupIsOn(editor, col.id, group)) : []
     const key = comboTargetKey(c.id)
     editor.addTarget({
       key, listingId: 0, comboId: c.id, label: c.combo_code,
       gameId: COMBO_GAME_OFFSET + c.id, gameName: `🎁 ${c.name}`,
       thumbnail: c.items[0]?.board_game_thumbnail ?? null,
     })
-    acting.forEach((ml) => editor.toggle(ml.id, key, next))
+    acting.forEach((col) => editor.toggle(col.id, key, next))
   }
 
   if (isLoading) return <p className="px-3 py-2 text-xs text-moss/70">Loading copies…</p>
@@ -1325,42 +1371,55 @@ function useEditor(model: PageModel): {
 // ============================================================
 
 interface VisualModeProps {
-  myListings: EventListing[]
+  columns: OfferColumn[]
   editor: Editor
   combos: Combo[]
 }
 
-function VisualMode({ myListings, editor, combos }: VisualModeProps) {
-  if (myListings.length === 0) return null
+function VisualMode({ columns, editor, combos }: VisualModeProps) {
+  if (columns.length === 0) return null
   const comboById = new Map(combos.map((c) => [c.id, c]))
 
   return (
     <div className="space-y-3">
-      {myListings.map((listing) => {
+      {columns.map((col) => {
         const groups = groupTargetsByGame(editor.targets)
-        const myWants = groups.filter((g) => groupIsOn(editor, listing.id, g))
+        const myWants = groups.filter((g) => groupIsOn(editor, col.id, g))
+        // The offered item: a combo renders its member thumbnails as a cluster,
+        // a listing renders its single game thumbnail.
+        const offeredCombo = col.isCombo ? comboById.get(col.comboId!) : undefined
         return (
-          <div key={listing.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
+          <div key={col.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-ink">{listing.board_game_name}</p>
-                <p className="font-mono text-xs text-moss/70">{listing.listing_code}</p>
+                <p className="truncate text-sm font-semibold text-ink">
+                  {col.isCombo ? `🎁 ${col.name}` : col.name}
+                </p>
+                <p className={`font-mono text-xs ${col.isCombo ? 'text-amber-600' : 'text-moss/70'}`}>{col.code}</p>
               </div>
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
                 wants {myWants.length}
               </span>
             </div>
 
-            {/* Give → receive: offered copy, then the wanted games as big thumbnails (× to remove). */}
+            {/* Give → receive: offered item, then the wanted games as big thumbnails (× to remove). */}
             <div className="flex items-start gap-3 overflow-x-auto">
               <div className="flex shrink-0 flex-col items-center gap-1">
-                <GameThumb
-                  src={listing.board_game_thumbnail}
-                  alt={listing.board_game_name ?? ''}
-                  className="h-32 w-32"
-                />
-                <span className="w-32 truncate text-center text-xs text-ink" title={listing.board_game_name}>
-                  {listing.board_game_name}
+                {offeredCombo ? (
+                  <div className="flex h-32 w-32 flex-wrap content-center items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 p-1">
+                    {offeredCombo.items.map((it) => (
+                      <GameThumb key={it.id} src={it.board_game_thumbnail} alt={it.board_game_name} className="h-14 w-14" />
+                    ))}
+                  </div>
+                ) : (
+                  <GameThumb
+                    src={col.thumbnail}
+                    alt={col.name ?? ''}
+                    className="h-32 w-32"
+                  />
+                )}
+                <span className="w-32 truncate text-center text-xs text-ink" title={col.name}>
+                  {col.isCombo ? `🎁 ${col.name}` : col.name}
                 </span>
               </div>
               <svg className="mt-12 h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
@@ -1376,7 +1435,7 @@ function VisualMode({ myListings, editor, combos }: VisualModeProps) {
                       <div key={g.gameId} className="relative flex w-32 shrink-0 flex-col items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
+                          onClick={() => groupKeys(g).forEach((k) => editor.toggle(col.id, k, false))}
                           aria-label={`Remove ${g.gameName}`}
                           title={`Remove ${g.gameName}`}
                           className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
@@ -1416,7 +1475,7 @@ function VisualMode({ myListings, editor, combos }: VisualModeProps) {
 
 interface GridModeProps {
   slug: string
-  myListings: EventListing[]
+  columns: OfferColumn[]
   editor: Editor
   username?: string
   ratings: Map<number, number>
@@ -1424,7 +1483,7 @@ interface GridModeProps {
   combos: Combo[]
 }
 
-function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, combos }: GridModeProps) {
+function GridMode({ slug, columns, editor, username, ratings, moneyEnabled, combos }: GridModeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -1434,7 +1493,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
       return s
     })
 
-  const rows = buildGridRows(editor, combos, myListings)
+  const rows = buildGridRows(editor, combos, columns)
 
   if (editor.targets.length === 0) {
     return (
@@ -1444,7 +1503,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
     )
   }
 
-  const colCount = myListings.length + 1
+  const colCount = columns.length + 1
 
   return (
     <div className="space-y-2">
@@ -1456,10 +1515,12 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
             for (const g of rows) {
               const wantRating = ratings.get(g.gameId)
               if (wantRating == null) continue
-              for (const l of myListings) {
-                const ownRating = ratings.get(l.board_game_id)
+              for (const col of columns) {
+                // Combos are bundles with no single game rating — skip them.
+                if (col.isCombo || col.boardGameId == null) continue
+                const ownRating = ratings.get(col.boardGameId)
                 if (ownRating == null) continue
-                if (ownRating <= wantRating && !groupIsOn(editor, l.id, g)) toggleGroup(editor, l.id, g)
+                if (ownRating <= wantRating && !groupIsOn(editor, col.id, g)) toggleGroup(editor, col.id, g)
               }
             }
           }}
@@ -1474,20 +1535,20 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
             <th className="sticky left-0 top-0 z-30 border-b border-r border-ink/15 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-moss">
               Want \ My item
             </th>
-            {myListings.map((l) => (
+            {columns.map((col) => (
               <th
-                key={l.id}
+                key={col.id}
                 className="sticky top-0 z-20 border-b border-r border-ink/15 bg-gray-50 px-1 py-2 align-bottom"
               >
-                {moneyEnabled && l.resolved_ask != null && (
+                {moneyEnabled && !col.isCombo && col.resolvedAsk != null && (
                   <div className="mb-1 text-center text-[10px] font-semibold text-emerald-700">
-                    ${Number(l.resolved_ask).toFixed(2)}
+                    ${Number(col.resolvedAsk).toFixed(2)}
                   </div>
                 )}
                 <div className="mx-auto h-28 w-8">
                   <div className="flex h-full -rotate-180 items-center justify-center [writing-mode:vertical-rl]">
-                    <span className="truncate text-xs font-medium text-moss" title={l.board_game_name}>
-                      {l.board_game_name}
+                    <span className={`truncate text-xs font-medium ${col.isCombo ? 'text-amber-700' : 'text-moss'}`} title={col.name}>
+                      {col.isCombo ? `🎁 ${col.name}` : col.name}
                     </span>
                   </div>
                 </div>
@@ -1548,22 +1609,22 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                       </div>
                     )}
                   </th>
-                  {myListings.map((l) => {
-                    const on = groupIsOn(editor, l.id, g)
+                  {columns.map((col) => {
+                    const on = groupIsOn(editor, col.id, g)
                     return (
                       <td
-                        key={l.id}
+                        key={col.id}
                         className="border-b border-r border-ink/15 p-0 text-center group-hover:bg-indigo-50/40"
                       >
                         <button
                           type="button"
-                          onClick={() => toggleGroup(editor, l.id, g)}
+                          onClick={() => toggleGroup(editor, col.id, g)}
                           className={`m-1 h-5 w-5 rounded border ${
                             on
                               ? 'border-ink bg-butter text-ink'
                               : 'border-ink/20 bg-white text-transparent hover:border-indigo-400'
                           }`}
-                          title={`${g.gameName}  ↕  ${l.board_game_name}`}
+                          title={`${g.gameName}  ↕  ${col.name}`}
                           aria-pressed={on}
                         >
                           <svg className="mx-auto h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -1583,7 +1644,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                             ? 'Specific copies you selected (refine in "Browse games" above):'
                             : "Copies you'd be matched to receive:"}
                         </span>
-                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable combos={combos} moneyEnabled={moneyEnabled} />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} columns={columns} selectable combos={combos} moneyEnabled={moneyEnabled} />
                       </div>
                     </td>
                   </tr>
@@ -1606,7 +1667,7 @@ async function persistChanges(
   slug: string,
   model: PageModel,
   editor: Editor,
-  myListings: EventListing[],
+  columns: OfferColumn[],
   moneyEnabled: boolean
 ): Promise<void> {
   // Per-game prices live on UserGamePrice (one per (user, event, game)) — they
@@ -1626,32 +1687,34 @@ async function persistChanges(
     }
   }
 
-  const listingById = new Map(myListings.map((l) => [l.id, l]))
+  const colById = new Map(columns.map((c) => [c.id, c]))
 
-  for (const listingId of editor.changedListingIds) {
-    const listing = listingById.get(listingId)
-    if (!listing) continue
+  for (const colId of editor.changedListingIds) {
+    const col = colById.get(colId)
+    if (!col) continue
 
-    // Desired target set for this listing (apply staged changes over base).
-    const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
+    // Desired target set for this column (apply staged changes over base).
+    const desired = editor.targets.filter((t) => editor.isOn(colId, t.key))
     const items: WantGroupItemPayload[] = desired.map((t) =>
       t.comboId != null ? { combo: t.comboId } : { event_listing: t.listingId }
     )
 
-    let wg = model.wantGroupByListing.get(listingId)
+    let wg = model.wantGroupByCol.get(colId)
 
     if (!wg) {
-      // No 1-to-1 trio yet → create offer group + want group + wish.
-      let og = model.offerGroupByListing.get(listingId)
+      // No 1-to-1 trio yet → create offer group + want group + wish. The offer
+      // group holds this single column: my listing, or my combo (given as a unit).
+      let og = model.offerGroupByCol.get(colId)
       if (!og) {
         og = await createOfferGroupRaw(slug, {
-          name: listing.listing_code,
+          name: col.code,
           max_give: 1,
-          item_listing_ids: [listingId],
+          item_listing_ids: col.isCombo ? [] : [col.listingId!],
+          ...(col.isCombo ? { item_combo_ids: [col.comboId!] } : {}),
         })
       }
       wg = await createWantGroupRaw(slug, {
-        name: `Wants for ${listing.listing_code}`,
+        name: `Wants for ${col.code}`,
         min_receive: 1,
         // Normal want builder always protects against duplicate game awards;
         // the advanced X-to-Y builder leaves this off.
@@ -1695,15 +1758,21 @@ export default function MyWantsPage() {
 
   const myListings = useMemo(() => listingsData?.results ?? [], [listingsData])
 
+  // Offered items = my listings + my own combos (each a grid/catalog column).
+  const columns = useMemo<OfferColumn[]>(() => {
+    const myCombos = combos.filter((c) => c.owner_username === user?.username)
+    return [...myListings.map(listingColumn), ...myCombos.map(comboColumn)]
+  }, [myListings, combos, user?.username])
+
   const model = useMemo(
-    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices),
-    [myListings, offerGroups, wantGroups, wishes, gamePrices]
+    () => buildModel(columns, offerGroups, wantGroups, wishes, gamePrices),
+    [columns, offerGroups, wantGroups, wishes, gamePrices]
   )
 
   const customWantGroups = useMemo(() => {
-    const autoIds = new Set([...model.wantGroupByListing.values()].map((wg) => wg.id))
+    const autoIds = new Set([...model.wantGroupByCol.values()].map((wg) => wg.id))
     return wantGroups.filter((wg) => !autoIds.has(wg.id))
-  }, [wantGroups, model.wantGroupByListing])
+  }, [wantGroups, model.wantGroupByCol])
 
   const { editor } = useEditor(model)
   const wantGameCount = useMemo(
@@ -1730,7 +1799,7 @@ export default function MyWantsPage() {
     }
     setSaving(true)
     try {
-      await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
+      await persistChanges(slug, model, editor, columns, event?.money_enabled ?? false)
       // Wait for the refetched server truth to land BEFORE clearing local staged
       // changes, otherwise the UI briefly falls back to stale cache (the flash).
       await Promise.all([
@@ -1745,7 +1814,7 @@ export default function MyWantsPage() {
     } finally {
       setSaving(false)
     }
-  }, [slug, model, editor, myListings, qc, event?.money_enabled])
+  }, [slug, model, editor, columns, qc, event?.money_enabled])
 
   if (eventLoading) {
     return (
@@ -1860,16 +1929,16 @@ export default function MyWantsPage() {
               <GameBrowse
                 slug={slug!}
                 editor={editor}
-                myListings={myListings}
+                columns={columns}
                 username={user?.username}
                 customWantGroups={customWantGroups}
                 moneyEnabled={event.money_enabled}
                 combos={combos}
               />
             )}
-            {view === 'visual' && <VisualMode myListings={myListings} editor={editor} combos={combos} />}
+            {view === 'visual' && <VisualMode columns={columns} editor={editor} combos={combos} />}
             {view === 'grid' && (
-              <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} combos={combos} />
+              <GridMode slug={slug!} columns={columns} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} combos={combos} />
             )}
           </div>
         </>
