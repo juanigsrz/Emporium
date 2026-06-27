@@ -496,6 +496,13 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
   const [expanded, setExpanded] = useState<number | null>(null)
 
+  // Per-expanded-game selection, kept independent so the two checklists in the
+  // dropdown don't yank each other around: `offerItems` = which of my items I'm
+  // giving, `wantKeys` = which copies/combos I'd accept. The saved offers are
+  // their cross-product, applied additively as either side is toggled.
+  const [offerItems, setOfferItems] = useState<Set<number>>(new Set())
+  const [wantKeys, setWantKeys] = useState<Set<string>>(new Set())
+
   // Filter bar state
   const [wishlisted, setWishlisted] = useState(false)
   const [minRating, setMinRating] = useState<number | ''>('')
@@ -558,31 +565,56 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
     setExpanded(g.bgg_id)
   }
 
-  // Toggle whether one of my items offers this game. If no copies are staged
-  // yet, stage "any copy" for that item so the checklist isn't inert.
-  async function toggleItemOffers(listing: EventListing, bggId: number) {
-    const group = groupByGame.get(bggId)
-    if (group && group.copyTargets.length > 0) {
-      toggleGroup(editor, listing.id, group)
-      return
+  // Seed the two selections from saved/staged state whenever a different game is
+  // opened: a copy/combo already referenced by any of my lists counts as wanted,
+  // and any item that offers one counts as offering. Read-only — opening a card
+  // changes nothing until the user clicks.
+  useEffect(() => {
+    if (expanded == null) return
+    const keys = new Set<string>()
+    for (const t of editor.targets) {
+      if (t.comboId == null && t.gameId === expanded) keys.add(t.key)
     }
-    let copies: EventListing[]
-    try {
-      const res = await fetchEventListings(slug, { board_game: bggId, page_size: 200 })
-      copies = res.results
-    } catch {
-      return
+    for (const c of combos) {
+      if (c.items.some((it) => it.board_game_id === expanded) &&
+          editor.targets.some((t) => t.comboId === c.id)) {
+        keys.add(comboTargetKey(c.id))
+      }
     }
-    copies
-      .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
-      .forEach((c) => {
-        const key = listingTargetKey(c.id)
-        editor.addTarget({
-          key, listingId: c.id, label: c.listing_code,
-          gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
-        })
-        editor.toggle(listing.id, key, true)
-      })
+    const items = new Set<number>()
+    for (const l of myListings) {
+      if (Array.from(keys).some((k) => editor.isOn(l.id, k))) items.add(l.id)
+    }
+    setWantKeys(keys)
+    setOfferItems(items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
+  // Toggle one of my items in/out of the offering set, additively re-applying it
+  // across the currently-wanted copies. Never touches `wantKeys`.
+  function toggleOfferItem(listing: EventListing) {
+    const adding = !offerItems.has(listing.id)
+    setOfferItems((prev) => {
+      const next = new Set(prev)
+      if (adding) next.add(listing.id)
+      else next.delete(listing.id)
+      return next
+    })
+    wantKeys.forEach((key) => editor.toggle(listing.id, key, adding))
+  }
+
+  // Toggle one copy/combo in/out of the wanted set, offered by every item already
+  // in the offering set (or none yet — picking the copy first is allowed).
+  function toggleWantKey(target: Target) {
+    const adding = !wantKeys.has(target.key)
+    setWantKeys((prev) => {
+      const next = new Set(prev)
+      if (adding) next.add(target.key)
+      else next.delete(target.key)
+      return next
+    })
+    editor.addTarget(target)
+    offerItems.forEach((lid) => editor.toggle(lid, target.key, adding))
   }
 
   return (
@@ -744,15 +776,14 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       </p>
                       <ul className="max-h-40 space-y-0.5 overflow-y-auto">
                         {myListings.map((l) => {
-                          const grp = groupByGame.get(g.bgg_id)
-                          const on = !!grp && groupIsOn(editor, l.id, grp)
+                          const on = offerItems.has(l.id)
                           return (
                             <li key={l.id}>
                               <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
                                 <input
                                   type="checkbox"
                                   checked={on}
-                                  onChange={() => toggleItemOffers(l, g.bgg_id)}
+                                  onChange={() => toggleOfferItem(l)}
                                   className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
                                 />
                                 <span className="truncate text-ink" title={l.board_game_name}>
@@ -774,6 +805,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       selectable
                       combos={combos}
                       moneyEnabled={moneyEnabled}
+                      selectedKeys={wantKeys}
+                      onToggleTarget={toggleWantKey}
                     />
                   </div>
                 )}
@@ -846,22 +879,38 @@ interface GameCopiesProps {
   selectable?: boolean
   combos?: Combo[]
   moneyEnabled?: boolean
+  // Controlled selection (catalog dropdown): when provided, copy/combo selection
+  // is owned by the parent's want-set instead of derived from the offer matrix,
+  // so a copy can be picked before any of my items is chosen.
+  selectedKeys?: Set<string>
+  onToggleTarget?: (t: Target) => void
 }
 
-function GameCopies({ slug, bggId, username, editor, myListings, selectable, combos, moneyEnabled }: GameCopiesProps) {
+function GameCopies({ slug, bggId, username, editor, myListings, selectable, combos, moneyEnabled, selectedKeys, onToggleTarget }: GameCopiesProps) {
   const { data, isLoading } = useEventListings(slug, { board_game: bggId, page_size: 200 })
   const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
   const others = all.filter((l) => l.copy_owner_username !== username)
   const ownCount = all.length - others.length
 
-  const canSelect = !!(selectable && editor && myListings && myListings.length > 0)
+  const controlled = !!(selectable && onToggleTarget && selectedKeys)
+  const canSelect = controlled || !!(selectable && editor && myListings && myListings.length > 0)
   const isCopyWanted = (listingId: number) =>
-    !!editor && !!myListings &&
-    myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
+    controlled
+      ? selectedKeys!.has(listingTargetKey(listingId))
+      : !!editor && !!myListings &&
+        myListings.some((ml) => editor.isOn(ml.id, listingTargetKey(listingId)))
 
   function toggleCopy(l: EventListing) {
-    if (!editor || !myListings || l.owner_too_far) return
+    if (l.owner_too_far) return
+    if (controlled) {
+      onToggleTarget!({
+        key: listingTargetKey(l.id), listingId: l.id, label: l.listing_code,
+        gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
+      })
+      return
+    }
+    if (!editor || !myListings) return
     const next = !isCopyWanted(l.id)
     // Act only on the items already offering this game; if none offer it yet,
     // clicking a copy stages it but assigns no item (tick an item above first).
@@ -882,8 +931,10 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   )
 
   const isComboWanted = (comboId: number) =>
-    !!editor && !!myListings &&
-    myListings.some((ml) => editor.isOn(ml.id, comboTargetKey(comboId)))
+    controlled
+      ? selectedKeys!.has(comboTargetKey(comboId))
+      : !!editor && !!myListings &&
+        myListings.some((ml) => editor.isOn(ml.id, comboTargetKey(comboId)))
 
   function maxMemberBid(c: Combo): string | null {
     if (!editor) return null
@@ -899,6 +950,14 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   }
 
   function toggleCombo(c: Combo) {
+    if (controlled) {
+      onToggleTarget!({
+        key: comboTargetKey(c.id), listingId: 0, comboId: c.id, label: c.combo_code,
+        gameId: COMBO_GAME_OFFSET + c.id, gameName: `🎁 ${c.name}`,
+        thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+      })
+      return
+    }
     if (!editor || !myListings) return
     const next = !isComboWanted(c.id)
     const group = groupTargetsByGame(editor.targets).find((g) => g.gameId === bggId)
@@ -1672,8 +1731,12 @@ export default function MyWantsPage() {
     setSaving(true)
     try {
       await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
-      invalidateTrades(qc, slug)
-      qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })
+      // Wait for the refetched server truth to land BEFORE clearing local staged
+      // changes, otherwise the UI briefly falls back to stale cache (the flash).
+      await Promise.all([
+        invalidateTrades(qc, slug),
+        qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] }),
+      ])
       editor.reset()
     } catch (err) {
       setSaveError(

@@ -266,10 +266,14 @@ export const createWantGroupRaw = createWantGroup
 export const patchWantGroupRaw = patchWantGroup
 export const createWishRaw = createWish
 
-export function invalidateTrades(qc: QueryClient, slug: string): void {
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.offerGroups(slug) })
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.wantGroups(slug) })
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.wishes(slug) })
+// Returns a promise that resolves once the triggered refetches settle, so
+// callers can await fresh server data before clearing local optimistic state.
+export function invalidateTrades(qc: QueryClient, slug: string): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.offerGroups(slug) }),
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.wantGroups(slug) }),
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.wishes(slug) }),
+  ]).then(() => undefined)
 }
 
 // ---- Hooks ----
