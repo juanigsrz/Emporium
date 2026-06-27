@@ -38,8 +38,8 @@ class ComboMixin:
         return get_object_or_404(TradeEvent, slug=slug)
 
     def _assert_editable(self, event):
-        if event.inputs_locked:
-            raise PermissionDenied("Combos are locked, this event has moved to matching.")
+        if event.submissions_locked:
+            raise PermissionDenied("Combos are locked once want-lists open.")
 
     def _ctx(self, request, event):
         return {"request": request, "event": event}

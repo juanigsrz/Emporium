@@ -360,8 +360,8 @@ class TradeEventViewSet(
         return Response(ser.data)
 
     def _listings_create(self, request, event):
-        if event.inputs_locked:
-            raise PermissionDenied("Listings are locked, this event has moved to matching.")
+        if event.submissions_locked:
+            raise PermissionDenied("Listings are locked once want-lists open.")
 
         copy_id = request.data.get("copy")
         if not copy_id:
@@ -413,8 +413,8 @@ class TradeEventViewSet(
             raise PermissionDenied("Only the copy owner can modify this listing.")
 
         if request.method == "DELETE":
-            if event.inputs_locked:
-                raise PermissionDenied("Listings are locked, this event has moved to matching.")
+            if event.submissions_locked:
+                raise PermissionDenied("Listings are locked once want-lists open.")
             listing.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
 

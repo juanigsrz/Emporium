@@ -144,3 +144,13 @@ class ComboAPITests(APITestCase):
         self.client.force_authenticate(self.other)
         resp = self.client.delete(f"{self._url()}{created['id']}/")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_create_blocked_at_wantlist_open(self):
+        self.event.refresh_from_db()
+        self.event.status = "WANTLIST_OPEN"
+        self.event.save(update_fields=["status"])
+        self.client.force_authenticate(self.owner)
+        resp = self.client.post(self._url(), {
+            "name": "x", "item_listing_ids": [self.el1.id, self.el2.id],
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
