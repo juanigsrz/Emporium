@@ -45,7 +45,7 @@ from .serializers import (
     TransitionSerializer,
 )
 from trades.models import OfferGroup, WantGroup, TradeWish
-from .admin_actions import kick_participant
+from .admin_actions import kick_participant, remove_listing
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +360,8 @@ class TradeEventViewSet(
         return Response(ser.data)
 
     def _listings_create(self, request, event):
-        if event.inputs_locked:
-            raise PermissionDenied("Listings are locked, this event has moved to matching.")
+        if event.submissions_locked:
+            raise PermissionDenied("Listings are locked once want-lists open.")
 
         copy_id = request.data.get("copy")
         if not copy_id:
@@ -413,9 +413,9 @@ class TradeEventViewSet(
             raise PermissionDenied("Only the copy owner can modify this listing.")
 
         if request.method == "DELETE":
-            if event.inputs_locked:
-                raise PermissionDenied("Listings are locked, this event has moved to matching.")
-            listing.delete()
+            if event.submissions_locked:
+                raise PermissionDenied("Listings are locked once want-lists open.")
+            remove_listing(listing)
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # PATCH — only sell_price is editable via this route (never copy/active)
@@ -567,7 +567,7 @@ class TradeEventViewSet(
         event = self.get_object()
         self._check_admin(event)
         listing = get_object_or_404(EventListing, pk=listing_id, event=event)
-        listing.delete()
+        remove_listing(listing)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="admin/kick")

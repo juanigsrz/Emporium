@@ -219,6 +219,7 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
   const statusClass = STATUS_COLOR[copy.status] ?? 'bg-gray-100 text-gray-400 border-gray-200'
   const isWithdrawn = copy.status === 'WITHDRAWN'
   const isPendingCopy = copy.is_pending === true
+  const lockedInEvent = copy.in_active_event
 
   const missingFields: string[] = []
   if (!copy.language) missingFields.push('language')
@@ -308,18 +309,30 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
         <div className="flex flex-wrap items-center gap-2 mt-3">
           {!isWithdrawn && (
             <>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => setWithdrawOpen(true)}
-                className="rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
-              >
-                Withdraw
-              </button>
+              {lockedInEvent ? (
+                <span
+                  title="Listed in an active event — unlist it from the event before editing or withdrawing."
+                  className="rounded-xl border-2 border-ink/10 px-3 py-1.5 text-xs font-semibold text-moss/50 cursor-not-allowed select-none"
+                  aria-disabled="true"
+                >
+                  Locked (in event)
+                </span>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setWithdrawOpen(true)}
+                    className="rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    Withdraw
+                  </button>
+                </>
+              )}
               {isPendingCopy && (
                 <span
                   title="Complete details before adding to an event."

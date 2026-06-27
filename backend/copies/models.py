@@ -152,5 +152,13 @@ class Copy(models.Model):
     def recompute_pending(self):
         self.is_pending = not (self.language and self.condition)
 
+    @property
+    def is_in_active_event(self) -> bool:
+        """True while this copy is listed in a non-archived event; such a copy is
+        committed and must not be edited or withdrawn from the owner's profile."""
+        return self.event_listings.filter(active=True).exclude(
+            event__status="ARCHIVED"
+        ).exists()
+
     def __str__(self):
         return f"{self.listing_code} — {self.board_game_id} ({self.owner})"

@@ -495,7 +495,6 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [offerOpen, setOfferOpen] = useState<number | null>(null)
 
   // Filter bar state
   const [wishlisted, setWishlisted] = useState(false)
@@ -534,15 +533,42 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   async function toggleWant(g: { bgg_id: number; name: string }) {
     const group = groupByGame.get(g.bgg_id)
     if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
-      // Already wanted (any/specific) — clear every target for this game.
+      // Already wanted — clear every target for this game.
       myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
       return
     }
-    // "Want any copy" = select every current copy explicitly, so the per-copy
-    // checkboxes all light up and it persists as concrete copies.
+    // Stage every other-owned, in-range copy as an accepted target, but offer NO
+    // items yet — the user consciously ticks which of their items offer it in the
+    // dropdown (auto-opened below).
     let copies: EventListing[]
     try {
       const res = await fetchEventListings(slug, { board_game: g.bgg_id, page_size: 200 })
+      copies = res.results
+    } catch {
+      return
+    }
+    copies
+      .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
+      .forEach((c) => {
+        editor.addTarget({
+          key: listingTargetKey(c.id), listingId: c.id, label: c.listing_code,
+          gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
+        })
+      })
+    setExpanded(g.bgg_id)
+  }
+
+  // Toggle whether one of my items offers this game. If no copies are staged
+  // yet, stage "any copy" for that item so the checklist isn't inert.
+  async function toggleItemOffers(listing: EventListing, bggId: number) {
+    const group = groupByGame.get(bggId)
+    if (group && group.copyTargets.length > 0) {
+      toggleGroup(editor, listing.id, group)
+      return
+    }
+    let copies: EventListing[]
+    try {
+      const res = await fetchEventListings(slug, { board_game: bggId, page_size: 200 })
       copies = res.results
     } catch {
       return
@@ -555,7 +581,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
           key, listingId: c.id, label: c.listing_code,
           gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
         })
-        myListings.forEach((l) => editor.toggle(l.id, key, true))
+        editor.toggle(listing.id, key, true)
       })
   }
 
@@ -711,6 +737,34 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       username={username}
                       customWantGroups={customWantGroups}
                     />
+                    {/* Which of my items offer this game (empty by default) */}
+                    <div className="border-b border-ink/10 px-3 py-2">
+                      <p className="mb-1 text-[11px] font-medium text-moss/70">
+                        Your items that offer this game:
+                      </p>
+                      <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+                        {myListings.map((l) => {
+                          const grp = groupByGame.get(g.bgg_id)
+                          const on = !!grp && groupIsOn(editor, l.id, grp)
+                          return (
+                            <li key={l.id}>
+                              <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => toggleItemOffers(l, g.bgg_id)}
+                                  className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="truncate text-ink" title={l.board_game_name}>
+                                  {l.board_game_name}
+                                </span>
+                                <span className="ml-auto shrink-0 font-mono text-moss/70">{l.listing_code}</span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
                     <GameCopies
                       slug={slug}
                       bggId={g.bgg_id}
@@ -723,49 +777,6 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     />
                   </div>
                 )}
-                {(() => {
-                  const group = groupByGame.get(g.bgg_id)
-                  if (!group || myListings.length < 2) return null
-                  const offeringCount = myListings.filter((l) => groupIsOn(editor, l.id, group)).length
-                  if (offeringCount === 0) return null
-                  const panelOpen = offerOpen === g.bgg_id
-                  return (
-                    <div className="border-t border-ink/10 bg-indigo-50/40">
-                      <button
-                        type="button"
-                        onClick={() => setOfferOpen(panelOpen ? null : g.bgg_id)}
-                        className="w-full px-2 py-1 text-left text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
-                        aria-expanded={panelOpen}
-                        title="Pick which of your offered items you'd give for this game"
-                      >
-                        Offering {offeringCount}/{myListings.length} of your items {panelOpen ? '▲' : '▾'}
-                      </button>
-                      {panelOpen && (
-                        <ul className="max-h-40 space-y-0.5 overflow-y-auto px-2 pb-2">
-                          {myListings.map((l) => {
-                            const on = groupIsOn(editor, l.id, group)
-                            return (
-                              <li key={l.id}>
-                                <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={on}
-                                    onChange={() => toggleGroup(editor, l.id, group)}
-                                    className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  <span className="truncate text-ink" title={l.board_game_name}>
-                                    {l.board_game_name}
-                                  </span>
-                                  <span className="ml-auto shrink-0 font-mono text-moss/70">{l.listing_code}</span>
-                                </label>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  )
-                })()}
                 <button
                   type="button"
                   onClick={() => toggleWant(g)}
@@ -852,11 +863,11 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   function toggleCopy(l: EventListing) {
     if (!editor || !myListings || l.owner_too_far) return
     const next = !isCopyWanted(l.id)
-    // Act on the items already offering this game (preserve per-item refinement);
-    // if none offer it yet, this is a fresh want → apply to all my items.
+    // Act only on the items already offering this game; if none offer it yet,
+    // clicking a copy stages it but assigns no item (tick an item above first).
     const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
     const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
-    const acting = offering.length ? offering : myListings
+    const acting = offering
 
     const key = listingTargetKey(l.id)
     editor.addTarget({
@@ -892,7 +903,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
     const next = !isComboWanted(c.id)
     const group = groupTargetsByGame(editor.targets).find((g) => g.gameId === bggId)
     const offering = group ? myListings.filter((ml) => groupIsOn(editor, ml.id, group)) : []
-    const acting = offering.length ? offering : myListings
+    const acting = offering
     const key = comboTargetKey(c.id)
     editor.addTarget({
       key, listingId: 0, comboId: c.id, label: c.combo_code,
@@ -1364,15 +1375,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
       return s
     })
 
-  const { data: listingsData } = useEventListings(slug, { page_size: 500 })
-  const askByListing = useMemo(() => {
-    const m = new Map<number, number>()
-    for (const el of listingsData?.results ?? []) {
-      if (el.resolved_ask != null && el.resolved_ask !== '') m.set(el.id, Number(el.resolved_ask))
-    }
-    return m
-  }, [listingsData])
-
   const rows = buildGridRows(editor, combos, myListings)
 
   if (editor.targets.length === 0) {
@@ -1418,6 +1420,11 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                 key={l.id}
                 className="sticky top-0 z-20 border-b border-r border-ink/15 bg-gray-50 px-1 py-2 align-bottom"
               >
+                {moneyEnabled && l.resolved_ask != null && (
+                  <div className="mb-1 text-center text-[10px] font-semibold text-emerald-700">
+                    ${Number(l.resolved_ask).toFixed(2)}
+                  </div>
+                )}
                 <div className="mx-auto h-28 w-8">
                   <div className="flex h-full -rotate-180 items-center justify-center [writing-mode:vertical-rl]">
                     <span className="truncate text-xs font-medium text-moss" title={l.board_game_name}>
@@ -1434,10 +1441,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
             const specific = g.copyTargets.length > 0
-            const askValues = g.copyTargets
-              .map((t) => askByListing.get(t.listingId))
-              .filter((v): v is number => v != null)
-            const minAsk = askValues.length ? Math.min(...askValues) : null
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1483,11 +1486,6 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                           placeholder="price"
                           className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                         />
-                      </div>
-                    )}
-                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
-                      <div className="mt-0.5 text-xs text-moss/70">
-                        ask: {minAsk != null ? `$${minAsk.toFixed(2)}` : '—'}
                       </div>
                     )}
                   </th>

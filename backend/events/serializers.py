@@ -28,6 +28,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
     is_organizer        = serializers.SerializerMethodField()
     is_participant      = serializers.SerializerMethodField()
     inputs_locked       = serializers.BooleanField(read_only=True)
+    submissions_locked  = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TradeEvent
@@ -59,6 +60,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "is_organizer",
             "is_participant",
             "inputs_locked",
+            "submissions_locked",
             "created",
             "updated",
         ]
@@ -74,6 +76,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "is_organizer",
             "is_participant",
             "inputs_locked",
+            "submissions_locked",
             "created",
             "updated",
         ]
@@ -181,11 +184,17 @@ class EventListingSerializer(serializers.ModelSerializer):
     ask_is_override = serializers.SerializerMethodField()
 
     def get_resolved_ask(self, obj):
+        request = self.context.get("request")
+        if request is None or obj.copy.owner_id != request.user.id:
+            return None
         from trades.pricing import resolve_ask
         v = resolve_ask(obj)
         return f"{v:.2f}" if v is not None else None
 
     def get_ask_is_override(self, obj):
+        request = self.context.get("request")
+        if request is None or obj.copy.owner_id != request.user.id:
+            return None
         return obj.sell_price is not None
 
     def validate_sell_price(self, value):

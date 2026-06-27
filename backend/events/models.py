@@ -47,6 +47,7 @@ ALLOWED_TRANSITIONS: dict[str, list[str]] = {
 }
 
 WANTLIST_LOCKED_STATUSES = {"MATCHING", "MATCH_REVIEW", "FINALIZATION", "SHIPPING", "ARCHIVED"}
+SUBMISSIONS_LOCKED_STATUSES = {"WANTLIST_OPEN"} | WANTLIST_LOCKED_STATUSES
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +153,11 @@ class TradeEvent(models.Model):
     def inputs_locked(self) -> bool:
         """True once matching has begun — wants and listings are read-only."""
         return self.status in WANTLIST_LOCKED_STATUSES
+
+    @property
+    def submissions_locked(self) -> bool:
+        """True once want-lists open — listings and combos are read-only."""
+        return self.status in SUBMISSIONS_LOCKED_STATUSES
 
 
 # ---------------------------------------------------------------------------

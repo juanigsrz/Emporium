@@ -246,12 +246,15 @@ class ResolvedReadFieldTests(MatchingTestBase):
     def test_listing_resolved_ask_and_override_flag(self):
         UserGamePrice.objects.create(user=self.user_a, event=self.event, board_game=self.game_brass, price=Decimal("40"))
         from events.serializers import EventListingSerializer
-        data = EventListingSerializer(self.el_a1, context={"request": None}).data
+        from rest_framework.test import APIRequestFactory
+        _req = APIRequestFactory().get("/")
+        _req.user = self.user_a
+        data = EventListingSerializer(self.el_a1, context={"request": _req}).data
         self.assertEqual(Decimal(data["resolved_ask"]), Decimal("40"))
         self.assertFalse(data["ask_is_override"])
         self.el_a1.sell_price = Decimal("33")
         self.el_a1.save(update_fields=["sell_price"])
-        data = EventListingSerializer(self.el_a1, context={"request": None}).data
+        data = EventListingSerializer(self.el_a1, context={"request": _req}).data
         self.assertEqual(Decimal(data["resolved_ask"]), Decimal("33"))
         self.assertTrue(data["ask_is_override"])
 

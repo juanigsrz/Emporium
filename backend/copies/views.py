@@ -93,14 +93,24 @@ class CopyViewSet(
         if instance.owner != self.request.user:
             raise PermissionDenied("You do not have permission to modify this copy.")
 
+    def _assert_not_locked(self, instance):
+        """Block edits/withdraw while the copy is committed to an active event."""
+        if instance.is_in_active_event:
+            raise PermissionDenied(
+                "This copy is listed in an active event. Unlist it from the event "
+                "before editing or withdrawing it."
+            )
+
     def update(self, request, *args, **kwargs):
         """PATCH only; PUT not supported."""
         kwargs["partial"] = True
         instance = self.get_object()
         self._check_owner(instance)
+        self._assert_not_locked(instance)
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
         self._check_owner(instance)
+        self._assert_not_locked(instance)
         return super().destroy(request, *args, **kwargs)
