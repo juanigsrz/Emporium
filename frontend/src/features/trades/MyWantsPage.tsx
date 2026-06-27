@@ -863,8 +863,8 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable, com
   function toggleCopy(l: EventListing) {
     if (!editor || !myListings || l.owner_too_far) return
     const next = !isCopyWanted(l.id)
-    // Act on the items already offering this game (preserve per-item refinement);
-    // if none offer it yet, this is a fresh want → apply to all my items.
+    // Act only on the items already offering this game; if none offer it yet,
+    // clicking a copy stages it but assigns no item (tick an item above first).
     const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
     const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
     const acting = offering

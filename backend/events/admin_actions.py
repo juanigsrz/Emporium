@@ -18,6 +18,7 @@ from trades.models import (
 from .models import EventListing, EventParticipation
 
 
+@transaction.atomic
 def remove_listing(listing):
     """Delete an EventListing and every Combo it belongs to.
 
