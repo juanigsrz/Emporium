@@ -297,7 +297,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <div className="flex items-center gap-1.5">
-        <span className="text-moss">Personal rating</span>
+        <span className="text-moss">My rating</span>
         <input
           type="number"
           min={1}
@@ -330,7 +330,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 
       {moneyEnabled && (
         <div className="flex items-center gap-1.5">
-          <span className="text-moss">Default bidding price $</span>
+          <span className="text-moss">Price $</span>
           <input
             type="number"
             min="0.01"
@@ -1465,7 +1465,7 @@ function GridMode({ slug, myListings, editor, username, ratings, moneyEnabled, c
                     </span>
                     {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
                       <div className="mt-1 flex items-center gap-1 text-xs">
-                        <span className="text-moss">Default bidding price $</span>
+                        <span className="text-moss">$</span>
                         <input
                           type="number"
                           min="0.01"
