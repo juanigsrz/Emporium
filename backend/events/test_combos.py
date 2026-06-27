@@ -154,3 +154,16 @@ class ComboAPITests(APITestCase):
             "name": "x", "item_listing_ids": [self.el1.id, self.el2.id],
         }, format="json")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_removing_member_listing_deletes_whole_combo(self):
+        self.client.force_authenticate(self.owner)
+        created = self.client.post(self._url(), {
+            "name": "a", "item_listing_ids": [self.el1.id, self.el2.id],
+        }, format="json")
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        combo_id = created.data["id"]
+        resp = self.client.delete(
+            f"/api/events/{self.event.slug}/listings/{self.el1.id}/"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Combo.objects.filter(pk=combo_id).exists())

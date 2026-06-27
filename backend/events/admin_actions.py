@@ -18,6 +18,17 @@ from trades.models import (
 from .models import EventListing, EventParticipation
 
 
+def remove_listing(listing):
+    """Delete an EventListing and every Combo it belongs to.
+
+    A combo is a bundle traded as one unit; if one member leaves, the bundle is
+    no longer the thing other users wished for, so the whole Combo is removed
+    (not merely its ComboItem)."""
+    from .models import Combo
+    Combo.objects.filter(items__event_listing=listing).distinct().delete()
+    listing.delete()
+
+
 @transaction.atomic
 def kick_participant(event, user):
     """Remove `user` from `event`. Returns an impact summary dict."""
