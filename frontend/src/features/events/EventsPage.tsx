@@ -124,7 +124,7 @@ function EventCard({ event }: { event: TradeEventListItem }) {
         <img
           src={event.image_url}
           alt=""
-          className="h-20 w-full shrink-0 rounded-2xl object-cover sm:h-16 sm:w-16"
+          className="h-24 w-full shrink-0 rounded-2xl object-cover sm:h-24 sm:w-24"
           loading="lazy"
         />
       ) : (
