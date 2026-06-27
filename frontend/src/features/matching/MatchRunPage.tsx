@@ -480,16 +480,19 @@ function MyTradesSection({
 
       {/* Payments — item-level breakdown + net balance (the "why"). Actionable payments live in the Shipping & Payments tab. */}
       {(() => {
+        // Only CASH legs move money; barter is free. cash_amount is null on barter
+        // legs (item_value carries the game's ask even there), so filter and sum on
+        // cash_amount to keep the net in actual money owed.
         const bought = assignments.filter(
-          (a) => a.item_value != null && a.receiver_username === currentUsername
+          (a) => a.cash_amount != null && a.receiver_username === currentUsername
         )
         const sold = assignments.filter(
-          (a) => a.item_value != null && a.giver_username === currentUsername
+          (a) => a.cash_amount != null && a.giver_username === currentUsername
         )
         if (bought.length === 0 && sold.length === 0) return null
 
-        const boughtTotal = bought.reduce((s, a) => s + Number(a.item_value), 0)
-        const soldTotal = sold.reduce((s, a) => s + Number(a.item_value), 0)
+        const boughtTotal = bought.reduce((s, a) => s + Number(a.cash_amount), 0)
+        const soldTotal = sold.reduce((s, a) => s + Number(a.cash_amount), 0)
         const net = boughtTotal - soldTotal // > 0 => you owe
 
         return (
@@ -502,7 +505,7 @@ function MyTradesSection({
               <div key={`buy-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
                 <p className="text-sm text-ink">
                   You bought <span className="font-semibold">{a.board_game_name}</span> for{' '}
-                  <span className="font-semibold">${a.item_value}</span> from{' '}
+                  <span className="font-semibold">${a.cash_amount}</span> from{' '}
                   <Link to={`/u/${a.giver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.giver_username}
                   </Link>
@@ -515,7 +518,7 @@ function MyTradesSection({
               <div key={`sell-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
                 <p className="text-sm text-ink">
                   You sold <span className="font-semibold">{a.board_game_name}</span> for{' '}
-                  <span className="font-semibold">${a.item_value}</span> to{' '}
+                  <span className="font-semibold">${a.cash_amount}</span> to{' '}
                   <Link to={`/u/${a.receiver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.receiver_username}
                   </Link>

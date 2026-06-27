@@ -652,16 +652,18 @@ def load_solution(match_run, raw_output: str):
     ]
 
     # Money cross-check + settlement plan (money mode only). Reconstruct each
-    # user's net from item_value (received - given) and require it to equal the
-    # solver's Cash Summary net; a mismatch means stale prices or a parse error, so
-    # fail loudly rather than ship wrong money.
+    # user's net from the CASH legs only (paid by buyer, received by seller) and
+    # require it to equal the solver's Cash Summary net; a mismatch means stale
+    # prices or a parse error, so fail loudly rather than ship wrong money.
+    # Barter swaps move no money even when the item carries an ask, so they must
+    # not enter the net -- mirrors the solver's cash-only budget accounting.
     settlement = []
     summary_net = parse_gurobi_cash_summary(raw_output)
     if summary_net:
-        recon = defaultdict(int)  # username -> net cents (received - given)
+        recon = defaultdict(int)  # username -> net cents (spent - earned)
         for kind, target, giver, receiver, cid, wid, amt, val in rows:
-            if val:
-                cents = _to_cents(val)
+            if amt is not None:
+                cents = _to_cents(amt)
                 recon[receiver.username] += cents
                 recon[giver.username] -= cents
         for username, net_cents in summary_net.items():

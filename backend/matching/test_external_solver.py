@@ -481,22 +481,40 @@ class MoneySettlementUploadTests(MatchingTestBase):
         cls.el_b1.sell_price = 30
         cls.el_b1.save(update_fields=["sell_price"])
 
-    def _money_solution(self, alice_net=1000):
+    def _barter_solution(self):
+        # Pure barter swap a1<->b1. No money moves, so the Cash Summary nets are $0
+        # even though both copies carry an ask -- the ask is only the cash sale price.
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
-        bob_net = -alice_net
         return (
             f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
             f"\nCash Summary:\n"
-            f"  {self.user_a.username}: spent $3000, earned $2000, net ${alice_net} (cap $inf)\n"
-            f"  {self.user_b.username}: spent $2000, earned $3000, net ${bob_net} (cap $inf)\n"
+            f"  {self.user_a.username}: spent $0, earned $0, net $0 (cap $inf)\n"
+            f"  {self.user_b.username}: spent $0, earned $0, net $0 (cap $inf)\n"
+        )
+
+    def _cash_solution(self, alice_net=1000):
+        # Cross cash purchases: alice buys bob's terra ($30), bob buys alice's brass
+        # ($20). Net: alice +3000-2000 = 1000c owed, bob the mirror. Only cash legs
+        # move money, so the reconstruction must equal these nets.
+        a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
+        au, bu = self.user_a.username, self.user_b.username
+        bob_net = -alice_net
+        return (
+            f"Trade Results:\n"
+            f"\nCash Purchases:\n"
+            f"  {b1}: {bu} -> {au}  ({au} pays {bu} $3000)\n"
+            f"  {a1}: {au} -> {bu}  ({bu} pays {au} $2000)\n"
+            f"\nCash Summary:\n"
+            f"  {au}: spent $3000, earned $2000, net ${alice_net} (cap $inf)\n"
+            f"  {bu}: spent $2000, earned $3000, net ${bob_net} (cap $inf)\n"
             f"\nSettlement plan:\n"
-            f"  {self.user_a.username} pays {self.user_b.username} $1000\n"
+            f"  {au} pays {bu} $1000\n"
         )
 
     def test_item_value_set_on_swap_legs(self):
         from decimal import Decimal
         resp = self.client.post(
-            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+            upload_url(self.slug), data=self._barter_solution(), content_type="text/plain"
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         run = MatchRun.objects.get(pk=resp.data["id"])
@@ -507,7 +525,7 @@ class MoneySettlementUploadTests(MatchingTestBase):
 
     def test_settlement_in_result(self):
         resp = self.client.post(
-            upload_url(self.slug), data=self._money_solution(), content_type="text/plain"
+            upload_url(self.slug), data=self._cash_solution(), content_type="text/plain"
         )
         run = MatchRun.objects.get(pk=resp.data["id"])
         self.assertEqual(
@@ -516,9 +534,9 @@ class MoneySettlementUploadTests(MatchingTestBase):
         )
 
     def test_reconstruction_mismatch_rejected(self):
-        # Cash Summary claims alice owes $99.99 but the items reconstruct to $10 -> 400.
+        # Cash Summary claims alice owes $99.99 but the cash legs reconstruct to $10 -> 400.
         resp = self.client.post(
-            upload_url(self.slug), data=self._money_solution(alice_net=9999),
+            upload_url(self.slug), data=self._cash_solution(alice_net=9999),
             content_type="text/plain",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
