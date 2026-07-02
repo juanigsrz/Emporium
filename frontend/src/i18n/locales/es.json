@@ -24,5 +24,55 @@
       "hours": "hace {{count}}h",
       "days": "hace {{count}}d"
     }
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "noAccount": "¿No tienes una cuenta?",
+    "usernameLabel": "Usuario",
+    "passwordLabel": "Contraseña",
+    "submit": "Iniciar sesión",
+    "submitting": "Iniciando sesión…",
+    "or": "o",
+    "errors": {
+      "usernameRequired": "El usuario es obligatorio",
+      "passwordRequired": "La contraseña es obligatoria",
+      "invalidCredentials": "Credenciales no válidas. Inténtalo de nuevo.",
+      "networkError": "Error de red. Inténtalo de nuevo."
+    }
+  },
+  "auth": {
+    "title": "Crear cuenta",
+    "haveAccount": "¿Ya tienes una cuenta?",
+    "signIn": "Iniciar sesión",
+    "usernameLabel": "Usuario",
+    "emailLabel": "Correo electrónico",
+    "passwordLabel": "Contraseña",
+    "confirmPasswordLabel": "Confirmar contraseña",
+    "submit": "Crear cuenta",
+    "submitting": "Creando cuenta…",
+    "or": "o",
+    "googleSignIn": "Iniciar sesión con Google",
+    "googleCancelled": "El inicio de sesión con Google se canceló o falló.",
+    "googleFailed": "El inicio de sesión con Google falló. Inténtalo de nuevo.",
+    "errors": {
+      "usernameRequired": "El usuario es obligatorio",
+      "usernameMax": "Máximo 150 caracteres",
+      "emailRequired": "El correo electrónico es obligatorio",
+      "emailInvalid": "Introduce un correo electrónico válido",
+      "password1Min": "La contraseña debe tener al menos 8 caracteres",
+      "password2Required": "Confirma tu contraseña",
+      "passwordMismatch": "Las contraseñas no coinciden",
+      "registrationFailed": "No se pudo completar el registro. Revisa tus datos.",
+      "networkError": "Error de red. Inténtalo de nuevo."
+    }
+  },
+  "home": {
+    "heroTitle": "Intercambia juegos de mesa como lo dictan las matemáticas.",
+    "heroSubtitle": "Publica los juegos que tienes, arma tus listas de deseos y deja que el solver trace las cadenas de intercambio más largas y justas.",
+    "browseEvents": "Explorar eventos",
+    "tradeEventsTitle": "Eventos de intercambio",
+    "tradeEventsDescription": "Únete a un evento, añade tus copias y arma tu lista de deseos.",
+    "myCopiesDescription": "Añade los juegos de mesa que tienes, listos para publicarse en eventos de intercambio.",
+    "open": "Abrir"
   }
 }

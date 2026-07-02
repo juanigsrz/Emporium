@@ -1,24 +1,26 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { loginApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
 import GoogleSignInButton from '../../components/GoogleSignInButton'
 
-const schema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
-})
-
-type FormValues = z.infer<typeof schema>
-
 export default function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const setSession = useAuthStore((s) => s.setSession)
   const [serverError, setServerError] = useState<string | null>(null)
+
+  const schema = useMemo(() => z.object({
+    username: z.string().min(1, t('login.errors.usernameRequired')),
+    password: z.string().min(1, t('login.errors.passwordRequired')),
+  }), [t])
+
+  type FormValues = z.infer<typeof schema>
 
   const {
     register,
@@ -47,11 +49,11 @@ export default function LoginPage() {
         if (data.password) { setError('password', { message: data.password[0] }); handled = true }
         if (!handled) {
           const msg = (data as { non_field_errors?: string[] }).non_field_errors?.[0]
-            ?? 'Invalid credentials. Please try again.'
+            ?? t('login.errors.invalidCredentials')
           setServerError(msg)
         }
       } else {
-        setServerError('Network error. Please try again.')
+        setServerError(t('login.errors.networkError'))
       }
     }
   }
@@ -60,11 +62,11 @@ export default function LoginPage() {
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm rounded-3xl border-2 border-ink bg-cream p-7 shadow-card">
         <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-butter text-2xl">🎲</span>
-        <h1 className="mb-1 text-2xl font-bold text-ink">Sign in</h1>
+        <h1 className="mb-1 text-2xl font-bold text-ink">{t('login.title')}</h1>
         <p className="mb-6 text-sm text-moss">
-          Don&apos;t have an account?{' '}
+          {t('login.noAccount')}{' '}
           <Link to="/register" className="font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2 hover:decoration-butter">
-            Register
+            {t('common.register')}
           </Link>
         </p>
 
@@ -77,7 +79,7 @@ export default function LoginPage() {
 
           <div>
             <label htmlFor="username" className="mb-1 block text-sm font-semibold text-ink">
-              Username
+              {t('login.usernameLabel')}
             </label>
             <input
               id="username"
@@ -95,7 +97,7 @@ export default function LoginPage() {
 
           <div>
             <label htmlFor="password" className="mb-1 block text-sm font-semibold text-ink">
-              Password
+              {t('login.passwordLabel')}
             </label>
             <input
               id="password"
@@ -116,13 +118,13 @@ export default function LoginPage() {
             disabled={isSubmitting}
             className="w-full rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
-            {isSubmitting ? 'Signing in…' : 'Sign in'}
+            {isSubmitting ? t('login.submitting') : t('login.submit')}
           </button>
         </form>
 
         <div className="my-4 flex items-center gap-3 text-xs text-moss/60">
           <span className="h-px flex-1 bg-ink/10" />
-          or
+          {t('login.or')}
           <span className="h-px flex-1 bg-ink/10" />
         </div>
         <GoogleSignInButton

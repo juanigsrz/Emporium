@@ -24,5 +24,55 @@
       "hours": "{{count}}h ago",
       "days": "{{count}}d ago"
     }
+  },
+  "login": {
+    "title": "Sign in",
+    "noAccount": "Don't have an account?",
+    "usernameLabel": "Username",
+    "passwordLabel": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "or": "or",
+    "errors": {
+      "usernameRequired": "Username is required",
+      "passwordRequired": "Password is required",
+      "invalidCredentials": "Invalid credentials. Please try again.",
+      "networkError": "Network error. Please try again."
+    }
+  },
+  "auth": {
+    "title": "Create account",
+    "haveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "usernameLabel": "Username",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "confirmPasswordLabel": "Confirm password",
+    "submit": "Create account",
+    "submitting": "Creating account…",
+    "or": "or",
+    "googleSignIn": "Sign in with Google",
+    "googleCancelled": "Google sign-in was cancelled or failed.",
+    "googleFailed": "Google sign-in failed. Please try again.",
+    "errors": {
+      "usernameRequired": "Username is required",
+      "usernameMax": "Max 150 characters",
+      "emailRequired": "Email is required",
+      "emailInvalid": "Enter a valid email",
+      "password1Min": "Password must be at least 8 characters",
+      "password2Required": "Please confirm your password",
+      "passwordMismatch": "Passwords do not match",
+      "registrationFailed": "Registration failed. Please check your details.",
+      "networkError": "Network error. Please try again."
+    }
+  },
+  "home": {
+    "heroTitle": "Trade board games the way the math intends.",
+    "heroSubtitle": "List the games you own, build wishlists, and let the solver weave the longest, fairest chains of trades.",
+    "browseEvents": "Browse events",
+    "tradeEventsTitle": "Trade Events",
+    "tradeEventsDescription": "Join an event, list your copies, and build your want list.",
+    "myCopiesDescription": "Add the board games you own, ready to list in trade events.",
+    "open": "Open"
   }
 }
