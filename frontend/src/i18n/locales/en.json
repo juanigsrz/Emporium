@@ -1,0 +1,28 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "profile": "Profile",
+    "myCopies": "My Copies",
+    "logout": "Logout",
+    "login": "Login",
+    "register": "Register"
+  },
+  "nav": {
+    "home": "Home",
+    "events": "Events",
+    "language": "Language",
+    "notifications": "Notifications",
+    "noNotifications": "No notifications yet.",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "time": {
+      "justNow": "just now",
+      "minutes": "{{count}}m ago",
+      "hours": "{{count}}h ago",
+      "days": "{{count}}d ago"
+    }
+  }
+}
