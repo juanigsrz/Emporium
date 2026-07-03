@@ -16,6 +16,7 @@ from DRAFT → ARCHIVED and exercises the features added on top:
 This is the authoritative "does the whole cycle still work" check.
 """
 
+import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -209,28 +210,29 @@ class EventCycleQA(APITestCase):
         self.client.force_authenticate(self.organizer)
         exp = self.client.get(wants_export(slug))
         self.assertEqual(exp.status_code, status.HTTP_200_OK)
-        text = exp.content.decode()
-        self.assertIn(f"user {self.t1.username} budget 3000", text)
-        # dup protection no longer emits a tag; t1's single terra copy passes
-        # through with no dummy node (t2's brass wish with 2 copies will get one).
-        self.assertNotIn("DUP-PROTECT", text)
-        self.assertNotIn("__DUMMY", text)
+        doc = json.loads(exp.content.decode())
+        self.assertIn({"user": self.t1.username, "budget": 3000}, doc["budgets"])
+        # dup protection emits a takecap (n=1), not a dummy node. t1's single terra
+        # copy passes through uncapped; t2's brass wish (2 copies) gets one.
         # terra has a single active copy (c2_terra) -> not capped.
         self.assertFalse(
-            any(l.startswith("dupcap") and self.c2_terra.listing_code in l
-                for l in text.splitlines()),
+            any(self.c2_terra.listing_code in c["items"] for c in doc["takecaps"]),
             "single-copy terra should not be capped",
         )
-        # brass has two copies (t1, t3) and t2 wants it -> a dupcap for t2.
+        # brass has two copies (t1, t3) and t2 wants it -> a takecap (n=1) for t2.
         self.assertTrue(
-            any(l.startswith(f"dupcap {self.t2.username} ")
-                for l in text.splitlines()),
-            "two-copy brass want should emit a dupcap",
+            any(c["user"] == self.t2.username and c["n"] == 1 for c in doc["takecaps"]),
+            "two-copy brass want should emit a takecap",
         )
-        self.assertIn(f"bid {self.t1.username} {self.c2_terra.listing_code} 2000", text)
-        self.assertIn(f"item {self.c2_terra.listing_code} owner {self.t2.username} ask 1000", text)
-        # body still valid NforM: at least one "user : (NforM) give -> take" line
-        self.assertTrue(any(" : " in l for l in text.splitlines() if not l.startswith("#")))
+        self.assertIn(
+            {"user": self.t1.username, "item": self.c2_terra.listing_code,
+             "max_price": 2000},
+            doc["bids"])
+        self.assertIn(
+            {"name": self.c2_terra.listing_code, "owner": self.t2.username, "ask": 1000},
+            doc["items"])
+        # body still valid: at least one wish entry
+        self.assertTrue(doc["wishes"])
 
         # 8. RUN MATCHING -------------------------------------------------
         self._transition(slug, "MATCHING")
@@ -298,7 +300,7 @@ class EventCycleQA(APITestCase):
         self._build_wish(slug, self.t1, l1, self.terra, dup=False)
 
         self.client.force_authenticate(self.organizer)
-        text = self.client.get(wants_export(slug)).content.decode()
-        self.assertNotIn("#! MONEY-ENABLED", text)
-        self.assertNotIn("#! MONEY-WANT", text)
-        self.assertNotIn("DUP-PROTECT", text)   # dup=False, money off
+        doc = json.loads(self.client.get(wants_export(slug)).content.decode())
+        self.assertEqual(doc["budgets"], [])   # money off -> no budgets
+        self.assertEqual(doc["bids"], [])       # money off -> no bids
+        self.assertEqual(doc["takecaps"], [])   # dup=False -> no takecaps

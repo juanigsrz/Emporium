@@ -1,4 +1,6 @@
 """TradeCap model + API tests."""
+import json
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import TestCase
@@ -170,27 +172,28 @@ class TradeCapExportTests(TestCase):
         ComboItem.objects.create(combo=cls.combo, event_listing=cls.el1)
         ComboItem.objects.create(combo=cls.combo, event_listing=cls.el2)
 
-    def test_give_cap_emits_givecap_line(self):
+    def test_give_cap_emits_givecap_entry(self):
         cap = TradeCap.objects.create(event=self.event, user=self.owner,
                                       kind=TradeCap.Kind.GIVE, n=1)
         TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
         TradeCapItem.objects.create(cap=cap, combo=self.combo)
-        lines = build_wants(self.event).splitlines()
+        givecaps = json.loads(build_wants(self.event))["givecaps"]
         self.assertIn(
-            f"givecap {self.owner.username} 1 {self.c1.listing_code} {self.combo.combo_code}",
-            lines,
+            {"user": self.owner.username, "n": 1,
+             "items": sorted([self.c1.listing_code, self.combo.combo_code])},
+            givecaps,
         )
 
-    def test_take_cap_emits_takecap_line(self):
+    def test_take_cap_emits_takecap_entry(self):
         cap = TradeCap.objects.create(event=self.event, user=self.wisher,
                                       kind=TradeCap.Kind.TAKE, n=2)
         TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
         TradeCapItem.objects.create(cap=cap, event_listing=self.el2)
-        lines = build_wants(self.event).splitlines()
-        tokens = " ".join(sorted([self.c1.listing_code, self.c2.listing_code]))
+        takecaps = json.loads(build_wants(self.event))["takecaps"]
         self.assertIn(
-            f"takecap {self.wisher.username} 2 {tokens}",
-            lines,
+            {"user": self.wisher.username, "n": 2,
+             "items": sorted([self.c1.listing_code, self.c2.listing_code])},
+            takecaps,
         )
 
     def test_inactive_item_skipped(self):
@@ -199,8 +202,12 @@ class TradeCapExportTests(TestCase):
         TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
         TradeCapItem.objects.create(cap=cap, event_listing=self.el2)
         EventListing.objects.filter(id=self.el2.id).update(active=False)
-        lines = build_wants(self.event).splitlines()
-        self.assertIn(f"givecap {self.owner.username} 1 {self.c1.listing_code}", lines)
+        givecaps = json.loads(build_wants(self.event))["givecaps"]
+        # the user's give cap drops the inactive el2, keeping only c1
+        self.assertIn(
+            {"user": self.owner.username, "n": 1, "items": [self.c1.listing_code]},
+            givecaps,
+        )
 
     def test_give_cap_declares_item_owner(self):
         # A GIVE cap on a listing not offered in any wish must still declare the
@@ -208,5 +215,6 @@ class TradeCapExportTests(TestCase):
         cap = TradeCap.objects.create(event=self.event, user=self.owner,
                                       kind=TradeCap.Kind.GIVE, n=1)
         TradeCapItem.objects.create(cap=cap, event_listing=self.el1)
-        lines = build_wants(self.event).splitlines()
-        self.assertIn(f"item {self.c1.listing_code} owner {self.owner.username}", lines)
+        items = json.loads(build_wants(self.event))["items"]
+        self.assertIn(
+            {"name": self.c1.listing_code, "owner": self.owner.username}, items)

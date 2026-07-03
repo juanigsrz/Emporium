@@ -4,12 +4,14 @@ matching/external_solver.py
 Bridge to the external Pareto (gurobi) solver.
 
   build_wants(event) -> str
-      Export the event's active wishes as a wants file in `(NforM) give -> take`
-      format for the local gurobi solver.
+      Export the event's active wishes as a JSON document in the format
+      main.py's `parse_json_input` reads (budgets/items/bids/wishes/
+      takecaps/givecaps/locations) for the local gurobi solver.
 
   load_solution(match_run, raw_output) -> (result, summary, log)
-      Parse solver stdout into the standard result JSON and create the
-      TradeAssignment rows on the MatchRun. Mirrors FakeMatcher.run()'s return.
+      Parse the solver's JSON stdout (`trades`/`combos`/`cash_*`/`settlement`)
+      into the standard result JSON and create the TradeAssignment rows on the
+      MatchRun. Mirrors FakeMatcher.run()'s return.
 
 The item token in every file AND in the parsed result is Copy.listing_code; it
 round-trips unchanged. giver/receiver are always derived from listing ownership
@@ -18,7 +20,7 @@ round-trips unchanged. giver/receiver are always derived from listing ownership
 
 from __future__ import annotations
 
-import re
+import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
@@ -88,9 +90,9 @@ def _load_coords():
     }
 
 
-def _location_lines(listings, wishes) -> str:
-    """`location <username> <lat> <lng>` for every user who owns an active
-    listing or has an active wish AND has Profile coordinates. Sorted, '' if none.
+def _location_entries(listings, wishes):
+    """`{user, lat, lng}` for every user who owns an active listing or has an
+    active wish AND has Profile coordinates. Sorted by user; [] if none.
 
     Covers both ends of every possible move (owner + receiver) so the solver's
     distance objective can price each shipment. Users without coordinates are
@@ -103,7 +105,7 @@ def _location_lines(listings, wishes) -> str:
     for w in wishes:
         names[w.user_id] = w.user.username
 
-    lines = []
+    entries = []
     for uid, username in names.items():
         c = coords.get(uid)
         if not c:
@@ -111,8 +113,8 @@ def _location_lines(listings, wishes) -> str:
         lat, lng, _max = c
         if lat is None or lng is None:
             continue
-        lines.append(f"location {username} {lat} {lng}")
-    return ("\n".join(sorted(lines)) + "\n") if lines else ""
+        entries.append({"user": username, "lat": lat, "lng": lng})
+    return sorted(entries, key=lambda e: e["user"])
 
 
 def _distance_blocked(user_id, coords):
@@ -175,21 +177,50 @@ def _expand(want_items, user_id, by_id, blocked, combo_by_id=None):
 # ---------------------------------------------------------------------------
 
 def build_wants(event, include_locations: bool = False) -> str:
+    """Export the event's active wishes as a solver-input JSON document in the
+    format main.py's `parse_json_input` reads. Keys: budgets, items, bids,
+    wishes, takecaps, givecaps, locations (empty lists when nothing applies).
+    Item/combo tokens are listing_code / combo_code; amounts are integer cents.
+    """
     listings, by_code, by_id = _listing_index(event)
     combos, _combo_by_code, combo_by_id = _combo_index(event)  # by_code used by load_solution
     block_pairs = _block_pairs()
     wishes = _active_wishes(event)
 
-    money_block = (
-        _build_xtoy_money_directives(
+    if event.money_enabled:
+        budgets, money_items, bids = _build_xtoy_money_directives(
             event, listings, combos, wishes, by_id, combo_by_id, block_pairs)
-        if event.money_enabled else ""
-    )
-    body = _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs)
-    givecap_block = _build_givecaps(combos)
-    caps_block = _build_user_caps(event, by_id, combo_by_id)
-    location_block = _location_lines(listings, wishes) if include_locations else ""
-    return money_block + body + givecap_block + caps_block + location_block
+    else:
+        budgets, money_items, bids = [], [], []
+
+    wishes_out, dup_takecaps = _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs)
+    combo_givecaps = _build_givecaps(combos)
+    user_takecaps, user_givecaps, cap_items = _build_user_caps(event, by_id, combo_by_id)
+
+    doc = {
+        "budgets": sorted(budgets, key=lambda b: b["user"]),
+        "items": _merge_items(money_items, cap_items),
+        "bids": sorted(bids, key=lambda b: (b["user"], b["item"])),
+        "wishes": sorted(wishes_out, key=lambda w: (w["user"], w["give"], w["take"])),
+        "takecaps": sorted(dup_takecaps + user_takecaps,
+                           key=lambda c: (c["user"], c["n"], c["items"])),
+        "givecaps": sorted(combo_givecaps + user_givecaps,
+                           key=lambda c: (c["user"], c["n"], c["items"])),
+        "locations": _location_entries(listings, wishes) if include_locations else [],
+    }
+    return json.dumps(doc, indent=2, sort_keys=True) + "\n"
+
+
+def _merge_items(*groups):
+    """Merge item declarations, de-duplicating by name and preferring the entry
+    that carries an `ask` (money-directive items over bare cap-owner decls)."""
+    by_name = {}
+    for grp in groups:
+        for it in grp:
+            cur = by_name.get(it["name"])
+            if cur is None or ("ask" not in cur and "ask" in it):
+                by_name[it["name"]] = it
+    return sorted(by_name.values(), key=lambda x: x["name"])
 
 
 def _to_cents(amount) -> int:
@@ -197,14 +228,13 @@ def _to_cents(amount) -> int:
     return int((Decimal(str(amount)) * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_by_id, block_pairs) -> str:
-    """Emit user/item/bid directives for main.py when money is enabled on an XTOY event.
+def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_by_id, block_pairs):
+    """Money directives for main.py when money is enabled on an XTOY event.
 
-    Returns a string block (ending with newline) or empty string if nothing to emit.
-    Lines emitted (all amounts in integer cents):
-      user <username> budget <cents>   — per participant with budget > 0
-      item <code> owner <username>     — every active listing; + ask <cents> if sell price set
-      bid <username> <code> <cents>    — per buy-side want item with a resolved bid price
+    Returns (budgets, items, bids), all amounts in integer cents:
+      budgets: [{"user", "budget"}]        — per participant with budget > 0
+      items:   [{"name", "owner", "ask"?}] — every active listing + combo
+      bids:    [{"user", "item", "max_price"}] — per buy-side want with a resolved bid
     """
     from events.models import EventParticipation
     from trades.pricing import (
@@ -215,12 +245,11 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
     combo_members = load_combo_members(event)
 
     # Preload pricing rows once; resolve_ask/resolve_bid below run per item.
-    bids = load_bids(event)
+    bids_data = load_bids(event)
     game_prices = load_game_prices(event)
 
-    lines = []
-
-    # --- user budget lines ---
+    # --- user budgets ---
+    budgets = []
     default_cap = event.max_money_per_user
     participations = list(
         EventParticipation.objects.filter(event=event).select_related("user")
@@ -233,31 +262,27 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
     for username in sorted(wish_usernames):
         p = part_by_user.get(username)
         if p and p.max_spend and p.max_spend > 0:
-            # Participation with null/zero max_spend is treated as unconstrained (no budget line).
-            lines.append(f"user {username} budget {_to_cents(p.max_spend)}")
+            # Participation with null/zero max_spend is treated as unconstrained (no budget).
+            budgets.append({"user": username, "budget": _to_cents(p.max_spend)})
         elif not p and default_cap and default_cap > 0:
-            lines.append(f"user {username} budget {_to_cents(default_cap)}")
+            budgets.append({"user": username, "budget": _to_cents(default_cap)})
 
-    # --- item lines ---
+    # --- items (listings + combos) ---
+    items = []
     for el in sorted(listings, key=lambda e: e.copy.listing_code):
-        code = el.copy.listing_code
-        owner_username = el.copy.owner.username
+        entry = {"name": el.copy.listing_code, "owner": el.copy.owner.username}
         ask = resolve_ask(el, game_prices)
         if ask is not None:
-            lines.append(f"item {code} owner {owner_username} ask {_to_cents(ask)}")
-        else:
-            lines.append(f"item {code} owner {owner_username}")
-
-    # --- combo item lines ---
+            entry["ask"] = _to_cents(ask)
+        items.append(entry)
     for c in sorted(combos, key=lambda x: x.combo_code):
-        owner_username = c.owner.username
+        entry = {"name": c.combo_code, "owner": c.owner.username}
         ask = resolve_ask_target(c)
         if ask is not None:
-            lines.append(f"item {c.combo_code} owner {owner_username} ask {_to_cents(ask)}")
-        else:
-            lines.append(f"item {c.combo_code} owner {owner_username}")
+            entry["ask"] = _to_cents(ask)
+        items.append(entry)
 
-    # --- bid lines ---
+    # --- bids ---
     # De-duplicate: (username, code) -> max bid in cents
     bid_map = {}
     blocked_cache = {}
@@ -277,7 +302,7 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
             elif ogi.event_listing and ogi.event_listing.active:
                 give_codes.add(ogi.event_listing.copy.listing_code)
         for it in w.want_group.items.all():
-            bid = resolve_bid(w.user, event, it, bids, game_prices, combo_bids, combo_members)
+            bid = resolve_bid(w.user, event, it, bids_data, game_prices, combo_bids, combo_members)
             if bid is None:
                 continue
             bid_cents = _to_cents(bid)
@@ -288,22 +313,23 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
                 if key not in bid_map or bid_cents > bid_map[key]:
                     bid_map[key] = bid_cents
 
-    for (username, code) in sorted(bid_map):
-        lines.append(f"bid {username} {code} {bid_map[(username, code)]}")
+    bids = [{"user": u, "item": code, "max_price": bid_map[(u, code)]}
+            for (u, code) in sorted(bid_map)]
 
-    return ("\n".join(lines) + "\n") if lines else ""
+    return budgets, items, bids
 
 
-def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs) -> str:
-    """gurobi: one `username : (NforM) give -> take` line per active wish.
+def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs):
+    """One wish entry `{user, give, take, n, m}` per active wish.
 
     Give/take tokens are listing_codes or combo_codes. A duplicate-protected
-    wish contributes `dupcap` over its multi-copy *listing* takes (combos are
-    not game-grouped — see the combos spec, out-of-scope note).
+    wish contributes a takecap (n=1) over its multi-copy *listing* takes grouped
+    by board game (combos are not game-grouped — see the combos spec, out-of-scope
+    note). Returns (wishes, dup_takecaps).
     """
     blocked_cache = {}
     coords = _load_coords()
-    lines = []
+    wishes_out = []
     dup_groups = {}  # (username, board_game_id) -> set of copy codes
     for w in wishes:
         blocked = blocked_cache.setdefault(
@@ -333,18 +359,22 @@ def _build_xtoy(wishes, by_id, by_code, combo_by_id, block_pairs) -> str:
                     continue
                 key = (w.user.username, el.copy.board_game_id)
                 dup_groups.setdefault(key, set()).add(code)
-        lines.append(f"{w.user.username} : ({n}for{m}) {' '.join(give)} -> {' '.join(take)}")
-    for (username, _bg_id), codes in sorted(dup_groups.items()):
-        if len(codes) >= 2:
-            lines.append(f"dupcap {username} {' '.join(sorted(codes))}")
-    return ("\n".join(lines) + "\n") if lines else ""
+        wishes_out.append({"user": w.user.username, "give": give, "take": take,
+                           "n": n, "m": m})
+    dup_takecaps = [
+        {"user": username, "n": 1, "items": sorted(codes)}
+        for (username, _bg_id), codes in sorted(dup_groups.items())
+        if len(codes) >= 2
+    ]
+    return wishes_out, dup_takecaps
 
 
-def _build_user_caps(event, by_id, combo_by_id) -> str:
-    """User-defined caps: one `takecap`/`givecap <user> <n> <tokens>` line per
-    active TradeCap. Tokens resolve to active listing/combo codes; items whose
-    listing/combo is inactive are skipped, and a cap with no live tokens is
-    dropped. Additive to the auto dupcap/combo-givecap lines."""
+def _build_user_caps(event, by_id, combo_by_id):
+    """User-defined caps -> (takecaps, givecaps, item_decls). Each cap is
+    `{user, n, items}` over active listing/combo codes; items whose listing/combo
+    is inactive are skipped, and a cap with no live tokens is dropped. GIVE-cap
+    tokens also yield `{name, owner}` item declarations. Additive to the auto
+    dupcap/combo-givecap entries."""
     from trades.models import TradeCap
 
     caps = (
@@ -353,9 +383,9 @@ def _build_user_caps(event, by_id, combo_by_id) -> str:
         .prefetch_related("items")   # only the FK ids are read; codes come from by_id/combo_by_id
         .order_by("id")
     )
-    decls = []          # `item <token> owner <user>` declarations for GIVE tokens
+    item_decls = []     # `{name, owner}` declarations for GIVE tokens
     decl_seen = set()
-    lines = []
+    takecaps, givecaps = [], []
     for cap in caps:
         username = cap.user.username
         tokens = []
@@ -370,6 +400,7 @@ def _build_user_caps(event, by_id, combo_by_id) -> str:
                     tokens.append(c.combo_code)
         if not tokens:
             continue
+        entry = {"user": username, "n": cap.n, "items": sorted(tokens)}
         if cap.kind == TradeCap.Kind.GIVE:
             # Declare each token's owner so the solver's givecap ownership check
             # never hits an undeclared (None-owner) item and raises. The user owns
@@ -378,137 +409,80 @@ def _build_user_caps(event, by_id, combo_by_id) -> str:
             for tok in tokens:
                 if tok not in decl_seen:
                     decl_seen.add(tok)
-                    decls.append(f"item {tok} owner {username}")
-            lines.append(f"givecap {username} {cap.n} {' '.join(sorted(tokens))}")
+                    item_decls.append({"name": tok, "owner": username})
+            givecaps.append(entry)
         else:
-            lines.append(f"takecap {username} {cap.n} {' '.join(sorted(tokens))}")
-    out = decls + lines
-    return ("\n".join(out) + "\n") if out else ""
+            takecaps.append(entry)
+    return takecaps, givecaps, item_decls
 
 
-def _build_givecaps(combos) -> str:
-    """One `givecap <owner> 1 <member_code> <combo_code>` per combo member, so a
+def _build_givecaps(combos):
+    """One givecap (n=1) per combo member over `[member_code, combo_code]`, so a
     physical copy leaves at most once — standalone or inside the combo."""
-    lines = []
+    caps = []
     for c in combos:
         owner = c.owner.username
         for ci in c.items.all():
             member_code = ci.event_listing.copy.listing_code
-            lines.append(f"givecap {owner} 1 {member_code} {c.combo_code}")
-    return ("\n".join(sorted(lines)) + "\n") if lines else ""
+            caps.append({"user": owner, "n": 1,
+                         "items": [member_code, c.combo_code]})
+    return caps
 
 
 # ---------------------------------------------------------------------------
 # Parsers — solver stdout -> edges (moved_code, receiver_anchor_code, group)
 # ---------------------------------------------------------------------------
 
-def parse_gurobi(output: str):
-    """gurobi output -> edges. `G... -> T...`: the wisher = owner(G[0]) receives
-    each taken item T from owner(T). Group is None (recovered as components).
+def parse_gurobi(doc):
+    """Solution JSON -> swap edges `(moved_code, receiver_anchor_code, None)`.
+
+    `trades` are single give->take edges; `combos` are N-for-M activations whose
+    anchor is the first sent token (owned by the wisher). For each edge the
+    wisher = owner(anchor) receives the taken item from owner(taken). Group is
+    None (recovered as connected components downstream).
     """
     edges = []
-    in_results = False
-    for raw in output.splitlines():
-        line = raw.strip()
-        if line.startswith("Trade Results"):
-            in_results = True
+    for t in doc.get("trades", []):
+        edges.append((t["take"], t["give"], None))
+    for c in doc.get("combos", []):
+        sent, taken = c.get("sent", []), c.get("taken", [])
+        if not sent or not taken:
             continue
-        # Cash lines also contain '->' — end the swap section so they aren't
-        # mis-parsed as barter edges (see parse_gurobi_cash).
-        if line.startswith("Cash Purchases") or line.startswith("Cash Summary"):
-            in_results = False
-            continue
-        if not in_results or "->" not in line:
-            continue
-        lhs, _, rhs = line.partition("->")
-        gives, takes = lhs.split(), rhs.split()
-        if not gives or not takes:
-            continue
-        anchor = gives[0]
-        for t in takes:
-            edges.append((t, anchor, None))
+        anchor = sent[0]
+        for tk in taken:
+            edges.append((tk, anchor, None))
     return edges
 
 
-_CASH_LINE = re.compile(r"^(\S+):\s+\S+\s+->\s+(\S+)\s+\(\S+ pays \S+ \$(\d+)")
+def parse_gurobi_cash(doc):
+    """Solution JSON `cash_purchases` -> [(moved_code, buyer_username, amount_cents), ...].
 
-
-def parse_gurobi_cash(output: str):
-    """gurobi `Cash Purchases:` section -> [(moved_code, buyer_username, amount_cents), ...].
-
-    Line form: `CODE: seller -> buyer  (buyer pays seller $N)`. The seller is the
-    owner of CODE (resolved downstream); the buyer is named only here, so it must
-    be carried out as a username (no listing code identifies the receiver).
-    Amount is in integer cents as emitted by the solver.
+    Each entry `{item, from, to, price}`: `from` is the seller (owner of the item,
+    resolved downstream); `to` is the buyer, named only here, so it is carried out
+    as a username. `price` is in integer cents as emitted by the solver.
     """
-    moves = []
-    in_cash = False
-    for raw in output.splitlines():
-        line = raw.strip()
-        if line.startswith("Cash Purchases"):
-            in_cash = True
-            continue
-        if line.startswith("Cash Summary"):
-            break
-        if not in_cash or not line:
-            continue
-        m = _CASH_LINE.match(line)
-        if m:
-            moves.append((m.group(1), m.group(2), int(m.group(3))))
-    return moves
+    return [(cp["item"], cp["to"], int(cp["price"]))
+            for cp in doc.get("cash_purchases", [])]
 
 
-_CASH_SUMMARY_LINE = re.compile(
-    r"^(\S+):\s+spent\s+\$-?\d+,\s+earned\s+\$-?\d+,\s+net\s+\$(-?\d+)\b"
-)
+def parse_gurobi_cash_summary(doc):
+    """Solution JSON `cash_summary` -> {username: net_cents}.
 
-
-def parse_gurobi_cash_summary(output: str):
-    """gurobi `Cash Summary:` section -> {username: net_cents}.
-
-    Line form: `  <user>: spent $A, earned $B, net $N ...` with amounts in integer
-    cents (net may be negative). The trailing `(direction)`/`(cap ...)` are ignored.
-    Used only to cross-check the per-item money reconstruction in load_solution.
+    Each entry `{user, spent, earned, net, cap}`; `net` is integer cents (may be
+    negative). Used only to cross-check the per-item money reconstruction in
+    load_solution.
     """
-    nets = {}
-    in_summary = False
-    for raw in output.splitlines():
-        line = raw.strip()
-        if line.startswith("Cash Summary"):
-            in_summary = True
-            continue
-        if line.startswith("Payments") or line.startswith("Settlement plan"):
-            break
-        if not in_summary or not line:
-            continue
-        m = _CASH_SUMMARY_LINE.match(line)
-        if m:
-            nets[m.group(1)] = int(m.group(2))
-    return nets
+    return {row["user"]: int(row["net"]) for row in doc.get("cash_summary", [])}
 
 
-_SETTLEMENT_LINE = re.compile(r"^(\S+)\s+pays\s+(\S+)\s+\$(\d+)$")
+def parse_gurobi_settlement(doc):
+    """Solution JSON `settlement` -> [(from_user, to_user, amount_cents), ...].
 
-
-def parse_gurobi_settlement(output: str):
-    """gurobi `Settlement plan:` section -> [(from_user, to_user, amount_cents), ...].
-
-    Line form: `  <from> pays <to> $<cents>`. The minimal-transfer settlement; the
-    section runs to end of output. Amounts are integer cents.
+    Each entry `{from, to, amount}`: the minimal-transfer settlement plan.
+    Amounts are integer cents.
     """
-    transfers = []
-    in_plan = False
-    for raw in output.splitlines():
-        line = raw.strip()
-        if line.startswith("Settlement plan"):
-            in_plan = True
-            continue
-        if not in_plan or not line:
-            continue
-        m = _SETTLEMENT_LINE.match(line)
-        if m:
-            transfers.append((m.group(1), m.group(2), int(m.group(3))))
-    return transfers
+    return [(s["from"], s["to"], int(s["amount"]))
+            for s in doc.get("settlement", [])]
 
 
 def _assign_components_v2(resolved):
@@ -555,7 +529,12 @@ def load_solution(match_run, raw_output: str):
     listings, by_code, by_id = _listing_index(event)
     _combos, combo_by_code, combo_by_id = _combo_index(event)
 
-    parsed = parse_gurobi(raw_output)
+    try:
+        doc = json.loads(raw_output)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid solver JSON: {exc}")
+
+    parsed = parse_gurobi(doc)
 
     def _resolve_token(code):
         """Return (target, owner) where target is an EventListing or Combo."""
@@ -574,11 +553,11 @@ def load_solution(match_run, raw_output: str):
         resolved.append([moved_kind, moved_target, moved_owner, recv_owner, group])
 
     # Cash purchases (money mode): the buyer (receiver) is named only by
-    # username in the `Cash Purchases:` section, so it can't be resolved via a
+    # username in the `cash_purchases` array, so it can't be resolved via a
     # listing-code anchor like a swap. Resolve the buyer directly.
     cash_by_listing = {}  # event_listing.id -> Decimal dollars
     cash_by_combo = {}    # combo.id -> Decimal dollars
-    cash_moves = parse_gurobi_cash(raw_output)
+    cash_moves = parse_gurobi_cash(doc)
     if cash_moves:
         from django.contrib.auth import get_user_model
 
@@ -658,7 +637,7 @@ def load_solution(match_run, raw_output: str):
     # Barter swaps move no money even when the item carries an ask, so they must
     # not enter the net -- mirrors the solver's cash-only budget accounting.
     settlement = []
-    summary_net = parse_gurobi_cash_summary(raw_output)
+    summary_net = parse_gurobi_cash_summary(doc)
     if summary_net:
         recon = defaultdict(int)  # username -> net cents (spent - earned)
         for kind, target, giver, receiver, cid, wid, amt, val in rows:
@@ -672,7 +651,7 @@ def load_solution(match_run, raw_output: str):
                     f"Money reconstruction mismatch for {username!r}: "
                     f"reconstructed {recon.get(username, 0)}c != solver {net_cents}c"
                 )
-    for from_u, to_u, cents in parse_gurobi_settlement(raw_output):
+    for from_u, to_u, cents in parse_gurobi_settlement(doc):
         settlement.append({
             "from_user": from_u,
             "to_user": to_u,

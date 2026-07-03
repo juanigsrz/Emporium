@@ -819,7 +819,7 @@
       "moveUp": "Move {{label}} up",
       "moveDown": "Move {{label}} down",
       "preparing": "Preparing…",
-      "downloadWants": "Download wants.txt",
+      "downloadWants": "Download wants.json",
       "selectAtLeastOneObjective": "Select at least one objective.",
       "objectivesLabel": "Objectives:",
       "objectivesHint": "Pass this flag when running the solver locally (Gurobi), then upload its output.",

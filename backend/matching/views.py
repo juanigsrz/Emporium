@@ -213,9 +213,9 @@ class MatchRunUploadView(APIView):
     """
     POST /api/events/{slug}/matches/upload/
 
-    Organizer uploads raw gurobi solver stdout (`give -> take`). Body = plain
-    text. Parsed into a DONE MatchRun with TradeAssignment rows. Organizer-only;
-    event must be in MATCHING.
+    Organizer uploads the gurobi solver's JSON stdout (`--format json`). Body =
+    the raw JSON document. Parsed into a DONE MatchRun with TradeAssignment rows.
+    Organizer-only; event must be in MATCHING.
     """
 
     permission_classes = [permissions.IsAuthenticated]

@@ -1,4 +1,6 @@
-"""Combo export: item/ask/bid lines, give/take, and givecap directives."""
+"""Combo export: item/ask/bid entries, give/take, and givecap directives."""
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -47,37 +49,35 @@ class ComboExportTests(TestCase):
                                  want_group=wg, active=True)
         WantBid.objects.create(user=cls.wisher, event=cls.event, combo=cls.combo, amount="42.00")
 
-    def _lines(self):
-        return build_wants(self.event).splitlines()
+    def _doc(self):
+        return json.loads(build_wants(self.event))
 
-    def test_combo_item_line_with_ask(self):
-        lines = self._lines()
+    def test_combo_item_entry_with_ask(self):
         self.assertIn(
-            f"item {self.combo.combo_code} owner {self.owner.username} ask 4000", lines
+            {"name": self.combo.combo_code, "owner": self.owner.username, "ask": 4000},
+            self._doc()["items"],
         )
 
-    def test_combo_bid_line(self):
-        lines = self._lines()
+    def test_combo_bid_entry(self):
         self.assertIn(
-            f"bid {self.wisher.username} {self.combo.combo_code} 4200", lines
+            {"user": self.wisher.username, "item": self.combo.combo_code,
+             "max_price": 4200},
+            self._doc()["bids"],
         )
 
     def test_givecap_per_member(self):
-        lines = self._lines()
-        self.assertIn(
-            f"givecap {self.owner.username} 1 {self.c1.listing_code} {self.combo.combo_code}",
-            lines,
-        )
-        self.assertIn(
-            f"givecap {self.owner.username} 1 {self.c2.listing_code} {self.combo.combo_code}",
-            lines,
-        )
+        givecaps = self._doc()["givecaps"]
+        member_sets = [
+            set(c["items"]) for c in givecaps
+            if c["user"] == self.owner.username and c["n"] == 1
+        ]
+        self.assertIn({self.c1.listing_code, self.combo.combo_code}, member_sets)
+        self.assertIn({self.c2.listing_code, self.combo.combo_code}, member_sets)
 
     def test_combo_appears_as_take(self):
-        lines = self._lines()
-        wish_lines = [l for l in lines if l.startswith(f"{self.wisher.username} : ")]
-        self.assertTrue(any(self.combo.combo_code in l for l in wish_lines),
-                        f"combo not in any wish take side: {wish_lines}")
+        wishes = [w for w in self._doc()["wishes"] if w["user"] == self.wisher.username]
+        self.assertTrue(any(self.combo.combo_code in w["take"] for w in wishes),
+                        f"combo not in any wish take side: {wishes}")
 
     def test_combo_appears_as_give(self):
         # owner offers the combo (give side) in exchange for the wisher's game
@@ -89,11 +89,9 @@ class ComboExportTests(TestCase):
         WantGroupItem.objects.create(want_group=wg, event_listing=self.elw)
         TradeWish.objects.create(event=self.event, user=self.owner, offer_group=og,
                                  want_group=wg, active=True)
-        owner_lines = [l for l in self._lines()
-                       if l.startswith(f"{self.owner.username} : ")]
-        give_sides = [l.split("->")[0] for l in owner_lines]
-        self.assertTrue(any(self.combo.combo_code in g for g in give_sides),
-                        f"combo not on give side: {owner_lines}")
+        owner_wishes = [w for w in self._doc()["wishes"] if w["user"] == self.owner.username]
+        self.assertTrue(any(self.combo.combo_code in w["give"] for w in owner_wishes),
+                        f"combo not on give side: {owner_wishes}")
 
 
 from matching.external_solver import load_solution
@@ -124,13 +122,12 @@ class ComboLoadTests(TestCase):
     def test_combo_move_loads_as_single_assignment(self):
         run = MatchRun.objects.create(event=self.event, algorithm="gurobi")
         # wisher gives their copy LW, receives the combo:
-        #   "<wisher give> -> <combo>" reads combo given so wisher's item received
+        #   {give: combo, take: LW} reads combo given so wisher's item received
         # Solver emits two barter edges for the cycle; the combo token is K-...
-        out = (
-            "Trade Results:\n"
-            f"{self.combo.combo_code} -> {self.cw.listing_code}\n"
-            f"{self.cw.listing_code} -> {self.combo.combo_code}\n"
-        )
+        out = json.dumps({"trades": [
+            {"give": self.combo.combo_code, "take": self.cw.listing_code},
+            {"give": self.cw.listing_code, "take": self.combo.combo_code},
+        ]})
         result, summary, log = load_solution(run, out)
         combo_rows = TradeAssignment.objects.filter(match_run=run, combo=self.combo)
         self.assertEqual(combo_rows.count(), 1)
@@ -150,11 +147,10 @@ class ComboLoadTests(TestCase):
         wish = TradeWish.objects.create(event=self.event, user=self.wisher,
                                         offer_group=og, want_group=wg, active=True)
         run = MatchRun.objects.create(event=self.event, algorithm="gurobi")
-        out = (
-            "Trade Results:\n"
-            f"{self.combo.combo_code} -> {self.cw.listing_code}\n"
-            f"{self.cw.listing_code} -> {self.combo.combo_code}\n"
-        )
+        out = json.dumps({"trades": [
+            {"give": self.combo.combo_code, "take": self.cw.listing_code},
+            {"give": self.cw.listing_code, "take": self.combo.combo_code},
+        ]})
         load_solution(run, out)
         row = TradeAssignment.objects.get(match_run=run, combo=self.combo)
         self.assertEqual(row.wish_id, wish.id)

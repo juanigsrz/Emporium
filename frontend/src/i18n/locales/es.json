@@ -819,7 +819,7 @@
       "moveUp": "Mover {{label}} arriba",
       "moveDown": "Mover {{label}} abajo",
       "preparing": "Preparando…",
-      "downloadWants": "Descargar wants.txt",
+      "downloadWants": "Descargar wants.json",
       "selectAtLeastOneObjective": "Selecciona al menos un objetivo.",
       "objectivesLabel": "Objetivos:",
       "objectivesHint": "Pasa esta bandera al ejecutar el solver localmente (Gurobi) y luego sube su resultado.",

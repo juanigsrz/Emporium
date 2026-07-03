@@ -5,11 +5,13 @@ Tests for the external Pareto (gurobi) bridge
 (matching/external_solver.py) and the export / upload endpoints.
 
 Covers:
-    Export — `(NforM)` header, give/take codes, block filtering, money directives.
-    Parsers — gurobi (give->take, cash, summary, settlement).
-    Upload — gurobi stdout -> DONE run + TradeAssignment rows; component grouping;
+    Export — JSON wishes (n/m), give/take codes, block filtering, money directives.
+    Parsers — gurobi solution JSON (trades/combos, cash, summary, settlement).
+    Upload — gurobi JSON stdout -> DONE run + TradeAssignment rows; component grouping;
       schema parity; error handling (unknown code, perms, status).
 """
+
+import json
 
 from rest_framework import status
 
@@ -25,6 +27,23 @@ def export_url(slug):
 
 def upload_url(slug):
     return f"/api/events/{slug}/matches/upload/"
+
+
+def _wants(event, **kw):
+    """Parsed solver-input document produced by build_wants."""
+    return json.loads(external_solver.build_wants(event, **kw))
+
+
+def _sol(trades=None, combos=None, cash_purchases=None,
+         cash_summary=None, settlement=None):
+    """Serialize a solver-output JSON document as the upload endpoint expects."""
+    return json.dumps({
+        "trades": trades or [],
+        "combos": combos or [],
+        "cash_purchases": cash_purchases or [],
+        "cash_summary": cash_summary or [],
+        "settlement": settlement or [],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -48,24 +67,28 @@ class ExportXToYTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.get(export_url(self.slug))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("text/plain", resp["Content-Type"])
+        self.assertIn("application/json", resp["Content-Type"])
         self.assertIn("attachment", resp["Content-Disposition"])
+        # body is valid JSON with the expected top-level keys
+        doc = json.loads(resp.content.decode())
+        for key in ("wishes", "items", "bids", "budgets",
+                    "takecaps", "givecaps", "locations"):
+            self.assertIn(key, doc)
 
-    def test_nforM_lines(self):
-        text = external_solver.build_wants(self.event)
-        lines = [l for l in text.splitlines() if l and not l.startswith("#")]
-        self.assertEqual(len(lines), 2)  # one per wish
-        for line in lines:
-            self.assertRegex(line, r"^\S+ : \(1for1\) ")
-            self.assertIn(" -> ", line)
+    def test_wish_entries_carry_n_and_m(self):
+        doc = _wants(self.event)
+        self.assertEqual(len(doc["wishes"]), 2)  # one per wish
+        for w in doc["wishes"]:
+            self.assertEqual((w["n"], w["m"]), (1, 1))
+            self.assertTrue(w["give"] and w["take"])
 
     def test_give_and_take_codes(self):
-        text = external_solver.build_wants(self.event)
-        line = next(l for l in text.splitlines() if self.copy_a1.listing_code in l.split("->")[0])
-        give, take = line.split("->")
-        self.assertIn(self.copy_a1.listing_code, give)
-        self.assertIn(self.copy_b1.listing_code, take)  # bob terra
-        self.assertIn(self.copy_c2.listing_code, take)  # carol terra
+        doc = _wants(self.event)
+        w = next(w for w in doc["wishes"]
+                 if self.copy_a1.listing_code in w["give"])
+        self.assertIn(self.copy_a1.listing_code, w["give"])
+        self.assertIn(self.copy_b1.listing_code, w["take"])  # bob terra
+        self.assertIn(self.copy_c2.listing_code, w["take"])  # carol terra
 
     def test_export_kpi_distance_includes_locations(self):
         from accounts.models import Profile
@@ -73,8 +96,11 @@ class ExportXToYTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.get(export_url(self.slug), {"kpi": "trades,distance"})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn(f"location {self.user_a.username} 40.7128 -74.006",
-                      resp.content.decode())
+        doc = json.loads(resp.content.decode())
+        self.assertIn(
+            {"user": self.user_a.username, "lat": 40.7128, "lng": -74.006},
+            doc["locations"],
+        )
 
     def test_export_kpi_without_distance_has_no_locations(self):
         from accounts.models import Profile
@@ -82,7 +108,7 @@ class ExportXToYTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.get(export_url(self.slug), {"kpi": "trades,users"})
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertNotIn("location ", resp.content.decode())
+        self.assertEqual(json.loads(resp.content.decode())["locations"], [])
 
     def test_export_default_kpi_has_no_locations(self):
         from accounts.models import Profile
@@ -90,7 +116,7 @@ class ExportXToYTests(MatchingTestBase):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.get(export_url(self.slug))  # no kpi param
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertNotIn("location ", resp.content.decode())
+        self.assertEqual(json.loads(resp.content.decode())["locations"], [])
 
     def test_export_invalid_kpi_400(self):
         self.client.force_authenticate(user=self.user_a)
@@ -103,7 +129,7 @@ class ExportXToYTests(MatchingTestBase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_xtoy_money_directives(self):
-        """XTOY with money_enabled emits real user/item/bid lines, not #! MONEY-* comments."""
+        """XTOY with money_enabled emits real budget/item/bid entries."""
         from events.models import EventParticipation
         self.event.money_enabled = True
         self.event.max_money_per_user = 100
@@ -121,19 +147,23 @@ class ExportXToYTests(MatchingTestBase):
             user=self.user_a, event=self.event, board_game=self.game_terra, price=30
         )
 
-        text = external_solver.build_wants(self.event)
+        doc = _wants(self.event)
 
-        # Real directives must appear
-        self.assertIn(f"user {self.user_a.username} budget 5000", text)
-        self.assertIn(f"item {self.copy_a1.listing_code} owner {self.user_a.username} ask 2000", text)
-        # bid line: alice bids on bob's terra and carol's terra (expanded from game_terra)
-        self.assertIn(f"bid {self.user_a.username} {self.copy_b1.listing_code} 3000", text)
-        self.assertIn(f"bid {self.user_a.username} {self.copy_c2.listing_code} 3000", text)
-        # No old-style comment money lines
-        self.assertNotIn("#! MONEY-WANT", text)
-        self.assertNotIn("#! MONEY-OFFER", text)
-        self.assertNotIn("#! MONEY-ENABLED", text)
-        self.assertNotIn("#! BUDGET", text)
+        self.assertIn(
+            {"user": self.user_a.username, "budget": 5000}, doc["budgets"])
+        self.assertIn(
+            {"name": self.copy_a1.listing_code, "owner": self.user_a.username,
+             "ask": 2000},
+            doc["items"])
+        # bid entries: alice bids on bob's terra and carol's terra (expanded from game_terra)
+        self.assertIn(
+            {"user": self.user_a.username, "item": self.copy_b1.listing_code,
+             "max_price": 3000},
+            doc["bids"])
+        self.assertIn(
+            {"user": self.user_a.username, "item": self.copy_c2.listing_code,
+             "max_price": 3000},
+            doc["bids"])
 
         # Clean up (avoid polluting other tests)
         self.event.money_enabled = False
@@ -157,29 +187,31 @@ class LocationExportTests(MatchingTestBase):
         from accounts.models import Profile
         Profile.objects.filter(user=user).update(latitude=lat, longitude=lng)
 
-    def test_no_location_lines_by_default(self):
-        text = external_solver.build_wants(self.event)
-        self.assertNotIn("location ", text)
+    def test_no_location_entries_by_default(self):
+        self.assertEqual(_wants(self.event)["locations"], [])
 
     def test_locations_included_for_users_with_coords(self):
         self._set_coords(self.user_a, 40.7128, -74.006)
         self._set_coords(self.user_b, 34.0522, -118.2437)
-        text = external_solver.build_wants(self.event, include_locations=True)
-        self.assertIn(f"location {self.user_a.username} 40.7128 -74.006", text)
-        self.assertIn(f"location {self.user_b.username} 34.0522 -118.2437", text)
+        locs = _wants(self.event, include_locations=True)["locations"]
+        self.assertIn(
+            {"user": self.user_a.username, "lat": 40.7128, "lng": -74.006}, locs)
+        self.assertIn(
+            {"user": self.user_b.username, "lat": 34.0522, "lng": -118.2437}, locs)
 
     def test_user_without_coords_skipped(self):
         self._set_coords(self.user_a, 40.7128, -74.006)
-        # user_b has no coords (Profile lat/lng null) -> no line
-        text = external_solver.build_wants(self.event, include_locations=True)
-        self.assertIn(f"location {self.user_a.username} ", text)
-        self.assertNotIn(f"location {self.user_b.username} ", text)
+        # user_b has no coords (Profile lat/lng null) -> no entry
+        locs = _wants(self.event, include_locations=True)["locations"]
+        names = {e["user"] for e in locs}
+        self.assertIn(self.user_a.username, names)
+        self.assertNotIn(self.user_b.username, names)
 
-    def test_location_lines_do_not_break_gurobi_parser(self):
-        self._set_coords(self.user_a, 40.7128, -74.006)
-        text = external_solver.build_wants(self.event, include_locations=True)
-        # location lines have no '->', so the swap parser ignores them
-        self.assertEqual(external_solver.parse_gurobi(text), [])
+    def test_wants_doc_has_no_trade_edges(self):
+        # The wants document carries no `trades`/`combos`, so the solution parser
+        # (which reads only those keys) yields no edges from it.
+        doc = _wants(self.event, include_locations=True)
+        self.assertEqual(external_solver.parse_gurobi(doc), [])
 
 
 # ---------------------------------------------------------------------------
@@ -189,35 +221,36 @@ class LocationExportTests(MatchingTestBase):
 class ParserTests(MatchingTestBase):
 
     def test_parse_gurobi_edges(self):
-        out = "Trade Results:\nC-A1 -> C-B1\nC-B1 -> C-A1\n"
-        edges = external_solver.parse_gurobi(out)
+        doc = {"trades": [{"give": "C-A1", "take": "C-B1"},
+                          {"give": "C-B1", "take": "C-A1"}]}
+        edges = external_solver.parse_gurobi(doc)
         self.assertEqual(edges, [("C-B1", "C-A1", None), ("C-A1", "C-B1", None)])
 
-    def test_parse_gurobi_nforM_multi_take(self):
-        out = "Trade Results:\nC-X C-Y -> C-A\nC-A C-B -> C-C\nC-C -> C-B\n"
-        edges = external_solver.parse_gurobi(out)
-        # 3 moved items (one per take token)
-        self.assertEqual([e[0] for e in edges], ["C-A", "C-C", "C-B"])
+    def test_parse_gurobi_combos_multi_take(self):
+        doc = {
+            "trades": [{"give": "C-C", "take": "C-B"}],
+            "combos": [{"sent": ["C-X", "C-Y"], "taken": ["C-A"]},
+                       {"sent": ["C-A", "C-B"], "taken": ["C-C"]}],
+        }
+        edges = external_solver.parse_gurobi(doc)
+        # one moved item per take token across trades + combos
+        self.assertEqual({e[0] for e in edges}, {"C-A", "C-B", "C-C"})
+        self.assertEqual(len(edges), 3)
         self.assertTrue(all(e[2] is None for e in edges))
 
     def test_parse_gurobi_ignores_cash_section(self):
-        # Cash lines also contain '->' — they must NOT be parsed as swap edges.
-        out = (
-            "Trade Results:\nC-A -> C-B\n"
-            "\nCash Purchases:\nC-C: carol -> bob  (bob pays carol $5)\n"
-            "\nCash Summary:\n  bob: spent $5, earned $0, net $5 (cap $inf)\n"
-        )
-        edges = external_solver.parse_gurobi(out)
+        # Cash purchases live in their own array; parse_gurobi reads only swaps.
+        doc = {"trades": [{"give": "C-A", "take": "C-B"}],
+               "cash_purchases": [
+                   {"item": "C-C", "from": "carol", "to": "bob", "price": 500}]}
+        edges = external_solver.parse_gurobi(doc)
         self.assertEqual(edges, [("C-B", "C-A", None)])
 
     def test_parse_gurobi_cash_extracts_moves(self):
-        out = (
-            "Cash Purchases:\n"
-            "C-C: carol -> bob  (bob pays carol $500)\n"
-            "C-D: dave -> eve  (eve pays dave $700)\n"
-            "\nCash Summary:\n  bob: spent $500, earned $0, net $500 (cap $inf)\n"
-        )
-        moves = external_solver.parse_gurobi_cash(out)
+        doc = {"cash_purchases": [
+            {"item": "C-C", "from": "carol", "to": "bob", "price": 500},
+            {"item": "C-D", "from": "dave", "to": "eve", "price": 700}]}
+        moves = external_solver.parse_gurobi_cash(doc)
         self.assertEqual(moves, [("C-C", "bob", 500), ("C-D", "eve", 700)])
 
     def test_trade_assignment_has_cash_amount_field(self):
@@ -252,15 +285,18 @@ class UploadXToYTests(MatchingTestBase):
 
     def _solution(self):
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
-        return f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
+        return _sol(trades=[{"give": a1, "take": b1}, {"give": b1, "take": a1}])
 
     def test_upload_with_cash_purchase_creates_assignment(self):
         from decimal import Decimal
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
         c1 = self.copy_c1.listing_code
-        out = (f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
-               f"\nCash Purchases:\n{c1}: carol -> bob  (bob pays carol $1000)\n"
-               f"\nCash Summary:\n  bob: spent $1000, earned $0, net $1000 (cap $inf)\n")
+        out = _sol(
+            trades=[{"give": a1, "take": b1}, {"give": b1, "take": a1}],
+            cash_purchases=[{"item": c1, "from": "carol", "to": "bob", "price": 1000}],
+            cash_summary=[{"user": "bob", "spent": 1000, "earned": 0,
+                           "net": 1000, "cap": None}],
+        )
         resp = self.client.post(upload_url(self.slug), data=out, content_type="text/plain")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         run = MatchRun.objects.get(pk=resp.data["id"])
@@ -314,8 +350,15 @@ class UploadXToYTests(MatchingTestBase):
     def test_upload_unknown_code_400_and_nothing_persisted(self):
         resp = self.client.post(
             upload_url(self.slug),
-            data="Trade Results:\nC-NOPEAA -> C-NOPEBB\n",
+            data=_sol(trades=[{"give": "C-NOPEAA", "take": "C-NOPEBB"}]),
             content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MatchRun.objects.filter(event=self.event).count(), 0)
+
+    def test_upload_invalid_json_400(self):
+        resp = self.client.post(
+            upload_url(self.slug), data="not json at all", content_type="text/plain"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(MatchRun.objects.filter(event=self.event).count(), 0)
@@ -333,13 +376,13 @@ class UploadXToYTests(MatchingTestBase):
             status=TradeEvent.Status.DRAFT,
         )
         resp = self.client.post(
-            upload_url(draft.slug), data="Trade Results:\n", content_type="text/plain"
+            upload_url(draft.slug), data=_sol(), content_type="text/plain"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 # ---------------------------------------------------------------------------
-# Duplicate protection via dupcap directives
+# Duplicate protection via takecap (n=1) directives
 # ---------------------------------------------------------------------------
 
 class DupProtectExportTests(MatchingTestBase):
@@ -353,113 +396,90 @@ class DupProtectExportTests(MatchingTestBase):
         cls.wish_a.want_group.duplicate_protection = True
         cls.wish_a.want_group.save(update_fields=["duplicate_protection"])
 
-    def test_multi_copy_game_emits_dupcap(self):
-        text = external_solver.build_wants(self.event)
-        self.assertNotIn("__DUMMY", text)
-        # wish line lists the real terra copies (no dummy indirection)
-        main = next(
-            l for l in text.splitlines()
-            if l.startswith(f"{self.user_a.username} :")
-            and self.copy_a1.listing_code in l
-        )
-        self.assertIn(self.copy_b1.listing_code, main)
-        self.assertIn(self.copy_c2.listing_code, main)
-        # a dupcap line caps alice over both terra copies
-        cap = next(
-            (l for l in text.splitlines()
-             if l.startswith(f"dupcap {self.user_a.username} ")),
-            None,
-        )
-        self.assertIsNotNone(cap)
-        self.assertIn(self.copy_b1.listing_code, cap)
-        self.assertIn(self.copy_c2.listing_code, cap)
+    def _dupcaps(self, doc, username):
+        """takecaps (n=1) belonging to `username` — the JSON form of a dupcap."""
+        return [c for c in doc["takecaps"]
+                if c["user"] == username and c["n"] == 1]
 
-    def test_single_copy_game_no_dupcap(self):
+    def test_multi_copy_game_emits_takecap(self):
+        doc = _wants(self.event)
+        # wish lists the real terra copies (no dummy indirection)
+        main = next(
+            w for w in doc["wishes"]
+            if w["user"] == self.user_a.username
+            and self.copy_a1.listing_code in w["give"]
+        )
+        self.assertIn(self.copy_b1.listing_code, main["take"])
+        self.assertIn(self.copy_c2.listing_code, main["take"])
+        # a takecap (n=1) caps alice over both terra copies
+        caps = self._dupcaps(doc, self.user_a.username)
+        self.assertEqual(len(caps), 1)
+        self.assertIn(self.copy_b1.listing_code, caps[0]["items"])
+        self.assertIn(self.copy_c2.listing_code, caps[0]["items"])
+
+    def test_single_copy_game_no_takecap(self):
         # alice offers ark (el_a2), wants brass -> carol's brass only (1 copy)
         wish = self._make_wish(self.user_a, self.el_a2, want_game=self.game_brass)
         wish.want_group.duplicate_protection = True
         wish.want_group.save(update_fields=["duplicate_protection"])
-        text = external_solver.build_wants(self.event)
-        # no dupcap line mentions the single brass copy
+        doc = _wants(self.event)
+        # no takecap mentions the single brass copy
         self.assertFalse(
-            any(l.startswith("dupcap") and self.copy_c1.listing_code in l
-                for l in text.splitlines())
+            any(self.copy_c1.listing_code in c["items"] for c in doc["takecaps"])
         )
-        # the real copy still appears on a wish line's take side
-        line = next(
-            l for l in text.splitlines()
-            if l.startswith(f"{self.user_a.username} :")
-            and self.copy_a2.listing_code in l
+        # the real copy still appears on a wish's take side
+        w = next(
+            w for w in doc["wishes"]
+            if w["user"] == self.user_a.username
+            and self.copy_a2.listing_code in w["give"]
         )
-        self.assertIn(self.copy_c1.listing_code, line.split(" -> ")[1])
+        self.assertIn(self.copy_c1.listing_code, w["take"])
 
-    def test_dupcap_unions_across_want_groups_same_game(self):
+    def test_takecap_unions_across_want_groups_same_game(self):
         # a second dup-protected want group for terra, same user (offers ark)
         wish2 = self._make_wish(self.user_a, self.el_a2, want_game=self.game_terra)
         wish2.want_group.duplicate_protection = True
         wish2.want_group.save(update_fields=["duplicate_protection"])
-        text = external_solver.build_wants(self.event)
-        caps = [l for l in text.splitlines()
-                if l.startswith(f"dupcap {self.user_a.username} ")]
-        # exactly one dupcap for alice (terra), unioning both copies
+        doc = _wants(self.event)
+        caps = self._dupcaps(doc, self.user_a.username)
+        # exactly one takecap for alice (terra), unioning both copies
         self.assertEqual(len(caps), 1)
-        self.assertIn(self.copy_b1.listing_code, caps[0])
-        self.assertIn(self.copy_c2.listing_code, caps[0])
+        self.assertIn(self.copy_b1.listing_code, caps[0]["items"])
+        self.assertIn(self.copy_c2.listing_code, caps[0]["items"])
 
-    def test_no_dupcap_when_disabled(self):
+    def test_no_takecap_when_disabled(self):
         self.wish_a.want_group.duplicate_protection = False
         self.wish_a.want_group.save(update_fields=["duplicate_protection"])
-        text = external_solver.build_wants(self.event)
-        self.assertNotIn("dupcap", text)
-        self.assertNotIn("__DUMMY", text)
-
-    def test_dupcap_export_does_not_break_gurobi_parser(self):
-        text = external_solver.build_wants(self.event)
-        self.assertEqual(external_solver.parse_gurobi(text), [])
+        self.assertEqual(_wants(self.event)["takecaps"], [])
 
 
 # ---------------------------------------------------------------------------
-# Money parsers — Cash Summary / Settlement plan
+# Money parsers — cash summary / settlement
 # ---------------------------------------------------------------------------
 
 class MoneyParserTests(MatchingTestBase):
 
     def test_parse_cash_summary_signed_nets(self):
-        out = (
-            "Cash Summary:\n"
-            "  alice: spent $3000, earned $2000, net $1000 (owes) (cap $inf)\n"
-            "  bob: spent $2000, earned $3000, net $-1000 (receives) (cap $inf)\n"
-            "\nSettlement plan:\n  alice pays bob $1000\n"
-        )
-        nets = external_solver.parse_gurobi_cash_summary(out)
-        self.assertEqual(nets, {"alice": 1000, "bob": -1000})
-
-    def test_parse_cash_summary_tolerates_missing_direction(self):
-        # Hand-written fixtures omit the "(owes)" word; parser must not require it.
-        out = "Cash Summary:\n  bob: spent $500, earned $0, net $500 (cap $inf)\n"
-        self.assertEqual(external_solver.parse_gurobi_cash_summary(out), {"bob": 500})
+        doc = {"cash_summary": [
+            {"user": "alice", "spent": 3000, "earned": 2000, "net": 1000, "cap": None},
+            {"user": "bob", "spent": 2000, "earned": 3000, "net": -1000, "cap": None}]}
+        self.assertEqual(external_solver.parse_gurobi_cash_summary(doc),
+                         {"alice": 1000, "bob": -1000})
 
     def test_parse_cash_summary_absent_section(self):
-        self.assertEqual(
-            external_solver.parse_gurobi_cash_summary("Trade Results:\nX -> Y\n"), {}
-        )
+        self.assertEqual(external_solver.parse_gurobi_cash_summary({}), {})
 
     def test_parse_settlement_transfers(self):
-        out = (
-            "Cash Summary:\n  alice: spent $1000, earned $0, net $1000 (cap $inf)\n"
-            "\nSettlement plan:\n"
-            "  alice pays bob $700\n"
-            "  alice pays carol $300\n"
-        )
+        doc = {"settlement": [
+            {"from": "alice", "to": "bob", "amount": 700},
+            {"from": "alice", "to": "carol", "amount": 300}]}
         self.assertEqual(
-            external_solver.parse_gurobi_settlement(out),
+            external_solver.parse_gurobi_settlement(doc),
             [("alice", "bob", 700), ("alice", "carol", 300)],
         )
 
     def test_parse_settlement_absent_section(self):
-        self.assertEqual(
-            external_solver.parse_gurobi_settlement("Trade Results:\nX -> Y\n"), []
-        )
+        self.assertEqual(external_solver.parse_gurobi_settlement({}), [])
 
 
 # ---------------------------------------------------------------------------
@@ -485,11 +505,12 @@ class MoneySettlementUploadTests(MatchingTestBase):
         # Pure barter swap a1<->b1. No money moves, so the Cash Summary nets are $0
         # even though both copies carry an ask -- the ask is only the cash sale price.
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
-        return (
-            f"Trade Results:\n{a1} -> {b1}\n{b1} -> {a1}\n"
-            f"\nCash Summary:\n"
-            f"  {self.user_a.username}: spent $0, earned $0, net $0 (cap $inf)\n"
-            f"  {self.user_b.username}: spent $0, earned $0, net $0 (cap $inf)\n"
+        au, bu = self.user_a.username, self.user_b.username
+        return _sol(
+            trades=[{"give": a1, "take": b1}, {"give": b1, "take": a1}],
+            cash_summary=[
+                {"user": au, "spent": 0, "earned": 0, "net": 0, "cap": None},
+                {"user": bu, "spent": 0, "earned": 0, "net": 0, "cap": None}],
         )
 
     def _cash_solution(self, alice_net=1000):
@@ -498,17 +519,14 @@ class MoneySettlementUploadTests(MatchingTestBase):
         # move money, so the reconstruction must equal these nets.
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
         au, bu = self.user_a.username, self.user_b.username
-        bob_net = -alice_net
-        return (
-            f"Trade Results:\n"
-            f"\nCash Purchases:\n"
-            f"  {b1}: {bu} -> {au}  ({au} pays {bu} $3000)\n"
-            f"  {a1}: {au} -> {bu}  ({bu} pays {au} $2000)\n"
-            f"\nCash Summary:\n"
-            f"  {au}: spent $3000, earned $2000, net ${alice_net} (cap $inf)\n"
-            f"  {bu}: spent $2000, earned $3000, net ${bob_net} (cap $inf)\n"
-            f"\nSettlement plan:\n"
-            f"  {au} pays {bu} $1000\n"
+        return _sol(
+            cash_purchases=[
+                {"item": b1, "from": bu, "to": au, "price": 3000},
+                {"item": a1, "from": au, "to": bu, "price": 2000}],
+            cash_summary=[
+                {"user": au, "spent": 3000, "earned": 2000, "net": alice_net, "cap": None},
+                {"user": bu, "spent": 2000, "earned": 3000, "net": -alice_net, "cap": None}],
+            settlement=[{"from": au, "to": bu, "amount": 1000}],
         )
 
     def test_item_value_set_on_swap_legs(self):

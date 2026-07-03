@@ -601,8 +601,8 @@ class TradeEventViewSet(
 
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
-        """Organizer-only export of the active wishes as a solver wants file
-        in `(NforM) give -> take` format for the local gurobi solver.
+        """Organizer-only export of the active wishes as a solver-input JSON
+        document (main.py's `parse_json_input` format) for the local gurobi solver.
         """
         from django.http import HttpResponse
         from matching.external_solver import build_wants
@@ -611,7 +611,7 @@ class TradeEventViewSet(
         self._check_organizer(event)
 
         kpi = self._parse_kpi(request.query_params.get("kpi"))
-        text = build_wants(event, include_locations=("distance" in kpi))
-        resp = HttpResponse(text, content_type="text/plain; charset=utf-8")
-        resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.txt"'
+        body = build_wants(event, include_locations=("distance" in kpi))
+        resp = HttpResponse(body, content_type="application/json")
+        resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.json"'
         return resp

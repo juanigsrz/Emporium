@@ -196,10 +196,10 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
     setDownloading(true)
     try {
       const text = await fetchWantsExport(slug, kpi)
-      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${slug}-wants.txt`
+      a.download = `${slug}-wants.json`
       document.body.appendChild(a)
       a.click()
       a.remove()
