@@ -7,6 +7,6 @@ export const resources = {
 } as const
 
 export const languages: ReadonlyArray<{ code: string; label: string }> = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Español' },
+  { code: 'en', label: '🇺🇸 en' },
+  { code: 'es', label: '🇪🇸 es' },
 ]
