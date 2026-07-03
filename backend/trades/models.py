@@ -20,6 +20,7 @@ innovation (see DESIGN.md §4).
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 
 
 # ---------------------------------------------------------------------------
@@ -69,23 +70,49 @@ class OfferGroupItem(models.Model):
         "events.EventListing",
         on_delete=models.CASCADE,
         related_name="offer_memberships",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo",
+        on_delete=models.CASCADE,
+        related_name="offer_memberships",
+        null=True, blank=True,
     )
 
     class Meta:
-        unique_together = [("offer_group", "event_listing")]
         ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="offeritem_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["offer_group", "event_listing"],
+                condition=Q(event_listing__isnull=False),
+                name="uniq_offeritem_group_listing",
+            ),
+            models.UniqueConstraint(
+                fields=["offer_group", "combo"],
+                condition=Q(combo__isnull=False),
+                name="uniq_offeritem_group_combo",
+            ),
+        ]
 
     def __str__(self):
-        return (
-            f"OfferGroupItem(group={self.offer_group_id}, "
-            f"listing={self.event_listing_id})"
-        )
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"OfferGroupItem(group={self.offer_group_id}, {target})"
 
     def clean(self):
-        """Validate that the listing's copy is owned by the offer group's user."""
-        if self.event_listing.copy.owner_id != self.offer_group.user_id:
+        """Validate the target (listing or combo) belongs to the group's user."""
+        if self.event_listing_id and \
+                self.event_listing.copy.owner_id != self.offer_group.user_id:
             raise ValidationError(
                 "The event listing does not belong to the offer group's user."
+            )
+        if self.combo_id and self.combo.owner_id != self.offer_group.user_id:
+            raise ValidationError(
+                "The combo does not belong to the offer group's user."
             )
 
 
@@ -128,67 +155,44 @@ class WantGroup(models.Model):
 # ---------------------------------------------------------------------------
 
 class WantGroupItem(models.Model):
-    """A tiered, ranked target inside a WantGroup."""
-
-    class TargetType(models.TextChoices):
-        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
-        LISTING    = "LISTING",    "Specific Listing"
+    """A specific-listing target inside a WantGroup."""
 
     want_group    = models.ForeignKey(
         WantGroup,
         on_delete=models.CASCADE,
         related_name="items",
     )
-    target_type   = models.CharField(
-        max_length=20,
-        choices=TargetType.choices,
-    )
-    board_game    = models.ForeignKey(
-        "catalog.BoardGame",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="want_group_items",
-    )
     event_listing = models.ForeignKey(
         "events.EventListing",
         on_delete=models.CASCADE,
-        null=True,
-        blank=True,
         related_name="want_memberships",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo",
+        on_delete=models.CASCADE,
+        related_name="want_memberships",
+        null=True, blank=True,
     )
 
     class Meta:
         ordering = ["id"]
+        # No (want_group, target) uniqueness: duplicate want targets were always
+        # tolerated here (pre-combo too) and the solver export dedupes via a set
+        # in external_solver._expand, so duplicates are harmless.
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="wantitem_exactly_one_target",
+            ),
+        ]
 
     def __str__(self):
         return (
             f"WantGroupItem(group={self.want_group_id}, "
-            f"type={self.target_type})"
+            f"listing={self.event_listing_id})"
         )
-
-    def clean(self):
-        """Validate exactly one of board_game / event_listing is set, matching target_type."""
-        if self.target_type == self.TargetType.BOARD_GAME:
-            if not self.board_game_id:
-                raise ValidationError(
-                    "board_game is required when target_type is BOARD_GAME."
-                )
-            if self.event_listing_id:
-                raise ValidationError(
-                    "event_listing must be null when target_type is BOARD_GAME."
-                )
-        elif self.target_type == self.TargetType.LISTING:
-            if not self.event_listing_id:
-                raise ValidationError(
-                    "event_listing is required when target_type is LISTING."
-                )
-            if self.board_game_id:
-                raise ValidationError(
-                    "board_game must be null when target_type is LISTING."
-                )
-        else:
-            raise ValidationError(f"Unknown target_type: {self.target_type}")
 
 
 # ---------------------------------------------------------------------------
@@ -278,11 +282,7 @@ class UserGamePrice(models.Model):
 # ---------------------------------------------------------------------------
 
 class WantBid(models.Model):
-    """A user's bid override for one target (a game or a specific listing)."""
-
-    class TargetType(models.TextChoices):
-        BOARD_GAME = "BOARD_GAME", "Board Game (any copy)"
-        LISTING    = "LISTING",    "Specific Listing"
+    """A user's bid override for one specific listing."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="want_bids"
@@ -290,14 +290,15 @@ class WantBid(models.Model):
     event = models.ForeignKey(
         "events.TradeEvent", on_delete=models.CASCADE, related_name="want_bids"
     )
-    target_type = models.CharField(max_length=20, choices=TargetType.choices)
-    board_game = models.ForeignKey(
-        "catalog.BoardGame", on_delete=models.CASCADE,
-        null=True, blank=True, related_name="want_bids",
-    )
     event_listing = models.ForeignKey(
         "events.EventListing", on_delete=models.CASCADE,
-        null=True, blank=True, related_name="want_bids",
+        related_name="want_bids",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo", on_delete=models.CASCADE,
+        related_name="want_bids",
+        null=True, blank=True,
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
 
@@ -306,35 +307,96 @@ class WantBid(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["user", "event", "board_game"],
-                condition=models.Q(board_game__isnull=False),
-                name="uniq_wantbid_user_event_game",
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="wantbid_exactly_one_target",
             ),
             models.UniqueConstraint(
                 fields=["user", "event", "event_listing"],
-                condition=models.Q(event_listing__isnull=False),
+                condition=Q(event_listing__isnull=False),
                 name="uniq_wantbid_user_event_listing",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "event", "combo"],
+                condition=Q(combo__isnull=False),
+                name="uniq_wantbid_user_event_combo",
             ),
         ]
         ordering = ["id"]
 
     def clean(self):
-        """Validate exactly one of board_game / event_listing is set, matching target_type."""
-        if self.target_type == self.TargetType.BOARD_GAME:
-            if not self.board_game_id:
-                raise ValidationError("board_game is required when target_type is BOARD_GAME.")
-            if self.event_listing_id:
-                raise ValidationError("event_listing must be null when target_type is BOARD_GAME.")
-        elif self.target_type == self.TargetType.LISTING:
-            if not self.event_listing_id:
-                raise ValidationError("event_listing is required when target_type is LISTING.")
-            if self.board_game_id:
-                raise ValidationError("board_game must be null when target_type is LISTING.")
-            if self.event_listing.event_id != self.event_id:
-                raise ValidationError("event_listing must belong to the same event as this bid.")
-        else:
-            raise ValidationError(f"Unknown target_type: {self.target_type}")
+        """Validate the target belongs to the same event as this bid."""
+        if self.event_listing_id and self.event_listing.event_id != self.event_id:
+            raise ValidationError("event_listing must belong to the same event as this bid.")
+        if self.combo_id and self.combo.event_id != self.event_id:
+            raise ValidationError("combo must belong to the same event as this bid.")
 
     def __str__(self):
-        return f"WantBid({self.user.username}, {self.target_type}, {self.amount})"
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"WantBid({self.user.username}, {target}, {self.amount})"
+
+
+# ---------------------------------------------------------------------------
+# TradeCap — user-defined solver cap (takecap / givecap)
+# ---------------------------------------------------------------------------
+
+class TradeCap(models.Model):
+    """A user-defined cap: receive (TAKE) or give (GIVE) any N items of a listed
+    set of items (event listings and/or combos). Emitted to the solver as a
+    `takecap`/`givecap` directive."""
+
+    class Kind(models.TextChoices):
+        TAKE = "TAKE", "Take (receive any N items)"
+        GIVE = "GIVE", "Give (send any N items)"
+
+    event = models.ForeignKey(
+        "events.TradeEvent", on_delete=models.CASCADE, related_name="trade_caps"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="trade_caps"
+    )
+    kind = models.CharField(max_length=4, choices=Kind.choices)
+    n = models.PositiveIntegerField()
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+        constraints = [
+            models.CheckConstraint(check=Q(n__gte=1), name="tradecap_n_gte_1"),
+        ]
+
+    def __str__(self):
+        return f"TradeCap({self.kind} {self.n}, user={self.user_id}, event={self.event_id})"
+
+
+class TradeCapItem(models.Model):
+    """One item in a TradeCap — exactly one of {event_listing, combo}."""
+
+    cap = models.ForeignKey(
+        TradeCap, on_delete=models.CASCADE, related_name="items"
+    )
+    event_listing = models.ForeignKey(
+        "events.EventListing", on_delete=models.CASCADE,
+        related_name="cap_memberships", null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo", on_delete=models.CASCADE,
+        related_name="cap_memberships", null=True, blank=True,
+    )
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(Q(event_listing__isnull=False) & Q(combo__isnull=True))
+                | (Q(event_listing__isnull=True) & Q(combo__isnull=False)),
+                name="capitem_exactly_one_target",
+            ),
+        ]
+
+    def __str__(self):
+        target = self.event_listing_id or f"combo={self.combo_id}"
+        return f"TradeCapItem(cap={self.cap_id}, {target})"

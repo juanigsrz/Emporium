@@ -1,36 +1,23 @@
-import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '../../api/client'
-
-interface HealthResponse {
-  status: string
-}
-
-async function fetchHealth(): Promise<HealthResponse> {
-  const { data } = await apiClient.get<HealthResponse>('/health/')
-  return data
-}
+import { useTranslation } from 'react-i18next'
 
 export default function HomePage() {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['health'],
-    queryFn: fetchHealth,
-    retry: 1,
-  })
+  const { t } = useTranslation()
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
       {/* Hero */}
       <header className="relative">
+        {/*
         <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-sage/60 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-moss">
           <span className="h-2 w-2 rounded-full bg-coral" />
-          The trade almanac
+          Emporium
         </p>
+        */}
         <h1 className="max-w-3xl text-4xl font-bold text-ink sm:text-6xl">
-          Trade board games the way the&nbsp;math&nbsp;intends.
+          {t('home.heroTitle')}
         </h1>
         <p className="mt-5 max-w-xl text-lg leading-relaxed text-moss">
-          List the games you own, build a want list, and let the solver weave the
-          longest, fairest chains of trades — cardboard for cardboard, no haggling.
+          {t('home.heroSubtitle')}
         </p>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -38,9 +25,11 @@ export default function HomePage() {
             href="/events"
             className="rounded-2xl border-2 border-ink bg-butter px-6 py-3 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
-            Browse events
+            {t('home.browseEvents')}
           </a>
+
           {/* Status — slim inline strip (live backend health) */}
+          {/*
           <span className="inline-flex items-center gap-2 rounded-2xl border-2 border-ink/15 bg-cream px-3.5 py-2.5 text-xs font-semibold shadow-sm">
             {isLoading && (
               <>
@@ -56,6 +45,7 @@ export default function HomePage() {
                 </span>
               </>
             )}
+            
             {data && (
               <>
                 <span
@@ -69,6 +59,7 @@ export default function HomePage() {
               </>
             )}
           </span>
+          */}
         </div>
       </header>
 
@@ -78,16 +69,16 @@ export default function HomePage() {
           index="01"
           emoji="🎲"
           tint="bg-butter/70"
-          title="Trade Events"
-          description="Join an event, list your copies, and build your want list."
+          title={t('home.tradeEventsTitle')}
+          description={t('home.tradeEventsDescription')}
           href="/events"
         />
         <FeatureCard
           index="02"
           emoji="📦"
           tint="bg-sage/70"
-          title="My Copies"
-          description="Add the board games you own, ready to list in trade events."
+          title={t('common.myCopies')}
+          description={t('home.myCopiesDescription')}
           href="/my-copies"
         />
       </div>
@@ -110,6 +101,8 @@ function FeatureCard({
   description: string
   href: string
 }) {
+  const { t } = useTranslation()
+
   return (
     <a
       href={href}
@@ -127,7 +120,7 @@ function FeatureCard({
         </h3>
         <p className="max-w-xs text-sm leading-relaxed text-moss">{description}</p>
         <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-ink">
-          Open
+          {t('home.open')}
           <svg className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 6l6 6-6 6" />
           </svg>

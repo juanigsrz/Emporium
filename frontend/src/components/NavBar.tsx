@@ -1,28 +1,26 @@
 import { useRef, useState, useEffect } from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../store/auth'
 import { logoutApi } from '../api/auth'
 import { useNotifications, useUnreadCount, useMarkAllRead } from '../api/notifications'
+import LanguageSwitcher from './LanguageSwitcher'
 
-const navLinks = [
-  { to: '/', label: 'Home' },
-  { to: '/events', label: 'Events' },
-]
-
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, t: (k: string, o?: Record<string, unknown>) => string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (seconds < 60) return 'just now'
+  if (seconds < 60) return t('nav.time.justNow')
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60) return t('nav.time.minutes', { count: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
+  if (hours < 24) return t('nav.time.hours', { count: hours })
+  return t('nav.time.days', { count: Math.floor(hours / 24) })
 }
 
 // In-app notification bell: polls unread count, shows a dropdown of recent
 // notifications, and marks all read when opened. Rendered only for logged-in
 // users. Multiple instances (desktop + mobile) share the same React Query keys.
 function NotificationBell() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -51,7 +49,7 @@ function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={toggle}
-        aria-label="Notifications"
+        aria-label={t('nav.notifications')}
         aria-expanded={open}
         className="relative flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-transparent text-moss transition-colors hover:border-ink/30 hover:bg-sage/40"
       >
@@ -68,10 +66,10 @@ function NotificationBell() {
       {open && (
         <div className="absolute right-0 z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-2xl border-2 border-ink bg-cream py-1 shadow-card">
           <div className="border-b border-ink/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-moss">
-            Notifications
+            {t('nav.notifications')}
           </div>
           {items.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-moss/70">No notifications yet.</p>
+            <p className="px-4 py-6 text-center text-sm text-moss/70">{t('nav.noNotifications')}</p>
           ) : (
             items.map((n) => (
               <button
@@ -86,7 +84,7 @@ function NotificationBell() {
                 }`}
               >
                 <span className="block">{n.message}</span>
-                <span className="mt-0.5 block text-[11px] text-moss/70">{relativeTime(n.created)}</span>
+                <span className="mt-0.5 block text-[11px] text-moss/70">{relativeTime(n.created, t)}</span>
               </button>
             ))
           )}
@@ -97,11 +95,17 @@ function NotificationBell() {
 }
 
 export default function NavBar() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { user, clear } = useAuthStore()
   const navigate = useNavigate()
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const navLinks = [
+    { to: '/', label: t('nav.home') },
+    { to: '/events', label: t('nav.events') },
+  ]
 
   // Close user dropdown on outside click
   useEffect(() => {
@@ -174,6 +178,8 @@ export default function NavBar() {
               </NavLink>
             ))}
 
+            <LanguageSwitcher />
+
             {user ? (
               <>
               <NotificationBell />
@@ -200,20 +206,20 @@ export default function NavBar() {
                       onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2 text-sm font-medium text-ink hover:bg-sage/30"
                     >
-                      Profile
+                      {t('common.profile')}
                     </Link>
                     <Link
                       to="/my-copies"
                       onClick={() => setUserMenuOpen(false)}
                       className="block px-4 py-2 text-sm font-medium text-ink hover:bg-sage/30"
                     >
-                      My Copies
+                      {t('common.myCopies')}
                     </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100/60"
                     >
-                      Logout
+                      {t('common.logout')}
                     </button>
                   </div>
                 )}
@@ -231,13 +237,13 @@ export default function NavBar() {
                     }`
                   }
                 >
-                  Login
+                  {t('common.login')}
                 </NavLink>
                 <NavLink
                   to="/register"
                   className="rounded-2xl border-2 border-ink bg-coral px-4 py-2 text-sm font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 active:translate-y-0"
                 >
-                  Register
+                  {t('common.register')}
                 </NavLink>
               </div>
             )}
@@ -248,7 +254,7 @@ export default function NavBar() {
           {user && <NotificationBell />}
           <button
             className="flex h-10 w-10 items-center justify-center rounded-2xl border-2 border-transparent text-moss transition-colors hover:border-ink/30 hover:bg-sage/40"
-            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-label={t(open ? 'nav.closeMenu' : 'nav.openMenu')}
             onClick={() => setOpen((v) => !v)}
           >
             {open ? (
@@ -267,6 +273,7 @@ export default function NavBar() {
         {/* Mobile menu */}
         {open && (
           <nav className="sm:hidden border-t-2 border-ink/10 px-1 py-2 flex flex-col gap-1">
+            <LanguageSwitcher />
             {navLinks.map(({ to, label }) => (
               <NavLink
                 key={to}
@@ -293,20 +300,20 @@ export default function NavBar() {
                   onClick={() => setOpen(false)}
                   className="block rounded-2xl px-3 py-2 text-sm font-semibold text-moss hover:bg-sage/40 transition-colors"
                 >
-                  Profile
+                  {t('common.profile')}
                 </Link>
                 <Link
                   to="/my-copies"
                   onClick={() => setOpen(false)}
                   className="block rounded-2xl px-3 py-2 text-sm font-semibold text-moss hover:bg-sage/40 transition-colors"
                 >
-                  My Copies
+                  {t('common.myCopies')}
                 </Link>
                 <button
                   onClick={handleLogout}
                   className="text-left rounded-2xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-100/60 transition-colors"
                 >
-                  Logout
+                  {t('common.logout')}
                 </button>
               </>
             ) : (
@@ -320,14 +327,14 @@ export default function NavBar() {
                     }`
                   }
                 >
-                  Login
+                  {t('common.login')}
                 </NavLink>
                 <NavLink
                   to="/register"
                   onClick={() => setOpen(false)}
                   className="block rounded-2xl border-2 border-ink bg-coral px-3 py-2 text-sm font-semibold text-ink shadow-pop-sm transition-colors"
                 >
-                  Register
+                  {t('common.register')}
                 </NavLink>
               </>
             )}

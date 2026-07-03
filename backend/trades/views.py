@@ -30,8 +30,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from events.models import TradeEvent
-from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice, WantBid
-from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer, WantBidSerializer
+from .models import OfferGroup, WantGroup, TradeWish, UserGamePrice, WantBid, TradeCap
+from .serializers import OfferGroupSerializer, WantGroupSerializer, TradeWishSerializer, UserGamePriceSerializer, WantBidSerializer, TradeCapSerializer
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ class EventScopedMixin:
 
     def _assert_editable(self, event):
         if event.inputs_locked:
-            raise PermissionDenied("Want lists are locked — this event has moved to matching.")
+            raise PermissionDenied("Want lists are locked, this event has moved to matching.")
 
     def _serializer_context(self, request, event):
         return {"request": request, "event": event}
@@ -96,7 +96,7 @@ class OfferGroupListCreateView(EventScopedMixin, APIView):
         qs = (
             OfferGroup.objects
             .filter(event=event, user=request.user)
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .order_by("-created")
         )
         return self._paginate(qs, OfferGroupSerializer, request, event)
@@ -111,7 +111,7 @@ class OfferGroupListCreateView(EventScopedMixin, APIView):
         # Re-serialize with prefetch for nested items
         group_full = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         out = OfferGroupSerializer(group_full, context=ctx)
@@ -140,7 +140,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
         event, group = self._get_group(slug, pk, request)
         group = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         ser = OfferGroupSerializer(group, context=self._serializer_context(request, event))
@@ -155,7 +155,7 @@ class OfferGroupDetailView(EventScopedMixin, APIView):
         group = ser.save()
         group = (
             OfferGroup.objects
-            .prefetch_related("items__event_listing__copy__board_game")
+            .prefetch_related("items__event_listing__copy__board_game", "items__combo")
             .get(pk=group.pk)
         )
         out = OfferGroupSerializer(group, context=ctx)
@@ -184,8 +184,8 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
             WantGroup.objects
             .filter(event=event, user=request.user)
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .order_by("-created")
         )
@@ -197,8 +197,6 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
         ctx = self._serializer_context(request, event)
 
         # Validate event_listing items belong to this event before saving.
-        # The WantGroupItemSerializer validates target_type logic; we add event
-        # scoping here.
         self._check_want_items_event_scope(request.data.get("items", []), event)
 
         ser = WantGroupSerializer(data=request.data, context=ctx)
@@ -207,8 +205,8 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
         group_full = (
             WantGroup.objects
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .get(pk=group.pk)
         )
@@ -217,8 +215,8 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
 
     @staticmethod
     def _check_want_items_event_scope(items_data, event):
-        """Ensure any event_listing references belong to the given event."""
-        from events.models import EventListing
+        """Ensure any event_listing / combo references belong to the given event."""
+        from events.models import Combo, EventListing
         for idx, item in enumerate(items_data):
             el_id = item.get("event_listing")
             if el_id:
@@ -226,6 +224,14 @@ class WantGroupListCreateView(EventScopedMixin, APIView):
                     raise ValidationError(
                         {f"items[{idx}].event_listing": (
                             f"EventListing {el_id} does not belong to this event."
+                        )}
+                    )
+            combo_id = item.get("combo")
+            if combo_id:
+                if not Combo.objects.filter(pk=combo_id, event=event).exists():
+                    raise ValidationError(
+                        {f"items[{idx}].combo": (
+                            f"Combo {combo_id} does not belong to this event."
                         )}
                     )
 
@@ -252,8 +258,8 @@ class WantGroupDetailView(EventScopedMixin, APIView):
         return (
             WantGroup.objects
             .prefetch_related(
-                "items__board_game",
                 "items__event_listing__copy__board_game",
+                "items__combo",
             )
             .get(pk=pk)
         )
@@ -389,6 +395,7 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ser = UserGamePriceSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         board_game = ser.validated_data["board_game"]
@@ -400,6 +407,7 @@ class GamePriceView(EventScopedMixin, APIView):
 
     def delete(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         bgg_id = request.query_params.get("board_game")
         if not bgg_id:
             raise ValidationError({"board_game": "Required query parameter."})
@@ -427,42 +435,138 @@ class WantBidView(EventScopedMixin, APIView):
 
     def put(self, request, slug):
         event = self._get_event(slug)
+        self._assert_editable(event)
         ser = WantBidSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
-        if (
-            d["target_type"] == WantBid.TargetType.LISTING
-            and d["event_listing"].event_id != event.id
-        ):
-            raise ValidationError(
-                {"event_listing": "Listing does not belong to this event."}
+        if d.get("combo"):
+            if d["combo"].event_id != event.id:
+                raise ValidationError({"combo": "Combo does not belong to this event."})
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, combo=d["combo"],
+                defaults={"amount": d["amount"]},
             )
-        if d["target_type"] == WantBid.TargetType.BOARD_GAME:
-            key = {"board_game": d["board_game"], "event_listing": None}
         else:
-            key = {"event_listing": d["event_listing"], "board_game": None}
-        obj, _ = WantBid.objects.update_or_create(
-            user=request.user, event=event, target_type=d["target_type"], **key,
-            defaults={"amount": d["amount"]},
-        )
+            if d["event_listing"].event_id != event.id:
+                raise ValidationError(
+                    {"event_listing": "Listing does not belong to this event."}
+                )
+            obj, _ = WantBid.objects.update_or_create(
+                user=request.user, event=event, event_listing=d["event_listing"],
+                defaults={"amount": d["amount"]},
+            )
         return Response(WantBidSerializer(obj).data, status=status.HTTP_200_OK)
 
     def delete(self, request, slug):
         event = self._get_event(slug)
-        bgg = request.query_params.get("board_game")
+        self._assert_editable(event)
+        combo = request.query_params.get("combo")
+        if combo:
+            try:
+                combo_id = int(combo)
+            except (TypeError, ValueError):
+                raise ValidationError({"combo": "Must be an integer."})
+            WantBid.objects.filter(
+                user=request.user, event=event, combo_id=combo_id
+            ).delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
         el = request.query_params.get("event_listing")
-        if not bgg and not el:
-            raise ValidationError({"detail": "board_game or event_listing query param required."})
-        f = {"user": request.user, "event": event}
-        if bgg:
-            try:
-                f["board_game_id"] = int(bgg)
-            except (TypeError, ValueError):
-                raise ValidationError({"board_game": "Must be an integer."})
-        if el:
-            try:
-                f["event_listing_id"] = int(el)
-            except (TypeError, ValueError):
-                raise ValidationError({"event_listing": "Must be an integer."})
-        WantBid.objects.filter(**f).delete()
+        if not el:
+            raise ValidationError(
+                {"detail": "event_listing or combo query param required."}
+            )
+        try:
+            el_id = int(el)
+        except (TypeError, ValueError):
+            raise ValidationError({"event_listing": "Must be an integer."})
+        WantBid.objects.filter(
+            user=request.user, event=event, event_listing_id=el_id
+        ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TradeCapListCreateView(EventScopedMixin, APIView):
+    """GET/POST /api/events/{slug}/caps/ — the user's own caps."""
+
+    _PREFETCH = ("items__event_listing__copy__board_game", "items__combo")
+
+    def get(self, request, slug):
+        event = self._get_event(slug)
+        qs = (
+            TradeCap.objects.filter(event=event, user=request.user)
+            .prefetch_related(*self._PREFETCH)
+            .order_by("-created")
+        )
+        return self._paginate(qs, TradeCapSerializer, request, event)
+
+    def post(self, request, slug):
+        event = self._get_event(slug)
+        self._assert_editable(event)
+        ctx = self._serializer_context(request, event)
+        ser = TradeCapSerializer(data=request.data, context=ctx)
+        ser.is_valid(raise_exception=True)
+        cap = ser.save(event=event, user=request.user)
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=ctx).data,
+                        status=status.HTTP_201_CREATED)
+
+
+class TradeCapDetailView(EventScopedMixin, APIView):
+    """GET/PATCH/DELETE /api/events/{slug}/caps/{id}/ — owner-only."""
+
+    _PREFETCH = ("items__event_listing__copy__board_game", "items__combo")
+
+    def _get_cap(self, slug, pk, request):
+        event = self._get_event(slug)
+        cap = get_object_or_404(TradeCap, pk=pk, event=event)
+        if cap.user_id != request.user.id:
+            raise PermissionDenied("You do not own this cap.")
+        return event, cap
+
+    def get(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=self._serializer_context(request, event)).data)
+
+    def patch(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        self._assert_editable(event)
+        ctx = self._serializer_context(request, event)
+        ser = TradeCapSerializer(cap, data=request.data, partial=True, context=ctx)
+        ser.is_valid(raise_exception=True)
+        cap = ser.save()
+        full = TradeCap.objects.prefetch_related(*self._PREFETCH).get(pk=cap.pk)
+        return Response(TradeCapSerializer(full, context=ctx).data)
+
+    def delete(self, request, slug, pk):
+        event, cap = self._get_cap(slug, pk, request)
+        self._assert_editable(event)
+        cap.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ImportTradesView(EventScopedMixin, APIView):
+    """POST /api/events/{slug}/import-trades/ — import the user's prices + wants
+    from a previous event they joined. Body: {"from_event": "<source slug>"}."""
+
+    def post(self, request, slug):
+        target = self._get_event(slug)
+        self._assert_editable(target)
+
+        from_slug = request.data.get("from_event")
+        if not from_slug:
+            raise ValidationError({"from_event": "This field is required."})
+        if from_slug == slug:
+            raise ValidationError({"from_event": "Choose a different event."})
+
+        from events.models import EventParticipation, TradeEvent
+        source = get_object_or_404(TradeEvent, slug=from_slug)
+
+        if not EventParticipation.objects.filter(event=target, user=request.user).exists():
+            raise PermissionDenied("Join this event before importing into it.")
+        if not EventParticipation.objects.filter(event=source, user=request.user).exists():
+            raise ValidationError({"from_event": "You did not participate in that event."})
+
+        from .services import import_user_trades
+        summary = import_user_trades(request.user, source, target)
+        return Response(summary, status=status.HTTP_200_OK)

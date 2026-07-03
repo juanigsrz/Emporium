@@ -7,11 +7,14 @@ import type { PaginatedResponse } from './games'
 
 export interface OfferGroupItem {
   id: number
-  event_listing: number
-  listing_code: string
-  board_game_name: string
+  event_listing: number | null
+  listing_code: string | null
+  board_game_name: string | null
   board_game_thumbnail: string
-  board_game_id: number
+  board_game_id: number | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
 }
 
 export interface OfferGroup {
@@ -31,18 +34,20 @@ export interface OfferGroupPayload {
   name: string
   max_give: number
   item_listing_ids: number[]
+  item_combo_ids?: number[]
 }
 
 export interface WantGroupItem {
   id: number
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
   board_game_name: string | null
   board_game_thumbnail: string
-  /** Canonical bgg id for BOTH types — use to group LISTING items under a game. */
+  /** Canonical bgg id of the listing's game — use to group items under a game. */
   board_game_id: number | null
   event_listing: number | null
   listing_code: string | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
   resolved_bid?: string | null
   bid_is_override?: boolean
 }
@@ -61,9 +66,8 @@ export interface WantGroup {
 }
 
 export interface WantGroupItemPayload {
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game?: number
   event_listing?: number
+  combo?: number
 }
 
 export interface WantGroupPayload {
@@ -210,17 +214,15 @@ export async function deleteGamePrice(slug: string, board_game: number): Promise
 // ---- Want Bids ----
 
 export interface WantBidPayload {
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game?: number | null
-  event_listing?: number | null
+  event_listing?: number
+  combo?: number
   amount: string
 }
 
 export interface WantBid {
   id: number
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
   event_listing: number | null
+  combo: number | null
   amount: string
   updated: string
 }
@@ -232,9 +234,27 @@ export async function setWantBid(slug: string, body: WantBidPayload): Promise<Wa
 
 export async function deleteWantBid(
   slug: string,
-  target: { board_game?: number; event_listing?: number }
+  target: { event_listing: number } | { combo: number }
 ): Promise<void> {
   await apiClient.delete(`/events/${slug}/want-bids/`, { params: target })
+}
+
+// ---- Cross-event import ----
+
+export interface ImportTradesSummary {
+  prices: number
+  want_groups: number
+}
+
+export async function importTrades(
+  targetSlug: string,
+  fromEvent: string
+): Promise<ImportTradesSummary> {
+  const { data } = await apiClient.post<ImportTradesSummary>(
+    `/events/${targetSlug}/import-trades/`,
+    { from_event: fromEvent }
+  )
+  return data
 }
 
 // ---- Raw helpers (for sequential orchestration outside React hooks) ----
@@ -246,10 +266,14 @@ export const createWantGroupRaw = createWantGroup
 export const patchWantGroupRaw = patchWantGroup
 export const createWishRaw = createWish
 
-export function invalidateTrades(qc: QueryClient, slug: string): void {
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.offerGroups(slug) })
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.wantGroups(slug) })
-  qc.invalidateQueries({ queryKey: TRADES_KEYS.wishes(slug) })
+// Returns a promise that resolves once the triggered refetches settle, so
+// callers can await fresh server data before clearing local optimistic state.
+export function invalidateTrades(qc: QueryClient, slug: string): Promise<void> {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.offerGroups(slug) }),
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.wantGroups(slug) }),
+    qc.invalidateQueries({ queryKey: TRADES_KEYS.wishes(slug) }),
+  ]).then(() => undefined)
 }
 
 // ---- Hooks ----

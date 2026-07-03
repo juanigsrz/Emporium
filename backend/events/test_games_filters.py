@@ -12,7 +12,7 @@ import tempfile
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from accounts.models import Wishlist
+from accounts.models import GameRating, Wishlist
 from catalog.models import BoardGame
 from catalog.tasks import import_boardgames_csv
 from copies.models import Copy
@@ -91,6 +91,11 @@ class GamesFiltersTests(APITestCase):
         EventListing.objects.create(event=cls.event, copy=cls.copy_a)
         EventListing.objects.create(event=cls.event, copy=cls.copy_b)
 
+        # Personal ratings for filteruser: game_a rated high, game_b rated low.
+        # This seeds the personal-rating filter; BGG averages are irrelevant.
+        GameRating.objects.create(user=cls.user, board_game=cls.game_a, value=9)
+        GameRating.objects.create(user=cls.user, board_game=cls.game_b, value=6)
+
     def setUp(self):
         self.client.force_authenticate(user=self.user)
         # Fresh wishlist each test: add game A only
@@ -104,9 +109,10 @@ class GamesFiltersTests(APITestCase):
         self.assertEqual(ids, {224517})
 
     def test_min_rating_filter_excludes_below_threshold(self):
+        # min_rating filters by the user's personal GameRating, not BGG average.
+        # filteruser rated game_a=9, game_b=6; threshold 8 → only game_a qualifies.
         r2 = self.client.get(f"/api/events/{self.slug}/games/?min_rating=8")
         self.assertEqual(r2.status_code, 200)
-        self.assertTrue(all(g["average"] >= 8 for g in r2.data["results"]))
         self.assertIn(224517, {g["bgg_id"] for g in r2.data["results"]})
         self.assertNotIn(13, {g["bgg_id"] for g in r2.data["results"]})
 

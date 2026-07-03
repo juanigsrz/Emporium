@@ -24,7 +24,11 @@ Permissions:
     - Listings delete: copy.owner == request.user
 """
 
+import logging
+
 from django.contrib.auth import get_user_model
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -41,7 +45,7 @@ from .serializers import (
     TransitionSerializer,
 )
 from trades.models import OfferGroup, WantGroup, TradeWish
-from .admin_actions import kick_participant
+from .admin_actions import kick_participant, remove_listing
 
 
 # ---------------------------------------------------------------------------
@@ -88,10 +92,16 @@ class TradeEventViewSet(
         qs = TradeEvent.objects.select_related("organizer").all()
         params = self.request.query_params
 
-        # ?status=
+        # ?status= + archived default-hide (list only)
         status_filter = params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        elif self.action == "list":
+            qs = qs.exclude(status=TradeEvent.Status.ARCHIVED)
+
+        # ?joined=1 — events the requesting user participates in (list only)
+        if self.action == "list" and params.get("joined") in ("1", "true") and self.request.user.is_authenticated:
+            qs = qs.filter(participations__user=self.request.user).distinct()
 
         # ?organizer= (by user id or username)
         organizer = params.get("organizer")
@@ -174,6 +184,13 @@ class TradeEventViewSet(
         event.status = target
         event.save(update_fields=["status", "updated"])
 
+        if target == TradeEvent.Status.ARCHIVED:
+            from matching.services import apply_carryover
+            try:
+                apply_carryover(event)
+            except Exception:  # never block archiving on a carryover hiccup (idempotent retry-safe)
+                logger.exception("carryover failed for event %s", event.slug)
+
         from notifications.models import Notification
         Notification.objects.bulk_create([
             Notification(user_id=p.user_id, event=event, kind="EVENT_STATUS",
@@ -208,6 +225,13 @@ class TradeEventViewSet(
         event = self.get_object()
         self._enforce_location_gate(event, request.user)
         self._enforce_single_event(event, request.user)
+        already_in = EventParticipation.objects.filter(
+            event=event, user=request.user
+        ).exists()
+        if not already_in and event.submissions_locked:
+            raise ValidationError(
+                {"detail": "This event is no longer accepting new participants."}
+            )
         participation, created = EventParticipation.objects.get_or_create(
             event=event,
             user=request.user,
@@ -343,8 +367,8 @@ class TradeEventViewSet(
         return Response(ser.data)
 
     def _listings_create(self, request, event):
-        if event.inputs_locked:
-            raise PermissionDenied("Listings are locked — this event has moved to matching.")
+        if event.submissions_locked:
+            raise PermissionDenied("Listings are locked once want-lists open.")
 
         copy_id = request.data.get("copy")
         if not copy_id:
@@ -360,6 +384,12 @@ class TradeEventViewSet(
 
         if copy.owner != request.user:
             raise PermissionDenied("You can only add your own copies to an event.")
+
+        if copy.status != Copy.Status.ACTIVE:
+            raise ValidationError(
+                {"copy": "This copy is not active (it may have been traded in a "
+                         "previous event) and can't be listed."}
+            )
 
         if copy.is_pending:
             raise ValidationError(
@@ -390,12 +420,14 @@ class TradeEventViewSet(
             raise PermissionDenied("Only the copy owner can modify this listing.")
 
         if request.method == "DELETE":
-            if event.inputs_locked:
-                raise PermissionDenied("Listings are locked — this event has moved to matching.")
-            listing.delete()
+            if event.submissions_locked:
+                raise PermissionDenied("Listings are locked once want-lists open.")
+            remove_listing(listing)
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         # PATCH — only sell_price is editable via this route (never copy/active)
+        if event.inputs_locked:
+            raise PermissionDenied("Prices are locked, this event has moved to matching.")
         data = {"sell_price": request.data.get("sell_price")} if "sell_price" in request.data else {}
         ser = EventListingSerializer(
             listing, data=data, partial=True, context={"request": request}
@@ -438,7 +470,11 @@ class TradeEventViewSet(
 
         min_rating = request.query_params.get("min_rating")
         if min_rating:
-            qs = qs.filter(average__gte=float(min_rating))
+            from accounts.models import GameRating
+            rated_ids = GameRating.objects.filter(
+                user=request.user, value__gte=float(min_rating)
+            ).values_list("board_game_id", flat=True)
+            qs = qs.filter(bgg_id__in=list(rated_ids))
 
         is_expansion = request.query_params.get("is_expansion")
         if is_expansion in ("true", "false"):
@@ -538,7 +574,7 @@ class TradeEventViewSet(
         event = self.get_object()
         self._check_admin(event)
         listing = get_object_or_404(EventListing, pk=listing_id, event=event)
-        listing.delete()
+        remove_listing(listing)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="admin/kick")
@@ -572,8 +608,8 @@ class TradeEventViewSet(
 
     @action(detail=True, methods=["get"], url_path="wants-export")
     def wants_export(self, request, slug=None):
-        """Organizer-only export of the active wishes as a solver wants file
-        in `(NforM) give -> take` format for the local gurobi solver.
+        """Organizer-only export of the active wishes as a solver-input JSON
+        document (main.py's `parse_json_input` format) for the local gurobi solver.
         """
         from django.http import HttpResponse
         from matching.external_solver import build_wants
@@ -582,7 +618,7 @@ class TradeEventViewSet(
         self._check_organizer(event)
 
         kpi = self._parse_kpi(request.query_params.get("kpi"))
-        text = build_wants(event, include_locations=("distance" in kpi))
-        resp = HttpResponse(text, content_type="text/plain; charset=utf-8")
-        resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.txt"'
+        body = build_wants(event, include_locations=("distance" in kpi))
+        resp = HttpResponse(body, content_type="application/json")
+        resp["Content-Disposition"] = f'attachment; filename="{event.slug}-wants.json"'
         return resp

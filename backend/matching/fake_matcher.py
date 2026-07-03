@@ -11,8 +11,7 @@ Algorithm:
   1. Load all active wishes with their offer and want data.
   2. Build a block set (pair of user IDs that must never share a cycle).
   3. For each wish, precompute which active EventListings satisfy its want group:
-       - BOARD_GAME target: any ACTIVE listing of that game owned by someone else.
-       - LISTING target: that specific listing (if active and not owned by wisher).
+     each want item names one specific listing (active and not owned by wisher).
   4. Greedy 2-cycle pass: for each pair (wish_a, wish_b) where a's offered
      listings satisfy b's wants AND b's offered listings satisfy a's wants AND
      no block between a.user and b.user, form a cycle.
@@ -62,7 +61,6 @@ class _WishNode:
         # Want targets (WantGroupItems)
         self.want_items: list = list(
             wish.want_group.items.select_related(
-                "board_game",
                 "event_listing__copy__board_game",
                 "event_listing__copy__owner",
             ).all()
@@ -334,7 +332,6 @@ class FakeMatcher:
             .prefetch_related(
                 "offer_group__items__event_listing__copy__board_game",
                 "offer_group__items__event_listing__copy__owner",
-                "want_group__items__board_game",
                 "want_group__items__event_listing__copy__board_game",
                 "want_group__items__event_listing__copy__owner",
             )
@@ -366,30 +363,18 @@ class FakeMatcher:
 
         satisfy_map[wish_id] = set of EventListing ids
         """
-        from trades.models import WantGroupItem
-
-        # Index active listings by board_game id and by listing id
-        by_game: dict[int, list] = {}
+        # Index active listings by listing id
         by_listing: dict[int, object] = {}
         for el in active_listings:
-            bgg_id = el.copy.board_game_id  # bgg_id is the PK
-            by_game.setdefault(bgg_id, []).append(el)
             by_listing[el.id] = el
 
         satisfy_map: dict[int, set] = {}
         for w in wishes:
             matching_ids: set[int] = set()
             for item in w.want_items:
-                if item.target_type == WantGroupItem.TargetType.BOARD_GAME:
-                    # Any active listing of that game owned by someone else
-                    for el in by_game.get(item.board_game_id, []):
-                        if el.copy.owner_id != w.user_id:
-                            matching_ids.add(el.id)
-                elif item.target_type == WantGroupItem.TargetType.LISTING:
-                    el_id = item.event_listing_id
-                    el = by_listing.get(el_id)
-                    if el and el.copy.owner_id != w.user_id:
-                        matching_ids.add(el.id)
+                el = by_listing.get(item.event_listing_id)
+                if el and el.copy.owner_id != w.user_id:
+                    matching_ids.add(el.id)
             satisfy_map[w.wish_id] = matching_ids
 
         return satisfy_map

@@ -35,7 +35,7 @@ Spec: `docs/superpowers/specs/2026-06-11-pricing-model-refactor-design.md`.
 | `backend/matching/test_external_solver.py` | rewrite money cases to new model | Modify |
 | `frontend/src/api/trades.ts`, `events.ts` | types + API calls for new fields/endpoints | Modify |
 | `frontend/src/features/events/EventDetailPage.tsx` | per-copy sell price input | Modify |
-| `frontend/src/features/trades/MyWantsPage.tsx` | Almanac per-game price | Modify |
+| `frontend/src/features/trades/MyWantsPage.tsx` | Catalog per-game price | Modify |
 | `frontend/src/features/trades/WantListBuilderPage.tsx` | per-want bid; remove offer price | Modify |
 
 ---
@@ -1171,9 +1171,9 @@ git commit -m "feat(pricing): per-copy sell price input in My Listings"
 
 ---
 
-## Task 10: Frontend — Almanac per-game price
+## Task 10: Frontend — Catalog per-game price
 
-The "Almanac" is the game-browse surface in `MyWantsPage.tsx`, which already tracks `baseMoneyByGame` (a per-game buy price). Extend it to persist as a `UserGamePrice` (one number per game, defaulting both sell and buy).
+The "Catalog" is the game-browse surface in `MyWantsPage.tsx`, which already tracks `baseMoneyByGame` (a per-game buy price). Extend it to persist as a `UserGamePrice` (one number per game, defaulting both sell and buy).
 
 **Files:**
 - Modify: `frontend/src/features/trades/MyWantsPage.tsx`
@@ -1192,14 +1192,14 @@ Update the field label/help text to state it sets the default price for all copi
 
 - [ ] **Step 4: Manual verify**
 
-In the Almanac, set a price for a game you own copies of; confirm the per-copy listings (Task 9) now show that as their default; confirm `listGamePrices` returns it after reload.
+In the Catalog, set a price for a game you own copies of; confirm the per-copy listings (Task 9) now show that as their default; confirm `listGamePrices` returns it after reload.
 
 - [ ] **Step 5: Type-check + commit**
 
 ```bash
 cd frontend && npx tsc --noEmit
 git add frontend/src/features/trades/MyWantsPage.tsx
-git commit -m "feat(pricing): Almanac per-game price persists to UserGamePrice"
+git commit -m "feat(pricing): Catalog per-game price persists to UserGamePrice"
 ```
 
 ---
@@ -1213,7 +1213,7 @@ Wishes tab gets a per-target bid override (`WantBid`); the OfferGroup per-item p
 
 - [ ] **Step 1: Remove OfferGroup price input**
 
-Remove the per-`OfferGroupItem` `money_amount` input and its `item_money` payload (lines referencing `money_amount` in the offer/give UI). In its place show the listing's `resolved_ask` read-only (from the listing data), labelled "sell price (set in My Listings / Almanac)".
+Remove the per-`OfferGroupItem` `money_amount` input and its `item_money` payload (lines referencing `money_amount` in the offer/give UI). In its place show the listing's `resolved_ask` read-only (from the listing data), labelled "sell price (set in My Listings / Catalog)".
 
 - [ ] **Step 2: Wishes tab — per-target bid override**
 
@@ -1298,5 +1298,5 @@ git commit -m "refactor(pricing): drop OfferGroupItem/WantGroupItem.money_amount
 
 - [ ] `cd backend && python manage.py test` — full suite green.
 - [ ] `cd frontend && npx tsc --noEmit` — clean.
-- [ ] Manual end-to-end on a money-enabled XTOY event: set an Almanac game price → reflected as default on owned copies and as a bid on wants; per-copy sell override wins; per-want bid override wins; export (`/wants-export/`) shows correct `item ... ask` and `bid ...` cents; run the solver and confirm cash purchases resolve.
+- [ ] Manual end-to-end on a money-enabled XTOY event: set an Catalog game price → reflected as default on owned copies and as a bid on wants; per-copy sell override wins; per-want bid override wins; export (`/wants-export/`) shows correct `item ... ask` and `bid ...` cents; run the solver and confirm cash purchases resolve.
 - [ ] `grep -rn "money_amount\|item_money" backend/ frontend/src/` returns nothing.

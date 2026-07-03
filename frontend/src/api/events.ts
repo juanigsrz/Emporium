@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { TFunction } from 'i18next'
 import { apiClient } from './client'
 import type { PaginatedResponse } from './games'
 
@@ -25,15 +26,9 @@ export const EVENT_STATUSES: EventStatus[] = [
   'ARCHIVED',
 ]
 
-export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
-  DRAFT: 'Draft',
-  SUBMISSIONS_OPEN: 'Submissions Open',
-  WANTLIST_OPEN: 'Want List Open',
-  MATCHING: 'Matching',
-  MATCH_REVIEW: 'Match Review',
-  FINALIZATION: 'Finalization',
-  SHIPPING: 'Shipping',
-  ARCHIVED: 'Archived',
+/** Human-readable, translated label for an event status. */
+export function eventStatusLabel(t: TFunction, status: EventStatus): string {
+  return t(`events.status.${status}`, { defaultValue: status })
 }
 
 // ---- Types ----
@@ -58,6 +53,9 @@ export interface TradeEvent {
   regional_restrictions: string
   trade_policies: string
   algorithm_settings: Record<string, unknown>
+  // Cover photo + cached reverse-geocoded place name
+  image_url: string
+  center_place: string
   // Location gate (organizer-writable)
   require_location: boolean
   center_latitude: number | null
@@ -69,6 +67,7 @@ export interface TradeEvent {
   is_organizer: boolean
   is_participant: boolean
   inputs_locked: boolean
+  submissions_locked: boolean
   created: string
   updated: string
 }
@@ -81,6 +80,14 @@ export interface TradeEventListItem {
   organizer: number
   organizer_username: string
   status: EventStatus
+  money_enabled: boolean
+  max_money_per_user: string | null
+  image_url: string
+  center_place: string
+  require_location: boolean
+  center_latitude: number | null
+  center_longitude: number | null
+  max_distance_km: number | null
   participants_count: number
   submissions_open_at: string | null
   submissions_close_at: string | null
@@ -100,6 +107,7 @@ export interface EventCreatePayload {
   wantlist_close_at?: string | null
   money_enabled?: boolean
   max_money_per_user?: string | null
+  image_url?: string
   require_location?: boolean
   center_latitude?: number | null
   center_longitude?: number | null
@@ -169,6 +177,7 @@ export interface EventsListParams {
   organizer?: string
   search?: string
   page?: number
+  joined?: boolean
 }
 
 // ---- Query keys ----
@@ -194,6 +203,7 @@ export async function fetchEvents(
   if (params.organizer) p.organizer = params.organizer
   if (params.search) p.search = params.search
   if (params.page && params.page > 1) p.page = String(params.page)
+  if (params.joined) p.joined = '1'
   const { data } = await apiClient.get<PaginatedResponse<TradeEventListItem>>('/events/', {
     params: p,
   })

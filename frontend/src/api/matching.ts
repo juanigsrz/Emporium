@@ -133,9 +133,9 @@ async function fetchMyAssignments(slug: string, id: number): Promise<PaginatedRe
   return data
 }
 
-/** GET the gurobi solver wants file (text) for the event. Organizer-only.
+/** GET the gurobi solver wants file (JSON) for the event. Organizer-only.
  *  `kpi` is the selected objectives in priority order; when it contains
- *  'distance' the backend appends user location lines. */
+ *  'distance' the backend includes user locations. */
 export async function fetchWantsExport(slug: string, kpi: string[] = []): Promise<string> {
   const { data } = await apiClient.get<string>(`/events/${slug}/wants-export/`, {
     responseType: 'text',

@@ -6,8 +6,8 @@ Organizer admin operations that mutate other users' event data.
 kick_participant() removes ALL of a user's event-scoped rows from an event while
 keeping their Copy inventory. Deleting the user's EventListings relies on the
 existing on_delete=CASCADE FKs to clean up OTHER users' references to those
-specific listings (WantGroupItem[LISTING], WantBid[LISTING], OfferGroupItem,
-plus any stale TradeAssignment/Shipment). BOARD_GAME-type wants are untouched.
+specific listings (WantGroupItem, WantBid, OfferGroupItem, plus any stale
+TradeAssignment/Shipment).
 """
 
 from django.db import transaction
@@ -16,6 +16,18 @@ from trades.models import (
     OfferGroup, WantGroup, WantGroupItem, TradeWish, WantBid, UserGamePrice,
 )
 from .models import EventListing, EventParticipation
+
+
+@transaction.atomic
+def remove_listing(listing):
+    """Delete an EventListing and every Combo it belongs to.
+
+    A combo is a bundle traded as one unit; if one member leaves, the bundle is
+    no longer the thing other users wished for, so the whole Combo is removed
+    (not merely its ComboItem)."""
+    from .models import Combo
+    Combo.objects.filter(items__event_listing=listing).distinct().delete()
+    listing.delete()
 
 
 @transaction.atomic

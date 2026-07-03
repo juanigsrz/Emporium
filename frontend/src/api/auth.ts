@@ -35,3 +35,8 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   const { data } = await apiClient.get<AuthUser>('/auth/user/')
   return data
 }
+
+export async function googleLoginApi(accessToken: string): Promise<TokenResponse> {
+  const { data } = await apiClient.post<TokenResponse>('/auth/google/', { access_token: accessToken })
+  return data
+}

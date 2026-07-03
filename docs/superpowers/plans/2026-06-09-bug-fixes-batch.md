@@ -530,7 +530,7 @@ git commit -m "fix: My Listings filters by owner server-side instead of page-1 c
 
 ---
 
-## Task 6 (Item 4): Almanac highlight reflects specific-copy wants
+## Task 6 (Item 4): Catalog highlight reflects specific-copy wants
 
 **Files:**
 - Modify: `frontend/src/features/trades/MyWantsPage.tsx:454`
@@ -571,13 +571,13 @@ function toggleWant(g: { bgg_id: number; name: string }) {
 - [ ] **Step 3: Verify frontend + manual**
 
 Run: `cd frontend && npm run build && npm run lint`
-Manual: in almanac, expand a game, check a specific copy (don't press "+ Want any copy") → card gets the purple ring and the bottom button reflects the selection.
+Manual: in catalog, expand a game, check a specific copy (don't press "+ Want any copy") → card gets the purple ring and the bottom button reflects the selection.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add frontend/src/features/trades/MyWantsPage.tsx
-git commit -m "fix: almanac highlights games wished via specific-copy checkboxes"
+git commit -m "fix: catalog highlights games wished via specific-copy checkboxes"
 ```
 
 ---

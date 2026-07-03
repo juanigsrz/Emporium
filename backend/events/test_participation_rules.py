@@ -91,3 +91,41 @@ class JoinExclusivityTests(APITestCase):
         # u organizes e3 but never joins it; should still be free to join e1.
         TradeEvent.objects.create(name="E-three", organizer=self.u)
         self.assertEqual(self._join(self.e1).status_code, 201)
+
+
+class JoinStageGateTests(APITestCase):
+    """New participants can't join once want-lists open (submissions locked)."""
+
+    def setUp(self):
+        self.org = User.objects.create_user("org3", password="x")
+        self.u = User.objects.create_user("carol", password="x")
+        self.event = TradeEvent.objects.create(name="E-gate", organizer=self.org)
+        self.client.force_authenticate(self.u)
+
+    def _join(self):
+        return self.client.post(f"/api/events/{self.event.slug}/join/", {}, format="json")
+
+    def _set_status(self, s):
+        self.event.status = s
+        self.event.save(update_fields=["status"])
+
+    def test_new_join_allowed_before_wantlist_open(self):
+        self._set_status(TradeEvent.Status.SUBMISSIONS_OPEN)
+        self.assertEqual(self._join().status_code, 201)
+
+    def test_new_join_blocked_once_wantlist_open(self):
+        self._set_status(TradeEvent.Status.WANTLIST_OPEN)
+        r = self._join()
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(
+            EventParticipation.objects.filter(event=self.event, user=self.u).exists()
+        )
+
+    def test_new_join_blocked_during_matching(self):
+        self._set_status(TradeEvent.Status.MATCHING)
+        self.assertEqual(self._join().status_code, 400)
+
+    def test_existing_participant_rejoin_still_works_when_locked(self):
+        EventParticipation.objects.create(event=self.event, user=self.u)
+        self._set_status(TradeEvent.Status.WANTLIST_OPEN)
+        self.assertEqual(self._join().status_code, 200)

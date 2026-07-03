@@ -1,31 +1,34 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { registerApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
-
-const schema = z
-  .object({
-    username: z.string().min(1, 'Username is required').max(150, 'Max 150 characters'),
-    email: z.string().min(1, 'Email is required').email('Enter a valid email'),
-    password1: z.string().min(8, 'Password must be at least 8 characters'),
-    password2: z.string().min(1, 'Please confirm your password'),
-  })
-  .refine((d) => d.password1 === d.password2, {
-    path: ['password2'],
-    message: 'Passwords do not match',
-  })
-
-type FormValues = z.infer<typeof schema>
+import GoogleSignInButton from '../../components/GoogleSignInButton'
 
 type FieldKey = 'username' | 'email' | 'password1' | 'password2'
 
 export default function RegisterPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
   const [serverError, setServerError] = useState<string | null>(null)
+
+  const schema = useMemo(() => z
+    .object({
+      username: z.string().min(1, t('auth.errors.usernameRequired')).max(150, t('auth.errors.usernameMax')),
+      email: z.string().min(1, t('auth.errors.emailRequired')).email(t('auth.errors.emailInvalid')),
+      password1: z.string().min(8, t('auth.errors.password1Min')),
+      password2: z.string().min(1, t('auth.errors.password2Required')),
+    })
+    .refine((d) => d.password1 === d.password2, {
+      path: ['password2'],
+      message: t('auth.errors.passwordMismatch'),
+    }), [t])
+
+  type FormValues = z.infer<typeof schema>
 
   const {
     register,
@@ -57,31 +60,31 @@ export default function RegisterPage() {
         if (!handled) {
           const msg =
             (data as { non_field_errors?: string[] }).non_field_errors?.[0] ??
-            'Registration failed. Please check your details.'
+            t('auth.errors.registrationFailed')
           setServerError(msg)
         }
       } else {
-        setServerError('Network error. Please try again.')
+        setServerError(t('auth.errors.networkError'))
       }
     }
   }
 
   const fields: { name: FieldKey; label: string; type: string; autoComplete: string }[] = [
-    { name: 'username', label: 'Username', type: 'text', autoComplete: 'username' },
-    { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' },
-    { name: 'password1', label: 'Password', type: 'password', autoComplete: 'new-password' },
-    { name: 'password2', label: 'Confirm password', type: 'password', autoComplete: 'new-password' },
+    { name: 'username', label: t('auth.usernameLabel'), type: 'text', autoComplete: 'username' },
+    { name: 'email', label: t('auth.emailLabel'), type: 'email', autoComplete: 'email' },
+    { name: 'password1', label: t('auth.passwordLabel'), type: 'password', autoComplete: 'new-password' },
+    { name: 'password2', label: t('auth.confirmPasswordLabel'), type: 'password', autoComplete: 'new-password' },
   ]
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm rounded-3xl border-2 border-ink bg-cream p-7 shadow-card">
         <span className="mb-4 grid h-12 w-12 place-items-center rounded-2xl border-2 border-ink bg-sage text-2xl">🎟️</span>
-        <h1 className="mb-1 text-2xl font-bold text-ink">Create account</h1>
+        <h1 className="mb-1 text-2xl font-bold text-ink">{t('auth.title')}</h1>
         <p className="mb-6 text-sm text-moss">
-          Already have an account?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link to="/login" className="font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2 hover:decoration-butter">
-            Sign in
+            {t('auth.signIn')}
           </Link>
         </p>
 
@@ -117,9 +120,19 @@ export default function RegisterPage() {
             disabled={isSubmitting}
             className="w-full rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
-            {isSubmitting ? 'Creating account…' : 'Create account'}
+            {isSubmitting ? t('auth.submitting') : t('auth.submit')}
           </button>
         </form>
+
+        <div className="my-4 flex items-center gap-3 text-xs text-moss/60">
+          <span className="h-px flex-1 bg-ink/10" />
+          {t('auth.or')}
+          <span className="h-px flex-1 bg-ink/10" />
+        </div>
+        <GoogleSignInButton
+          onSuccess={() => navigate('/', { replace: true })}
+          onError={setServerError}
+        />
       </div>
     </div>
   )

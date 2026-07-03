@@ -1,12 +1,17 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
 import type { EventListing } from '../../api/events'
+import { useCombos } from '../../api/combos'
+import type { Combo } from '../../api/combos'
 import { useCopy } from '../../api/copies'
 import { useAuthStore } from '../../store/auth'
 import { useMyRatings, ratingMap, useSetRating, useDeleteRating } from '../../api/ratings'
+import ConfirmDialog from '../../components/ConfirmDialog'
 
 import {
   useOfferGroups,
@@ -24,10 +29,11 @@ import {
 import type { OfferGroup, WantGroup, WantGroupItemPayload, GamePrice } from '../../api/trades'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { GameThumb } from '../../components/GameThumb'
+import BackButton from '../../components/BackButton'
 
 // ============================================================
 // Model: a "want target" is one row in the matrix.
-//   key  =  "G:<bggId>"  (any copy of a game)  |  "L:<listingId>" (specific copy)
+//   key  =  "L:<listingId>" (a specific copy)
 // Each of my EventListings (a "my item") maps to a single-listing
 // OfferGroup(max_give=1) → TradeWish → WantGroup(min_receive=1). The WantGroup's
 // items are that listing's want list. Toggling a cell adds/removes a target from
@@ -36,25 +42,26 @@ import { GameThumb } from '../../components/GameThumb'
 
 interface Target {
   key: string
-  type: 'BOARD_GAME' | 'LISTING'
-  boardGameId?: number
-  listingId?: number
+  listingId: number
   label: string
-  /** Canonical game this target belongs to — LISTING targets group under it. */
+  /** Canonical game this target belongs to — listings group under it. */
   gameId: number
   gameName: string
   /** Thumbnail of the canonical game (for the Visual view's receive cluster). */
   thumbnail?: string | null
+  /** Set when this target is a Combo (not a listing). */
+  comboId?: number
+  /** Effective bid for a wished combo (resolved_bid), for read-only display. */
+  bid?: string | null
 }
 
-// A canonical-game row in the want views: one game, its optional "any copy"
-// target plus any specific-copy (LISTING) targets. Collapses the duplicate rows.
+// A canonical-game row in the want views: one game and its specific-copy
+// (listing) targets. Collapses the duplicate per-copy rows under one game.
 interface GameGroup {
   gameId: number
   gameName: string
   thumbnail?: string | null    // canonical game thumbnail (Visual view)
-  anyTarget?: Target           // BOARD_GAME (any copy)
-  copyTargets: Target[]        // specific LISTING selections
+  copyTargets: Target[]        // specific listing selections
 }
 
 function groupTargetsByGame(targets: Target[]): GameGroup[] {
@@ -65,58 +72,124 @@ function groupTargetsByGame(targets: Target[]): GameGroup[] {
       g = { gameId: t.gameId, gameName: t.gameName, thumbnail: t.thumbnail, copyTargets: [] }
       byGame.set(t.gameId, g)
     }
-    if (t.type === 'BOARD_GAME') g.anyTarget = t
-    else g.copyTargets.push(t)
+    g.copyTargets.push(t)
   }
   return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
 }
 
 function groupKeys(g: GameGroup): string[] {
-  const keys = g.copyTargets.map((t) => t.key)
-  if (g.anyTarget) keys.push(g.anyTarget.key)
-  return keys
+  return g.copyTargets.map((t) => t.key)
 }
 
 function groupIsOn(editor: Editor, listingId: number, g: GameGroup): boolean {
   return groupKeys(g).some((k) => editor.isOn(listingId, k))
 }
 
-// Aggregate toggle: on→clear every target of this game; off→want "any copy"
-// (or re-enable the previously-picked specific copies if that's all there is).
+// Aggregate toggle: on→clear every copy of this game; off→select all its copies.
 function toggleGroup(editor: Editor, listingId: number, g: GameGroup): void {
-  if (groupIsOn(editor, listingId, g)) {
-    groupKeys(g).forEach((k) => editor.toggle(listingId, k, false))
-  } else if (g.anyTarget) {
-    editor.toggle(listingId, g.anyTarget.key, true)
-  } else {
-    g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, true))
-  }
+  const on = groupIsOn(editor, listingId, g)
+  g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, !on))
 }
 
-function groupBadge(g: GameGroup): string {
-  if (g.anyTarget) return 'any copy'
+function groupBadge(t: TFunction, g: GameGroup): string {
   const n = g.copyTargets.length
-  return `${n} cop${n === 1 ? 'y' : 'ies'}`
+  return t('trades.copiesCount', { count: n })
 }
 
-function gameTargetKey(bggId: number): string {
-  return `G:${bggId}`
+// Grid rows = canonical-game groups from real game/listing targets, plus a row
+// for each member game of any WISHED combo (so the combo is reachable in its
+// dropdown). Combos never get their own row.
+function buildGridRows(editor: Editor, combos: Combo[], columns: OfferColumn[]): GameGroup[] {
+  const gameGroups = groupTargetsByGame(
+    editor.targets.filter((t) => t.comboId == null && t.gameId < COMBO_GAME_OFFSET)
+  )
+  const byGame = new Map<number, GameGroup>(gameGroups.map((g) => [g.gameId, g]))
+  for (const c of combos) {
+    if (!columns.some((col) => editor.isOn(col.id, comboTargetKey(c.id)))) continue
+    for (const it of c.items) {
+      if (!byGame.has(it.board_game_id)) {
+        byGame.set(it.board_game_id, {
+          gameId: it.board_game_id,
+          gameName: it.board_game_name,
+          thumbnail: it.board_game_thumbnail,
+          copyTargets: [],
+        })
+      }
+    }
+  }
+  return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
 }
+
 function listingTargetKey(listingId: number): string {
   return `L:${listingId}`
+}
+
+// Combo targets render as their own one-row group, keyed off a synthetic gameId
+// well above any real bgg id so they never collide with a game group.
+const COMBO_GAME_OFFSET = 1_000_000_000
+
+function comboTargetKey(comboId: number): string {
+  return `K:${comboId}`
 }
 
 function cellKey(listingId: number, targetKey: string): string {
   return `${listingId}::${targetKey}`
 }
 
+// ---- Offer columns: an offered item is either a listing I own or one of MY
+// combos. The grid/catalog matrix keys columns by a number; combo columns are
+// shifted by COMBO_COL_OFFSET so they never collide with a listing id. (This is
+// the column-space twin of COMBO_GAME_OFFSET, which lives in the row/game space.)
+
+const COMBO_COL_OFFSET = 2_000_000_000
+
+function comboColId(comboId: number): number {
+  return COMBO_COL_OFFSET + comboId
+}
+
+interface OfferColumn {
+  id: number                   // matrix key: listing.id OR comboColId(combo.id)
+  isCombo: boolean
+  name: string                 // board_game_name | combo.name
+  code: string                 // listing_code   | combo_code
+  thumbnail?: string | null
+  listingId?: number           // when !isCombo
+  comboId?: number             // when isCombo
+  resolvedAsk?: string | null  // listings only (Grid money header)
+  boardGameId?: number         // listings only (rating auto-tick / per-game price)
+}
+
+function listingColumn(l: EventListing): OfferColumn {
+  return {
+    id: l.id,
+    isCombo: false,
+    name: l.board_game_name,
+    code: l.listing_code,
+    thumbnail: l.board_game_thumbnail,
+    listingId: l.id,
+    resolvedAsk: l.resolved_ask,
+    boardGameId: l.board_game_id,
+  }
+}
+
+function comboColumn(c: Combo): OfferColumn {
+  return {
+    id: comboColId(c.id),
+    isCombo: true,
+    name: c.name,
+    code: c.combo_code,
+    thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+    comboId: c.id,
+  }
+}
+
 // ---- Derive page model from the loaded trade objects ----
 
 interface PageModel {
-  /** For each of my listings, the want-group that holds its 1-to-1 want list (if any). */
-  wantGroupByListing: Map<number, WantGroup>
-  offerGroupByListing: Map<number, OfferGroup>
-  /** listingId -> set of target keys currently in its want list (server truth). */
+  /** For each offer column, the want-group that holds its 1-to-1 want list (if any). */
+  wantGroupByCol: Map<number, WantGroup>
+  offerGroupByCol: Map<number, OfferGroup>
+  /** column id -> set of target keys currently in its want list (server truth). */
   baseMatrix: Map<number, Set<string>>
   /** All want targets referenced by any of my lists, keyed for dedupe. */
   baseTargets: Map<string, Target>
@@ -125,25 +198,27 @@ interface PageModel {
 }
 
 function buildModel(
-  myListings: EventListing[],
+  columns: OfferColumn[],
   offerGroups: OfferGroup[],
   wantGroups: WantGroup[],
   wishes: { offer_group: number; want_group: number }[],
-  gamePrices: GamePrice[]
+  gamePrices: GamePrice[],
 ): PageModel {
   const wantGroupById = new Map(wantGroups.map((wg) => [wg.id, wg]))
   const wantGroupIdByOffer = new Map(wishes.map((w) => [w.offer_group, w.want_group]))
 
-  // Pick the single-listing, X=1 offer group for each of my listings.
-  const offerGroupByListing = new Map<number, OfferGroup>()
+  // Pick the single-item, X=1 offer group for each offer column (listing or combo).
+  const offerGroupByCol = new Map<number, OfferGroup>()
   for (const og of offerGroups) {
     if (og.max_give === 1 && og.items.length === 1) {
-      const lid = og.items[0].event_listing
-      if (!offerGroupByListing.has(lid)) offerGroupByListing.set(lid, og)
+      const it = og.items[0]
+      const colId = it.event_listing ?? (it.combo != null ? comboColId(it.combo) : null)
+      if (colId == null) continue
+      if (!offerGroupByCol.has(colId)) offerGroupByCol.set(colId, og)
     }
   }
 
-  const wantGroupByListing = new Map<number, WantGroup>()
+  const wantGroupByCol = new Map<number, WantGroup>()
   const baseMatrix = new Map<number, Set<string>>()
   const baseTargets = new Map<string, Target>()
   // Per-game price comes from UserGamePrice rows (keyed by bgg id), not want items.
@@ -151,59 +226,60 @@ function buildModel(
     gamePrices.map((gp) => [gp.board_game, gp.price])
   )
 
-  for (const listing of myListings) {
-    const og = offerGroupByListing.get(listing.id)
+  for (const col of columns) {
+    const og = offerGroupByCol.get(col.id)
     const set = new Set<string>()
     if (og) {
       const wgId = wantGroupIdByOffer.get(og.id)
       const wg = wgId != null ? wantGroupById.get(wgId) : undefined
       if (wg) {
-        wantGroupByListing.set(listing.id, wg)
+        wantGroupByCol.set(col.id, wg)
         for (const item of wg.items) {
-          if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-            const key = gameTargetKey(item.board_game)
+          if (item.combo != null) {
+            const key = comboTargetKey(item.combo)
             set.add(key)
             if (!baseTargets.has(key)) {
               baseTargets.set(key, {
                 key,
-                type: 'BOARD_GAME',
-                boardGameId: item.board_game,
-                label: item.board_game_name ?? `Game ${item.board_game}`,
-                gameId: item.board_game,
-                gameName: item.board_game_name ?? `Game ${item.board_game}`,
-                thumbnail: item.board_game_thumbnail,
+                listingId: 0,
+                comboId: item.combo,
+                label: item.combo_code ?? `Combo ${item.combo}`,
+                gameId: COMBO_GAME_OFFSET + item.combo,
+                gameName: `🎁 ${item.combo_name ?? 'Combo'}`,
+                thumbnail: null,
+                bid: item.resolved_bid ?? null,
               })
             }
-          } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-            const key = listingTargetKey(item.event_listing)
-            set.add(key)
-            if (!baseTargets.has(key)) {
-              baseTargets.set(key, {
-                key,
-                type: 'LISTING',
-                listingId: item.event_listing,
-                label: item.listing_code ?? `Listing ${item.event_listing}`,
-                // board_game_id is the canonical game of the listing's copy →
-                // lets specific-copy wants fold under their game row.
-                gameId: item.board_game_id ?? -item.event_listing,
-                gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
-                thumbnail: item.board_game_thumbnail,
-              })
-            }
+            continue
+          }
+          if (item.event_listing == null) continue
+          const key = listingTargetKey(item.event_listing)
+          set.add(key)
+          if (!baseTargets.has(key)) {
+            baseTargets.set(key, {
+              key,
+              listingId: item.event_listing,
+              label: item.listing_code ?? `Listing ${item.event_listing}`,
+              // board_game_id is the canonical game of the listing's copy →
+              // lets specific-copy wants fold under their game row.
+              gameId: item.board_game_id ?? -item.event_listing,
+              gameName: item.board_game_name ?? `Listing ${item.event_listing}`,
+              thumbnail: item.board_game_thumbnail,
+            })
           }
         }
       }
     }
-    baseMatrix.set(listing.id, set)
+    baseMatrix.set(col.id, set)
   }
 
-  return { wantGroupByListing, offerGroupByListing, baseMatrix, baseTargets, baseMoneyByGame }
+  return { wantGroupByCol, offerGroupByCol, baseMatrix, baseTargets, baseMoneyByGame }
 }
 
 // ============================================================
 // Game browse — paginated card grid of the games available in THIS event.
-// Expand a card to see the concrete copies it resolves to; "Want" toggles a
-// BOARD_GAME target on for ALL my items, then the inline "Offering N/M" panel
+// Expand a card to see the concrete copies it resolves to; "Want" selects every
+// copy of that game for ALL my items, then the inline "Offering N/M" panel
 // (or the grid) refines which of my offered items go toward that want.
 // Replaces the old typeahead search; only event-scoped games, never the
 // global 177k catalog.
@@ -214,10 +290,11 @@ const BROWSE_PAGE_SIZE = 12
 interface GameBrowseProps {
   slug: string
   editor: Editor
-  myListings: EventListing[]
+  columns: OfferColumn[]
   username?: string
   customWantGroups: WantGroup[]
   moneyEnabled: boolean
+  combos: Combo[]
 }
 
 interface RatingPriceRowProps {
@@ -229,6 +306,7 @@ interface RatingPriceRowProps {
 
 /** Always-visible rating + per-game price shown on the face of a browse card. */
 function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: RatingPriceRowProps) {
+  const { t } = useTranslation()
   const { data: ratings = [] } = useMyRatings()
   const setRating = useSetRating()
   const delRating = useDeleteRating()
@@ -246,8 +324,8 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
   useEffect(() => {
     const persisted = rating ? String(Number(rating.value)) : ''
     if (ratingInput === persisted) return
-    const t = setTimeout(commitRating, 600)
-    return () => clearTimeout(t)
+    const timer = setTimeout(commitRating, 600)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ratingInput])
 
@@ -270,7 +348,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       <div className="flex items-center gap-1.5">
-        <span className="text-moss">My rating</span>
+        <span className="text-moss">{t('trades.rating.myRatingLabel')}</span>
         <input
           type="number"
           min={1}
@@ -283,7 +361,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
           placeholder="—"
-          className="w-14 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+          className="no-spinner w-14 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
         />
         {rating && (
           <button
@@ -293,7 +371,7 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
               delRating.mutate(rating.id)
             }}
             className="text-moss/40 hover:text-red-500"
-            aria-label="Clear rating"
+            aria-label={t('trades.rating.clearRatingAriaLabel')}
           >
             ×
           </button>
@@ -303,16 +381,16 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 
       {moneyEnabled && (
         <div className="flex items-center gap-1.5">
-          <span className="text-moss">Price $</span>
+          <span className="text-moss">{t('trades.rating.biddingPriceLabel')}</span>
           <input
             type="number"
-            min={0}
+            min="0.01"
             step="0.01"
             value={priceValue}
             onChange={(e) => onPriceChange(e.target.value)}
             placeholder="—"
-            title="One price for every copy of this game: the default ask for copies you own and your bid if you want it"
-            className="w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            title={t('trades.rating.priceTitle')}
+            className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
           />
         </div>
       )}
@@ -323,39 +401,55 @@ function RatingPriceRow({ bggId, moneyEnabled, priceValue, onPriceChange }: Rati
 interface WantGroupControlsProps {
   slug: string
   bggId: number
+  username?: string
   customWantGroups: WantGroup[]
 }
 
-function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsProps) {
+function WantGroupControls({ slug, bggId, username, customWantGroups }: WantGroupControlsProps) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [groupSel, setGroupSel] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [groupMsg, setGroupMsg] = useState<string | null>(null)
 
+  // "Want this game" → every other-owned, in-range listing of it.
+  async function targetListingIds(): Promise<number[]> {
+    const res = await fetchEventListings(slug, { board_game: bggId, page_size: 200 })
+    return res.results
+      .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
+      .map((c) => c.id)
+  }
+
   async function addToExisting(groupId: number) {
     setGroupMsg(null)
     const group = customWantGroups.find((g) => g.id === groupId)
     if (!group) return
-    if (group.items.some((i) => i.target_type === 'BOARD_GAME' && i.board_game === bggId)) {
-      setGroupMsg('Already in that group.')
+    let listingIds: number[]
+    try {
+      listingIds = await targetListingIds()
+    } catch {
+      setGroupMsg(t('trades.errors.couldNotAdd'))
+      return
+    }
+    const existing = new Set(group.items.map((i) => i.event_listing))
+    const toAdd = listingIds.filter((id) => !existing.has(id))
+    if (toAdd.length === 0) {
+      setGroupMsg(listingIds.length ? t('trades.wantGroupControls.alreadyInGroup') : t('trades.wantGroupControls.noCopiesToAdd'))
       return
     }
     const items: WantGroupItemPayload[] = [
-      ...group.items.map((i) => ({
-        target_type: i.target_type,
-        ...(i.target_type === 'BOARD_GAME'
-          ? { board_game: i.board_game! }
-          : { event_listing: i.event_listing! }),
-      })),
-      { target_type: 'BOARD_GAME', board_game: bggId },
+      ...group.items.map((i) =>
+        i.combo != null ? { combo: i.combo } : { event_listing: i.event_listing as number }
+      ),
+      ...toAdd.map((id) => ({ event_listing: id })),
     ]
     try {
       await patchWantGroupRaw(slug, group.id, { items })
       invalidateTrades(qc, slug)
-      setGroupMsg('Added.')
+      setGroupMsg(t('trades.wantGroupControls.added'))
     } catch {
-      setGroupMsg('Could not add.')
+      setGroupMsg(t('trades.errors.couldNotAdd'))
     }
   }
 
@@ -363,25 +457,36 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
     const name = newName.trim()
     if (!name) return
     setGroupMsg(null)
+    let listingIds: number[]
+    try {
+      listingIds = await targetListingIds()
+    } catch {
+      setGroupMsg(t('trades.errors.couldNotCreateGroup'))
+      return
+    }
+    if (listingIds.length === 0) {
+      setGroupMsg(t('trades.wantGroupControls.noCopiesToAdd'))
+      return
+    }
     try {
       await createWantGroupRaw(slug, {
         name,
         min_receive: 1,
-        items: [{ target_type: 'BOARD_GAME', board_game: bggId }],
+        items: listingIds.map((id) => ({ event_listing: id })),
       })
       invalidateTrades(qc, slug)
       setShowNew(false)
       setNewName('')
-      setGroupMsg('Group created.')
+      setGroupMsg(t('trades.wantGroupControls.groupCreated'))
     } catch {
-      setGroupMsg('Could not create group.')
+      setGroupMsg(t('trades.errors.couldNotCreateGroup'))
     }
   }
 
   return (
     <div className="space-y-2 border-b border-ink/10 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-moss">Add to group</span>
+        <span className="text-moss">{t('trades.wantGroupControls.addToGroupLabel')}</span>
         <select
           value={groupSel}
           onChange={(e) => {
@@ -395,13 +500,13 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
           }}
           className="rounded border border-ink/20 px-1.5 py-0.5 text-moss focus:outline-none focus:ring-1 focus:ring-purple-400"
         >
-          <option value="">Choose…</option>
+          <option value="">{t('trades.wantGroupControls.choosePlaceholder')}</option>
           {customWantGroups.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
           ))}
-          <option value="__new__">+ New group…</option>
+          <option value="__new__">{t('trades.wantGroupControls.newGroupOption')}</option>
         </select>
         {groupMsg && <span className="text-moss/70">{groupMsg}</span>}
       </div>
@@ -411,7 +516,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="New group name"
+            placeholder={t('trades.wantGroupControls.newGroupNamePlaceholder')}
             className="flex-1 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
           />
           <button
@@ -419,7 +524,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
             onClick={createAndAdd}
             className="rounded bg-purple-600 px-2 py-0.5 font-medium text-white hover:bg-purple-500"
           >
-            Create
+            {t('trades.create')}
           </button>
           <button
             type="button"
@@ -429,7 +534,7 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
             }}
             className="text-moss/70 hover:text-moss"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -437,12 +542,19 @@ function WantGroupControls({ slug, bggId, customWantGroups }: WantGroupControlsP
   )
 }
 
-function GameBrowse({ slug, editor, myListings, username, customWantGroups, moneyEnabled }: GameBrowseProps) {
+function GameBrowse({ slug, editor, columns, username, customWantGroups, moneyEnabled, combos }: GameBrowseProps) {
+  const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [ordering, setOrdering] = useState<'-copies_count' | 'name'>('-copies_count')
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [offerOpen, setOfferOpen] = useState<number | null>(null)
+
+  // Per-expanded-game selection, kept independent so the two checklists in the
+  // dropdown don't yank each other around: `offerItems` = which of my items I'm
+  // giving, `wantKeys` = which copies/combos I'd accept. The saved offers are
+  // their cross-product, applied additively as either side is toggled.
+  const [offerItems, setOfferItems] = useState<Set<number>>(new Set())
+  const [wantKeys, setWantKeys] = useState<Set<string>>(new Set())
 
   // Filter bar state
   const [wishlisted, setWishlisted] = useState(false)
@@ -473,20 +585,21 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
   const isWanted = useCallback(
     (bggId: number) => {
       const group = groupByGame.get(bggId)
-      return group ? myListings.some((l) => groupIsOn(editor, l.id, group)) : false
+      return group ? columns.some((col) => groupIsOn(editor, col.id, group)) : false
     },
-    [editor, myListings, groupByGame]
+    [editor, columns, groupByGame]
   )
 
   async function toggleWant(g: { bgg_id: number; name: string }) {
     const group = groupByGame.get(g.bgg_id)
-    if (group && myListings.some((l) => groupIsOn(editor, l.id, group))) {
-      // Already wanted (any/specific) — clear every target for this game.
-      myListings.forEach((l) => groupKeys(group).forEach((k) => editor.toggle(l.id, k, false)))
+    if (group && columns.some((col) => groupIsOn(editor, col.id, group))) {
+      // Already wanted — clear every target for this game.
+      columns.forEach((col) => groupKeys(group).forEach((k) => editor.toggle(col.id, k, false)))
       return
     }
-    // "Want any copy" = select every current copy explicitly (no BOARD_GAME target),
-    // so the per-copy checkboxes all light up and it persists as concrete copies.
+    // Stage every other-owned, in-range copy as an accepted target, but offer NO
+    // items yet — the user consciously ticks which of their items offer it in the
+    // dropdown (auto-opened below).
     let copies: EventListing[]
     try {
       const res = await fetchEventListings(slug, { board_game: g.bgg_id, page_size: 200 })
@@ -497,13 +610,64 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
     copies
       .filter((c) => c.copy_owner_username !== username && !c.owner_too_far)
       .forEach((c) => {
-        const key = listingTargetKey(c.id)
         editor.addTarget({
-          key, type: 'LISTING', listingId: c.id, label: c.listing_code,
+          key: listingTargetKey(c.id), listingId: c.id, label: c.listing_code,
           gameId: c.board_game_id, gameName: c.board_game_name, thumbnail: c.board_game_thumbnail,
         })
-        myListings.forEach((l) => editor.toggle(l.id, key, true))
       })
+    setExpanded(g.bgg_id)
+  }
+
+  // Seed the two selections from saved/staged state whenever a different game is
+  // opened: a copy/combo already referenced by any of my lists counts as wanted,
+  // and any item that offers one counts as offering. Read-only — opening a card
+  // changes nothing until the user clicks.
+  useEffect(() => {
+    if (expanded == null) return
+    const keys = new Set<string>()
+    for (const target of editor.targets) {
+      if (target.comboId == null && target.gameId === expanded) keys.add(target.key)
+    }
+    for (const c of combos) {
+      if (c.items.some((it) => it.board_game_id === expanded) &&
+          editor.targets.some((t) => t.comboId === c.id)) {
+        keys.add(comboTargetKey(c.id))
+      }
+    }
+    const items = new Set<number>()
+    for (const col of columns) {
+      if (Array.from(keys).some((k) => editor.isOn(col.id, k))) items.add(col.id)
+    }
+    setWantKeys(keys)
+    setOfferItems(items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
+  // Toggle one of my items in/out of the offering set, additively re-applying it
+  // across the currently-wanted copies. Never touches `wantKeys`.
+  function toggleOfferItem(col: OfferColumn) {
+    const adding = !offerItems.has(col.id)
+    setOfferItems((prev) => {
+      const next = new Set(prev)
+      if (adding) next.add(col.id)
+      else next.delete(col.id)
+      return next
+    })
+    wantKeys.forEach((key) => editor.toggle(col.id, key, adding))
+  }
+
+  // Toggle one copy/combo in/out of the wanted set, offered by every item already
+  // in the offering set (or none yet — picking the copy first is allowed).
+  function toggleWantKey(target: Target) {
+    const adding = !wantKeys.has(target.key)
+    setWantKeys((prev) => {
+      const next = new Set(prev)
+      if (adding) next.add(target.key)
+      else next.delete(target.key)
+      return next
+    })
+    editor.addTarget(target)
+    offerItems.forEach((lid) => editor.toggle(lid, target.key, adding))
   }
 
   return (
@@ -512,17 +676,17 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setPage(1) }}
-          placeholder="Search games available in this event…"
+          placeholder={t('trades.browse.searchPlaceholder')}
           className="min-w-[12rem] flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
         />
         <select
           value={ordering}
           onChange={(e) => { setOrdering(e.target.value as '-copies_count' | 'name'); setPage(1) }}
           className="rounded-xl border border-ink/20 px-2 py-1.5 text-sm text-moss"
-          aria-label="Order games"
+          aria-label={t('trades.browse.orderAriaLabel')}
         >
-          <option value="-copies_count">Most available</option>
-          <option value="name">A–Z</option>
+          <option value="-copies_count">{t('trades.browse.mostAvailableOption')}</option>
+          <option value="name">{t('trades.browse.aToZOption')}</option>
         </select>
       </div>
 
@@ -535,11 +699,11 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             onChange={(e) => { setWishlisted(e.target.checked); setPage(1) }}
             className="h-3 w-3 rounded border-ink/20 text-indigo-600"
           />
-          In my BGG wishlist
+          {t('trades.browse.inWishlistLabel')}
         </label>
 
         <label className="flex items-center gap-1.5 text-xs text-moss">
-          <span>Min rating</span>
+          <span>{t('trades.browse.minRatingLabel')}</span>
           <input
             type="number"
             min={1}
@@ -548,7 +712,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             value={minRating}
             onChange={(e) => { setMinRating(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
             placeholder="—"
-            className="w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+            className="no-spinner w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
           />
         </label>
 
@@ -559,18 +723,52 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
             setPage(1)
           }}
           className="rounded-xl border border-ink/20 px-2 py-1 text-xs text-moss"
-          aria-label="Expansion filter"
+          aria-label={t('trades.browse.expansionFilterAriaLabel')}
         >
-          <option value="">Base games + expansions</option>
-          <option value="false">Base games only</option>
-          <option value="true">Expansions only</option>
+          <option value="">{t('trades.browse.baseAndExpansionsOption')}</option>
+          <option value="false">{t('trades.browse.baseOnlyOption')}</option>
+          <option value="true">{t('trades.browse.expansionsOnlyOption')}</option>
         </select>
 
       </div>
 
+      {totalPages > 1 && (
+        <div className="mb-2 flex items-center justify-end gap-2 text-xs">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-xl border border-ink/20 px-2 py-1 disabled:opacity-40"
+          >
+            {t('trades.prev')}
+          </button>
+          <span className="text-moss">{t('trades.browse.pageLabel')}</span>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={page}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              if (v >= 1 && v <= totalPages) setPage(v)
+            }}
+            className="no-spinner w-14 rounded border border-ink/20 px-1.5 py-0.5 text-center"
+            aria-label={t('trades.browse.jumpToPageAriaLabel')}
+          />
+          <span className="text-moss">{t('trades.browse.ofTotalPages', { total: totalPages })}</span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded-xl border border-ink/20 px-2 py-1 disabled:opacity-40"
+          >
+            {t('trades.next')}
+          </button>
+        </div>
+      )}
       {games.length === 0 ? (
         <p className="px-1 py-6 text-center text-sm text-moss/70">
-          {isFetching ? 'Loading games…' : 'No games with copies match.'}
+          {isFetching ? t('trades.browse.loadingGames') : t('trades.browse.noGamesMatch')}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -581,11 +779,11 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
               <div
                 key={g.bgg_id}
                 className={`flex flex-col overflow-hidden rounded-2xl border ${
-                  wanted ? 'border-purple-300 ring-1 ring-purple-200' : 'border-ink/15'
+                  wanted ? 'border-purple-400 ring-2 ring-purple-300' : 'border-ink/20'
                 }`}
               >
                 <div className="flex gap-2 p-2">
-                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded bg-gray-100">
+                  <div className="h-32 w-32 shrink-0 overflow-hidden rounded bg-gray-100">
                     {(g.thumbnail || g.image_url) ? (
                       <img src={g.thumbnail || g.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
                     ) : null}
@@ -603,7 +801,8 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                       className="mt-0.5 text-[11px] font-medium text-indigo-500 hover:text-indigo-700"
                       aria-expanded={open}
                     >
-                      {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'} {open ? '▲' : '▼'}
+                      {/* {g.copies_count} cop{g.copies_count === 1 ? 'y' : 'ies'} {open ? '▲' : '▼'} */}
+                      {t('trades.browse.expandLabel')} {open ? '▲' : '▼'}
                     </button>
                   </div>
                 </div>
@@ -620,72 +819,61 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
                     <WantGroupControls
                       slug={slug}
                       bggId={g.bgg_id}
+                      username={username}
                       customWantGroups={customWantGroups}
                     />
+                    {/* Which of my items offer this game (empty by default) */}
+                    <div className="border-b border-ink/10 px-3 py-2">
+                      <p className="mb-1 text-[11px] font-medium text-moss/70">
+                        {t('trades.browse.yourItemsOfferLabel')}
+                      </p>
+                      <ul className="max-h-40 space-y-0.5 overflow-y-auto">
+                        {columns.map((col) => {
+                          const on = offerItems.has(col.id)
+                          return (
+                            <li key={col.id}>
+                              <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={() => toggleOfferItem(col)}
+                                  className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="truncate text-ink" title={col.name}>
+                                  {col.isCombo ? `🎁 ${col.name}` : col.name}
+                                </span>
+                                <span className={`ml-auto shrink-0 font-mono ${col.isCombo ? 'text-amber-600' : 'text-moss/70'}`}>{col.code}</span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
                     <GameCopies
                       slug={slug}
                       bggId={g.bgg_id}
                       username={username}
                       editor={editor}
-                      myListings={myListings}
+                      columns={columns}
                       selectable
+                      combos={combos}
+                      moneyEnabled={moneyEnabled}
+                      selectedKeys={wantKeys}
+                      onToggleTarget={toggleWantKey}
                     />
                   </div>
                 )}
-                {(() => {
-                  const group = groupByGame.get(g.bgg_id)
-                  if (!group || myListings.length < 2) return null
-                  const offeringCount = myListings.filter((l) => groupIsOn(editor, l.id, group)).length
-                  if (offeringCount === 0) return null
-                  const panelOpen = offerOpen === g.bgg_id
-                  return (
-                    <div className="border-t border-ink/10 bg-indigo-50/40">
-                      <button
-                        type="button"
-                        onClick={() => setOfferOpen(panelOpen ? null : g.bgg_id)}
-                        className="w-full px-2 py-1 text-left text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
-                        aria-expanded={panelOpen}
-                        title="Pick which of your offered items you'd give for this game"
-                      >
-                        Offering {offeringCount}/{myListings.length} of your items {panelOpen ? '▲' : '▾'}
-                      </button>
-                      {panelOpen && (
-                        <ul className="max-h-40 space-y-0.5 overflow-y-auto px-2 pb-2">
-                          {myListings.map((l) => {
-                            const on = groupIsOn(editor, l.id, group)
-                            return (
-                              <li key={l.id}>
-                                <label className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] hover:bg-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={on}
-                                    onChange={() => toggleGroup(editor, l.id, group)}
-                                    className="h-3 w-3 shrink-0 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
-                                  />
-                                  <span className="truncate text-ink" title={l.board_game_name}>
-                                    {l.board_game_name}
-                                  </span>
-                                  <span className="ml-auto shrink-0 font-mono text-moss/70">{l.listing_code}</span>
-                                </label>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  )
-                })()}
                 <button
                   type="button"
                   onClick={() => toggleWant(g)}
-                  title="Want any copy of this game (or expand to pick specific copies)"
+                  title={t('trades.browse.wantAnyCopyTitle')}
                   className={`mt-auto border-t px-2 py-1.5 text-xs font-semibold transition-colors ${
                     wanted
                       ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
                       : 'border-ink/10 text-moss hover:bg-indigo-50 hover:text-indigo-600'
                   }`}
                 >
-                  {wanted ? 'Any copy ✓' : '+ Want any copy'}
+                  {wanted ? t('trades.browse.wantedBadge') : t('trades.browse.wantAnyCopyButton')}
                 </button>
               </div>
             )
@@ -695,7 +883,7 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
 
       {count > BROWSE_PAGE_SIZE && (
         <div className="mt-3 flex items-center justify-between gap-2 text-xs text-moss">
-          <span>{count} games</span>
+          <span>{t('trades.gamesCount', { count })}</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -703,31 +891,22 @@ function GameBrowse({ slug, editor, myListings, username, customWantGroups, mone
               disabled={page <= 1 || isFetching}
               className="rounded border border-ink/15 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              Prev
+              {t('trades.prev')}
             </button>
-            <span>Page {page} / {totalPages}</span>
+            <span>{t('trades.browse.pageOfTotal', { page, total: totalPages })}</span>
             <button
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages || isFetching}
               className="rounded border border-ink/15 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              Next
+              {t('trades.next')}
             </button>
           </div>
         </div>
       )}
     </div>
   )
-}
-
-const CONDITION_LABEL: Record<string, string> = {
-  NEW: 'New',
-  LIKE_NEW: 'Like New',
-  EXCELLENT: 'Excellent',
-  GOOD: 'Good',
-  FAIR: 'Fair',
-  POOR: 'Poor',
 }
 
 // Concrete copies behind a canonical-game want. Own copies are excluded (you
@@ -740,80 +919,120 @@ interface GameCopiesProps {
   bggId: number
   username?: string
   editor?: Editor
-  myListings?: EventListing[]
+  columns?: OfferColumn[]
   selectable?: boolean
+  combos?: Combo[]
+  moneyEnabled?: boolean
+  // Controlled selection (catalog dropdown): when provided, copy/combo selection
+  // is owned by the parent's want-set instead of derived from the offer matrix,
+  // so a copy can be picked before any of my items is chosen.
+  selectedKeys?: Set<string>
+  onToggleTarget?: (t: Target) => void
 }
 
-function GameCopies({ slug, bggId, username, editor, myListings, selectable }: GameCopiesProps) {
+function GameCopies({ slug, bggId, username, editor, columns, selectable, combos, moneyEnabled, selectedKeys, onToggleTarget }: GameCopiesProps) {
+  const { t } = useTranslation()
   const { data, isLoading } = useEventListings(slug, { board_game: bggId, page_size: 200 })
   const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const all = data?.results ?? []
   const others = all.filter((l) => l.copy_owner_username !== username)
   const ownCount = all.length - others.length
 
-  const canSelect = !!(selectable && editor && myListings && myListings.length > 0)
-  // A copy counts as wanted if its specific LISTING target is on, OR a legacy
-  // "any copy" (BOARD_GAME) target is still on for this game — so seeded/any
-  // wishes light up every per-copy box (any = all copies selected).
-  const anyKey = gameTargetKey(bggId)
+  const controlled = !!(selectable && onToggleTarget && selectedKeys)
+  const canSelect = controlled || !!(selectable && editor && columns && columns.length > 0)
   const isCopyWanted = (listingId: number) =>
-    !!editor && !!myListings &&
-    myListings.some(
-      (ml) => editor.isOn(ml.id, listingTargetKey(listingId)) || editor.isOn(ml.id, anyKey)
-    )
+    controlled
+      ? selectedKeys!.has(listingTargetKey(listingId))
+      : !!editor && !!columns &&
+        columns.some((col) => editor.isOn(col.id, listingTargetKey(listingId)))
 
   function toggleCopy(l: EventListing) {
-    if (!editor || !myListings || l.owner_too_far) return
+    if (l.owner_too_far) return
+    if (controlled) {
+      onToggleTarget!({
+        key: listingTargetKey(l.id), listingId: l.id, label: l.listing_code,
+        gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
+      })
+      return
+    }
+    if (!editor || !columns) return
     const next = !isCopyWanted(l.id)
-    const otherSelectable = others.filter((o) => !o.owner_too_far)
-    // Act on the items already offering this game (preserve per-item refinement);
-    // if none offer it yet, this is a fresh want → apply to all my items.
+    // Act only on the columns already offering this game; if none offer it yet,
+    // clicking a copy stages it but assigns no item (tick an item above first).
     const group = groupTargetsByGame(editor!.targets).find((g) => g.gameId === bggId)
-    const offering = group ? myListings.filter((ml) => groupIsOn(editor!, ml.id, group)) : []
-    const acting = offering.length ? offering : myListings
-
-    acting.forEach((ml) => {
-      // Materialize a legacy "any copy" want into explicit copies before editing,
-      // so toggling one box doesn't silently leave the any-target on.
-      if (editor!.isOn(ml.id, anyKey)) {
-        editor!.toggle(ml.id, anyKey, false)
-        otherSelectable.forEach((o) => {
-          const k = listingTargetKey(o.id)
-          editor!.addTarget({
-            key: k, type: 'LISTING', listingId: o.id, label: o.listing_code,
-            gameId: o.board_game_id, gameName: o.board_game_name, thumbnail: o.board_game_thumbnail,
-          })
-          editor!.toggle(ml.id, k, true)
-        })
-      }
-    })
+    const acting = group ? columns.filter((col) => groupIsOn(editor!, col.id, group)) : []
 
     const key = listingTargetKey(l.id)
     editor.addTarget({
-      key, type: 'LISTING', listingId: l.id, label: l.listing_code,
+      key, listingId: l.id, label: l.listing_code,
       gameId: l.board_game_id, gameName: l.board_game_name, thumbnail: l.board_game_thumbnail,
     })
-    acting.forEach((ml) => editor!.toggle(ml.id, key, next))
+    acting.forEach((col) => editor!.toggle(col.id, key, next))
   }
 
-  if (isLoading) return <p className="px-3 py-2 text-xs text-moss/70">Loading copies…</p>
+  const comboRows = (combos ?? []).filter(
+    (c) => c.owner_username !== username && c.items.some((it) => it.board_game_id === bggId)
+  )
+
+  const isComboWanted = (comboId: number) =>
+    controlled
+      ? selectedKeys!.has(comboTargetKey(comboId))
+      : !!editor && !!columns &&
+        columns.some((col) => editor.isOn(col.id, comboTargetKey(comboId)))
+
+  function maxMemberBid(c: Combo): string | null {
+    if (!editor) return null
+    const vals = c.items
+      .map((it) => Number(editor.priceForGame(it.board_game_id)))
+      .filter((v) => Number.isFinite(v) && v > 0)
+    return vals.length ? Math.max(...vals).toFixed(2) : null
+  }
+
+  function effBidFor(c: Combo): string | null {
+    const wished = editor?.targets.find((target) => target.comboId === c.id)
+    return wished?.bid ?? maxMemberBid(c)
+  }
+
+  function toggleCombo(c: Combo) {
+    if (controlled) {
+      onToggleTarget!({
+        key: comboTargetKey(c.id), listingId: 0, comboId: c.id, label: c.combo_code,
+        gameId: COMBO_GAME_OFFSET + c.id, gameName: `🎁 ${c.name}`,
+        thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+      })
+      return
+    }
+    if (!editor || !columns) return
+    const next = !isComboWanted(c.id)
+    const group = groupTargetsByGame(editor.targets).find((g) => g.gameId === bggId)
+    const acting = group ? columns.filter((col) => groupIsOn(editor, col.id, group)) : []
+    const key = comboTargetKey(c.id)
+    editor.addTarget({
+      key, listingId: 0, comboId: c.id, label: c.combo_code,
+      gameId: COMBO_GAME_OFFSET + c.id, gameName: `🎁 ${c.name}`,
+      thumbnail: c.items[0]?.board_game_thumbnail ?? null,
+    })
+    acting.forEach((col) => editor.toggle(col.id, key, next))
+  }
+
+  if (isLoading) return <p className="px-3 py-2 text-xs text-moss/70">{t('trades.gameCopies.loadingCopies')}</p>
 
   return (
     <div className="px-3 py-2">
       {others.length === 0 ? (
-        <p className="text-xs text-moss/70">No copies from other traders in this event yet.</p>
+        <p className="text-xs text-moss/70">{t('trades.gameCopies.noOtherCopiesYet')}</p>
       ) : (
         <>
           {canSelect && (
             <p className="mb-1 text-[11px] font-medium text-moss/70">
-              Pick the specific copies you'd accept:
+              {t('trades.gameCopies.pickSpecificCopies')}
             </p>
           )}
           <ul className="flex flex-col gap-1">
             {others.map((l) => {
               const tooFar = !!l.owner_too_far
               const wanted = canSelect && !tooFar && isCopyWanted(l.id)
-              const meta = [l.copy_language, CONDITION_LABEL[l.copy_condition] || l.copy_condition]
+              const meta = [l.copy_language, t(`trades.conditionLabel.${l.copy_condition}`, { defaultValue: l.copy_condition })]
                 .filter(Boolean)
                 .join(' · ')
               return (
@@ -834,7 +1053,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                       disabled={tooFar}
                       onChange={() => toggleCopy(l)}
                       className="h-3.5 w-3.5 shrink-0 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
-                      aria-label={`Want copy ${l.listing_code}`}
+                      aria-label={t('trades.gameCopies.wantCopyAriaLabel', { code: l.listing_code })}
                     />
                   )}
                   <button
@@ -842,7 +1061,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                     onClick={() => !tooFar && setDetailCopyId(l.copy_id)}
                     disabled={tooFar}
                     className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:underline disabled:cursor-default disabled:no-underline"
-                    title={tooFar ? 'Owner is too far away' : 'View copy details'}
+                    title={tooFar ? t('trades.gameCopies.ownerTooFarTitle') : t('trades.gameCopies.viewCopyDetailsTitle')}
                   >
                     <span className="font-mono text-moss">{l.listing_code}</span>
                     <span className="text-moss/40">·</span>
@@ -855,7 +1074,7 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
                     )}
                     {tooFar && (
                       <span className="ml-auto shrink-0 rounded bg-orange-100 px-1 py-0.5 text-[10px] font-medium text-orange-600">
-                        too far
+                        {t('trades.gameCopies.tooFarBadge')}
                       </span>
                     )}
                   </button>
@@ -865,9 +1084,60 @@ function GameCopies({ slug, bggId, username, editor, myListings, selectable }: G
           </ul>
         </>
       )}
+      {canSelect && comboRows.length > 0 && (
+        <div className="mt-2">
+          <p className="mb-1 text-[11px] font-medium text-amber-700/80">
+            {t('trades.gameCopies.combosIncludingGame')}
+          </p>
+          <ul className="flex flex-col gap-1">
+            {comboRows.map((c) => {
+              const wanted = isComboWanted(c.id)
+              const eff = effBidFor(c)
+              return (
+                <li
+                  key={`combo-${c.id}`}
+                  className={`flex items-center gap-2 rounded border px-2 py-1 text-xs ${
+                    wanted ? 'border-amber-300 bg-amber-50' : 'border-ink/15 bg-white'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={wanted}
+                    onChange={() => toggleCombo(c)}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-ink/20 text-amber-600 focus:ring-amber-500"
+                    aria-label={t('trades.gameCopies.wantComboAriaLabel', { code: c.combo_code })}
+                  />
+                  <span className="flex shrink-0 -space-x-1">
+                    {c.items.map((it) =>
+                      it.board_game_thumbnail ? (
+                        <img
+                          key={it.id}
+                          src={it.board_game_thumbnail}
+                          alt=""
+                          title={it.board_game_name}
+                          className="h-6 w-6 rounded border border-amber-300 object-cover"
+                          loading="lazy"
+                        />
+                      ) : null
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-ink" title={c.name}>
+                    🎁 {c.name}
+                  </span>
+                  {moneyEnabled && (
+                    <span className="shrink-0 font-mono text-amber-700/80">
+                      {eff != null ? `$${eff}` : t('trades.barter')}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
       {ownCount > 0 && (
         <p className="mt-1 text-[11px] text-moss/70">
-          ({ownCount} more {ownCount === 1 ? 'is' : 'are'} your own copy — excluded)
+          {t('trades.gameCopies.ownCopiesExcluded', { count: ownCount })}
         </p>
       )}
       {detailCopyId != null && (
@@ -893,22 +1163,23 @@ function CopyDetailRow({ label, value }: { label: string; value?: string | null 
 }
 
 function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => void }) {
+  const { t } = useTranslation()
   const { data: copy, isLoading } = useCopy(copyId)
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Copy details"
+      aria-label={t('trades.copyDetail.dialogAriaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
       <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
-            <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-12 w-12" />
+            <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-32 w-32" />
             <div className="min-w-0">
               <h3 className="truncate text-base font-semibold text-ink">
-                {copy ? copy.board_game_name : 'Copy details'}
+                {copy ? copy.board_game_name : t('trades.copyDetail.defaultTitle')}
               </h3>
               {copy && (
                 <p className="font-mono text-xs text-moss/70">
@@ -920,7 +1191,7 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
           <button
             onClick={onClose}
             className="rounded p-1 text-moss/70 hover:text-moss"
-            aria-label="Close"
+            aria-label={t('trades.closeAriaLabel')}
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -929,26 +1200,26 @@ function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => v
         </div>
 
         {isLoading || !copy ? (
-          <p className="py-6 text-center text-sm text-moss/70">Loading…</p>
+          <p className="py-6 text-center text-sm text-moss/70">{t('common.loading')}</p>
         ) : (
           <div className="divide-y divide-gray-50">
-            <CopyDetailRow label="Condition" value={CONDITION_LABEL[copy.condition] || copy.condition} />
-            <CopyDetailRow label="Language" value={copy.language} />
-            <CopyDetailRow label="Edition" value={copy.version_name && copy.version_name !== 'Unknown' ? copy.version_name : ''} />
-            <CopyDetailRow label="Sleeved" value={copy.sleeved !== 'UNKNOWN' ? copy.sleeved : ''} />
-            <CopyDetailRow label="Includes" value={copy.includes_expansions} />
-            <CopyDetailRow label="Missing" value={copy.missing_components} />
-            <CopyDetailRow label="Upgraded" value={copy.upgraded_components} />
-            <CopyDetailRow label="Component notes" value={copy.component_notes} />
-            <CopyDetailRow label="Owner notes" value={copy.owner_notes} />
-            <CopyDetailRow label="Trade value" value={copy.trade_value_hint} />
-            <CopyDetailRow label="Shipping" value={copy.shipping_constraints} />
-            <CopyDetailRow label="Pickup" value={copy.pickup_available ? 'Available' : ''} />
-            <CopyDetailRow label="Status" value={copy.status !== 'ACTIVE' ? copy.status : ''} />
+            <CopyDetailRow label={t('trades.copyDetail.condition')} value={t(`trades.conditionLabel.${copy.condition}`, { defaultValue: copy.condition })} />
+            <CopyDetailRow label={t('trades.copyDetail.language')} value={copy.language} />
+            <CopyDetailRow label={t('trades.copyDetail.edition')} value={copy.version_name && copy.version_name !== 'Unknown' ? copy.version_name : ''} />
+            <CopyDetailRow label={t('trades.copyDetail.sleeved')} value={copy.sleeved !== 'UNKNOWN' ? copy.sleeved : ''} />
+            <CopyDetailRow label={t('trades.copyDetail.includes')} value={copy.includes_expansions} />
+            <CopyDetailRow label={t('trades.copyDetail.missing')} value={copy.missing_components} />
+            <CopyDetailRow label={t('trades.copyDetail.upgraded')} value={copy.upgraded_components} />
+            <CopyDetailRow label={t('trades.copyDetail.componentNotes')} value={copy.component_notes} />
+            <CopyDetailRow label={t('trades.copyDetail.ownerNotes')} value={copy.owner_notes} />
+            <CopyDetailRow label={t('trades.copyDetail.tradeValue')} value={copy.trade_value_hint} />
+            <CopyDetailRow label={t('trades.copyDetail.shipping')} value={copy.shipping_constraints} />
+            <CopyDetailRow label={t('trades.copyDetail.pickup')} value={copy.pickup_available ? t('trades.copyDetail.available') : ''} />
+            <CopyDetailRow label={t('trades.copyDetail.status')} value={copy.status !== 'ACTIVE' ? copy.status : ''} />
             {copy.photo_urls?.length > 0 && (
               <div className="py-2">
                 <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-moss/70">
-                  Photos
+                  {t('trades.copyDetail.photos')}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {copy.photo_urls.map((url, i) => (
@@ -1098,133 +1369,98 @@ function useEditor(model: PageModel): {
 // ============================================================
 
 interface VisualModeProps {
-  myListings: EventListing[]
+  columns: OfferColumn[]
   editor: Editor
+  combos: Combo[]
 }
 
-function VisualMode({ myListings, editor }: VisualModeProps) {
-  const [addingFor, setAddingFor] = useState<number | null>(null)
-
-  if (myListings.length === 0) return null
+function VisualMode({ columns, editor, combos }: VisualModeProps) {
+  const { t } = useTranslation()
+  if (columns.length === 0) return null
+  const comboById = new Map(combos.map((c) => [c.id, c]))
 
   return (
     <div className="space-y-3">
-      {myListings.map((listing) => {
+      {columns.map((col) => {
         const groups = groupTargetsByGame(editor.targets)
-        const myWants = groups.filter((g) => groupIsOn(editor, listing.id, g))
-        const addable = groups.filter((g) => !groupIsOn(editor, listing.id, g))
+        const myWants = groups.filter((g) => groupIsOn(editor, col.id, g))
+        // The offered item: a combo renders its member thumbnails as a cluster,
+        // a listing renders its single game thumbnail.
+        const offeredCombo = col.isCombo ? comboById.get(col.comboId!) : undefined
         return (
-          <div key={listing.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {listing.board_game_name}
-                  </p>
-                  <p className="font-mono text-xs text-moss/70">{listing.listing_code}</p>
-                </div>
+          <div key={col.id} className="rounded-xl border border-ink/15 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {col.isCombo ? `🎁 ${col.name}` : col.name}
+                </p>
+                <p className={`font-mono text-xs ${col.isCombo ? 'text-amber-600' : 'text-moss/70'}`}>{col.code}</p>
               </div>
               <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
-                wants {myWants.length}
+                {t('trades.wantsCount', { count: myWants.length })}
               </span>
             </div>
 
-            {/* Give → receive: offered copy on the left, wanted games on the right. */}
-            <div className="mb-3 flex items-center gap-2 overflow-x-auto">
-              <div className="flex shrink-0 items-center gap-1">
-                <GameThumb
-                  src={listing.board_game_thumbnail}
-                  alt={listing.board_game_name ?? ''}
-                  className="h-12 w-12"
-                />
+            {/* Give → receive: offered item, then the wanted games as big thumbnails (× to remove). */}
+            <div className="flex items-start gap-3 overflow-x-auto">
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                {offeredCombo ? (
+                  <div className="flex h-32 w-32 flex-wrap content-center items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 p-1">
+                    {offeredCombo.items.map((it) => (
+                      <GameThumb key={it.id} src={it.board_game_thumbnail} alt={it.board_game_name} className="h-14 w-14" />
+                    ))}
+                  </div>
+                ) : (
+                  <GameThumb
+                    src={col.thumbnail}
+                    alt={col.name ?? ''}
+                    className="h-32 w-32"
+                  />
+                )}
+                <span className="w-32 truncate text-center text-xs text-ink" title={col.name}>
+                  {col.isCombo ? `🎁 ${col.name}` : col.name}
+                </span>
               </div>
-              <svg className="h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+              <svg className="mt-12 h-5 w-5 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label={t('trades.tradesForAriaLabel')}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
               {myWants.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1">
-                  {myWants.map((g) => (
-                    <GameThumb
-                      key={g.gameId}
-                      src={g.thumbnail}
-                      alt={g.gameName ?? ''}
-                      className="h-12 w-12"
-                    />
-                  ))}
+                <div className="flex flex-wrap items-start gap-3">
+                  {myWants.map((g) => {
+                    const combo = g.gameId >= COMBO_GAME_OFFSET
+                      ? comboById.get(g.gameId - COMBO_GAME_OFFSET)
+                      : undefined
+                    return (
+                      <div key={g.gameId} className="relative flex w-32 shrink-0 flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => groupKeys(g).forEach((k) => editor.toggle(col.id, k, false))}
+                          aria-label={t('trades.visualMode.removeAriaLabel', { name: g.gameName })}
+                          title={t('trades.visualMode.removeAriaLabel', { name: g.gameName })}
+                          className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-ink bg-white text-xs font-bold text-red-600 shadow-sm hover:bg-red-50"
+                        >
+                          ×
+                        </button>
+                        {combo ? (
+                          <div className="flex h-32 w-32 flex-wrap content-center items-center justify-center gap-1 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50/50 p-1">
+                            {combo.items.map((it) => (
+                              <GameThumb key={it.id} src={it.board_game_thumbnail} alt={it.board_game_name} className="h-14 w-14" />
+                            ))}
+                          </div>
+                        ) : (
+                          <GameThumb src={g.thumbnail} alt={g.gameName ?? ''} className="h-32 w-32" />
+                        )}
+                        <span className="w-32 truncate text-center text-xs text-ink" title={g.gameName}>
+                          {g.gameName}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
-                <span className="text-xs text-moss/40">nothing yet</span>
+                <span className="mt-12 text-xs text-moss/70">{t('trades.visualMode.noWantsYet')}</span>
               )}
             </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {myWants.map((g) => {
-                const specific = !g.anyTarget && g.copyTargets.length > 0
-                return (
-                  <span
-                    key={g.gameId}
-                    className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700"
-                  >
-                    <span className="max-w-[12rem] truncate">{g.gameName}</span>
-                    <span className={specific ? 'text-blue-500' : 'text-purple-400'}>
-                      ({groupBadge(g)})
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => groupKeys(g).forEach((k) => editor.toggle(listing.id, k, false))}
-                      className="text-purple-400 hover:text-purple-700"
-                      aria-label={`Remove ${g.gameName}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                )
-              })}
-              {myWants.length === 0 && (
-                <span className="text-xs text-moss/70">No wants yet — add the games you'd accept.</span>
-              )}
-            </div>
-
-            {addingFor === listing.id ? (
-              <div className="mt-3">
-                {addable.length > 0 ? (
-                  <>
-                    <p className="mb-1 text-xs text-moss/70">Add a want this item would accept:</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {addable.slice(0, 24).map((g) => (
-                        <button
-                          key={g.gameId}
-                          type="button"
-                          onClick={() => toggleGroup(editor, listing.id, g)}
-                          className="rounded-full border border-ink/15 px-2 py-1 text-xs text-moss hover:border-purple-300 hover:text-purple-700"
-                        >
-                          + {g.gameName}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-moss/70">
-                    Every want is already on this item — use “Browse games” above to add more.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setAddingFor(null)}
-                  className="mt-2 text-xs text-moss/70 hover:text-moss"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setAddingFor(listing.id)}
-                className="mt-3 rounded-xl border border-dashed border-ink/15 px-3 py-1.5 text-xs font-medium text-moss/70 hover:border-purple-300 hover:text-purple-500"
-              >
-                + Add want
-              </button>
-            )}
           </div>
         )
       })}
@@ -1238,13 +1474,16 @@ function VisualMode({ myListings, editor }: VisualModeProps) {
 
 interface GridModeProps {
   slug: string
-  myListings: EventListing[]
+  columns: OfferColumn[]
   editor: Editor
   username?: string
   ratings: Map<number, number>
+  moneyEnabled: boolean
+  combos: Combo[]
 }
 
-function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps) {
+function GridMode({ slug, columns, editor, username, ratings, moneyEnabled, combos }: GridModeProps) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const toggleExpand = (key: string) =>
     setExpanded((prev) => {
@@ -1254,35 +1493,39 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
       return s
     })
 
+  const rows = buildGridRows(editor, combos, columns)
+
   if (editor.targets.length === 0) {
     return (
       <div className="rounded-xl bg-gray-50 px-3 py-6 text-center text-sm text-moss/70">
-        No want targets yet. Add one above, then check the items that would accept it.
+        {t('trades.grid.noTargetsYet')}
       </div>
     )
   }
 
-  const colCount = myListings.length + 1
+  const colCount = columns.length + 1
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-xl border px-2 py-1 text-xs"
+          className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           onClick={() => {
-            for (const g of groupTargetsByGame(editor.targets)) {
+            for (const g of rows) {
               const wantRating = ratings.get(g.gameId)
               if (wantRating == null) continue
-              for (const l of myListings) {
-                const ownRating = ratings.get(l.board_game_id)
+              for (const col of columns) {
+                // Combos are bundles with no single game rating — skip them.
+                if (col.isCombo || col.boardGameId == null) continue
+                const ownRating = ratings.get(col.boardGameId)
                 if (ownRating == null) continue
-                if (ownRating <= wantRating && !groupIsOn(editor, l.id, g)) toggleGroup(editor, l.id, g)
+                if (ownRating <= wantRating && !groupIsOn(editor, col.id, g)) toggleGroup(editor, col.id, g)
               }
             }
           }}
         >
-          Auto-tick by rating (give &le;-rated for &ge;-rated)
+          {t('trades.grid.autoTickButton')}
         </button>
       </div>
     <div className="overflow-auto rounded-xl border border-ink/15 bg-white" style={{ maxHeight: '70vh' }}>
@@ -1290,17 +1533,22 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
         <thead>
           <tr>
             <th className="sticky left-0 top-0 z-30 border-b border-r border-ink/15 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-moss">
-              Want \ My item
+              {t('trades.grid.wantVsMyItemHeader')}
             </th>
-            {myListings.map((l) => (
+            {columns.map((col) => (
               <th
-                key={l.id}
+                key={col.id}
                 className="sticky top-0 z-20 border-b border-r border-ink/15 bg-gray-50 px-1 py-2 align-bottom"
               >
+                {moneyEnabled && !col.isCombo && col.resolvedAsk != null && (
+                  <div className="mb-1 text-center text-[10px] font-semibold text-emerald-700">
+                    ${Number(col.resolvedAsk).toFixed(2)}
+                  </div>
+                )}
                 <div className="mx-auto h-28 w-8">
                   <div className="flex h-full -rotate-180 items-center justify-center [writing-mode:vertical-rl]">
-                    <span className="truncate text-xs font-medium text-moss" title={l.board_game_name}>
-                      {l.board_game_name}
+                    <span className={`truncate text-xs font-medium ${col.isCombo ? 'text-amber-700' : 'text-moss'}`} title={col.name}>
+                      {col.isCombo ? `🎁 ${col.name}` : col.name}
                     </span>
                   </div>
                 </div>
@@ -1309,10 +1557,10 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
           </tr>
         </thead>
         <tbody>
-          {groupTargetsByGame(editor.targets).map((g) => {
+          {rows.map((g) => {
             const gkey = String(g.gameId)
             const isOpen = expanded.has(gkey)
-            const specific = !g.anyTarget && g.copyTargets.length > 0
+            const specific = g.copyTargets.length > 0
             return (
               <Fragment key={gkey}>
                 <tr className="group">
@@ -1322,7 +1570,7 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                         type="button"
                         onClick={() => toggleExpand(gkey)}
                         className="shrink-0 text-moss/70 hover:text-indigo-600"
-                        title="Show the concrete copies this want resolves to"
+                        title={t('trades.grid.showCopiesTitle')}
                         aria-expanded={isOpen}
                       >
                         <svg
@@ -1343,26 +1591,40 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                           specific ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
                         }`}
                       >
-                        {groupBadge(g)}
+                        {groupBadge(t, g)}
                       </span>
                     </span>
+                    {moneyEnabled && g.gameId >= 0 && g.gameId < COMBO_GAME_OFFSET && (
+                      <div className="mt-1 flex items-center gap-1 text-xs">
+                        <span className="text-moss">{t('trades.rating.biddingPriceLabel')}</span>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={editor.priceForGame(g.gameId)}
+                          onChange={(e) => editor.setMoney(g.gameId, e.target.value)}
+                          placeholder={t('trades.pricePlaceholder')}
+                          className="no-spinner w-20 rounded border border-ink/20 px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        />
+                      </div>
+                    )}
                   </th>
-                  {myListings.map((l) => {
-                    const on = groupIsOn(editor, l.id, g)
+                  {columns.map((col) => {
+                    const on = groupIsOn(editor, col.id, g)
                     return (
                       <td
-                        key={l.id}
+                        key={col.id}
                         className="border-b border-r border-ink/15 p-0 text-center group-hover:bg-indigo-50/40"
                       >
                         <button
                           type="button"
-                          onClick={() => toggleGroup(editor, l.id, g)}
+                          onClick={() => toggleGroup(editor, col.id, g)}
                           className={`m-1 h-5 w-5 rounded border ${
                             on
                               ? 'border-ink bg-butter text-ink'
                               : 'border-ink/20 bg-white text-transparent hover:border-indigo-400'
                           }`}
-                          title={`${g.gameName}  ↕  ${l.board_game_name}`}
+                          title={t('trades.grid.cellTitle', { gameName: g.gameName, colName: col.name })}
                           aria-pressed={on}
                         >
                           <svg className="mx-auto h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -1379,10 +1641,10 @@ function GridMode({ slug, myListings, editor, username, ratings }: GridModeProps
                       <div className="text-xs">
                         <span className="px-3 py-1 font-medium text-moss">
                           {specific
-                            ? 'Specific copies you selected (refine in “Browse games” above):'
-                            : "Copies you'd be matched to receive:"}
+                            ? t('trades.grid.specificCopiesLabel')
+                            : t('trades.grid.matchedCopiesLabel')}
                         </span>
-                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} myListings={myListings} selectable />
+                        <GameCopies slug={slug} bggId={g.gameId} username={username} editor={editor} columns={columns} selectable combos={combos} moneyEnabled={moneyEnabled} />
                       </div>
                     </td>
                   </tr>
@@ -1405,7 +1667,7 @@ async function persistChanges(
   slug: string,
   model: PageModel,
   editor: Editor,
-  myListings: EventListing[],
+  columns: OfferColumn[],
   moneyEnabled: boolean
 ): Promise<void> {
   // Per-game prices live on UserGamePrice (one per (user, event, game)) — they
@@ -1413,9 +1675,9 @@ async function persistChanges(
   // each staged price independently of the want lists.
   if (moneyEnabled) {
     for (const [gameId, value] of editor.changedGamePrices) {
-      // Per-game prices are keyed by bgg id; LISTING-only targets that lack a
-      // real bgg id use a negative synthetic id and can't be priced.
-      if (gameId < 0) continue
+      // Per-game prices are keyed by bgg id; LISTING-only targets use a negative
+      // synthetic id and combos use a >= COMBO_GAME_OFFSET id — neither is priceable.
+      if (gameId < 0 || gameId >= COMBO_GAME_OFFSET) continue
       const raw = (value ?? '').trim()
       if (raw === '') {
         await deleteGamePrice(slug, gameId)
@@ -1425,35 +1687,34 @@ async function persistChanges(
     }
   }
 
-  const listingById = new Map(myListings.map((l) => [l.id, l]))
+  const colById = new Map(columns.map((c) => [c.id, c]))
 
-  for (const listingId of editor.changedListingIds) {
-    const listing = listingById.get(listingId)
-    if (!listing) continue
+  for (const colId of editor.changedListingIds) {
+    const col = colById.get(colId)
+    if (!col) continue
 
-    // Desired target set for this listing (apply staged changes over base).
-    const desired = editor.targets.filter((t) => editor.isOn(listingId, t.key))
-    const items: WantGroupItemPayload[] = desired.map((t) => ({
-      target_type: t.type,
-      ...(t.type === 'BOARD_GAME'
-        ? { board_game: t.boardGameId! }
-        : { event_listing: t.listingId! }),
-    }))
+    // Desired target set for this column (apply staged changes over base).
+    const desired = editor.targets.filter((t) => editor.isOn(colId, t.key))
+    const items: WantGroupItemPayload[] = desired.map((t) =>
+      t.comboId != null ? { combo: t.comboId } : { event_listing: t.listingId }
+    )
 
-    let wg = model.wantGroupByListing.get(listingId)
+    let wg = model.wantGroupByCol.get(colId)
 
     if (!wg) {
-      // No 1-to-1 trio yet → create offer group + want group + wish.
-      let og = model.offerGroupByListing.get(listingId)
+      // No 1-to-1 trio yet → create offer group + want group + wish. The offer
+      // group holds this single column: my listing, or my combo (given as a unit).
+      let og = model.offerGroupByCol.get(colId)
       if (!og) {
         og = await createOfferGroupRaw(slug, {
-          name: listing.listing_code,
+          name: col.code,
           max_give: 1,
-          item_listing_ids: [listingId],
+          item_listing_ids: col.isCombo ? [] : [col.listingId!],
+          ...(col.isCombo ? { item_combo_ids: [col.comboId!] } : {}),
         })
       }
       wg = await createWantGroupRaw(slug, {
-        name: `Wants for ${listing.listing_code}`,
+        name: `Wants for ${col.code}`,
         min_receive: 1,
         // Normal want builder always protects against duplicate game awards;
         // the advanced X-to-Y builder leaves this off.
@@ -1471,10 +1732,13 @@ async function persistChanges(
 // MAIN PAGE
 // ============================================================
 
-type ViewMode = 'almanac' | 'visual' | 'grid'
+type ViewMode = 'catalog' | 'visual' | 'grid'
 
 export default function MyWantsPage() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
+  const navigate = useNavigate()
+  const [confirmAdvanced, setConfirmAdvanced] = useState(false)
   const { user } = useAuthStore()
   const qc = useQueryClient()
 
@@ -1483,6 +1747,8 @@ export default function MyWantsPage() {
   const { data: offerGroups = [] } = useOfferGroups(slug)
   const { data: wantGroups = [] } = useWantGroups(slug)
   const { data: wishes = [] } = useWishes(slug)
+  const { data: combosData } = useCombos(slug)
+  const combos = useMemo(() => combosData?.results ?? [], [combosData])
   // Per-game prices (UserGamePrice) — the source of truth for each game's price.
   const { data: gamePrices = [] } = useQuery({
     queryKey: ['trades', 'game-prices', slug ?? ''],
@@ -1493,50 +1759,67 @@ export default function MyWantsPage() {
 
   const myListings = useMemo(() => listingsData?.results ?? [], [listingsData])
 
+  // Offered items = my listings + my own combos (each a grid/catalog column).
+  const columns = useMemo<OfferColumn[]>(() => {
+    const myCombos = combos.filter((c) => c.owner_username === user?.username)
+    return [...myListings.map(listingColumn), ...myCombos.map(comboColumn)]
+  }, [myListings, combos, user?.username])
+
   const model = useMemo(
-    () => buildModel(myListings, offerGroups, wantGroups, wishes, gamePrices),
-    [myListings, offerGroups, wantGroups, wishes, gamePrices]
+    () => buildModel(columns, offerGroups, wantGroups, wishes, gamePrices),
+    [columns, offerGroups, wantGroups, wishes, gamePrices]
   )
 
   const customWantGroups = useMemo(() => {
-    const autoIds = new Set([...model.wantGroupByListing.values()].map((wg) => wg.id))
+    const autoIds = new Set([...model.wantGroupByCol.values()].map((wg) => wg.id))
     return wantGroups.filter((wg) => !autoIds.has(wg.id))
-  }, [wantGroups, model.wantGroupByListing])
+  }, [wantGroups, model.wantGroupByCol])
 
   const { editor } = useEditor(model)
   const wantGameCount = useMemo(
-    () => new Set(editor.targets.map((t) => t.gameId)).size,
+    () => new Set(editor.targets.map((target) => target.gameId)).size,
     [editor.targets]
   )
 
   const { data: ratingsData = [] } = useMyRatings()
   const rmap = useMemo(() => ratingMap(ratingsData), [ratingsData])
 
-  const [view, setView] = useState<ViewMode>('almanac')
+  const [view, setView] = useState<ViewMode>('catalog')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const handleSave = useCallback(async () => {
     if (!slug) return
-    setSaving(true)
     setSaveError(null)
+    for (const [, value] of editor.changedGamePrices) {
+      const raw = (value ?? '').trim()
+      if (raw !== '' && Number(raw) <= 0) {
+        setSaveError(t('trades.errors.priceMustBePositive'))
+        return
+      }
+    }
+    setSaving(true)
     try {
-      await persistChanges(slug, model, editor, myListings, event?.money_enabled ?? false)
-      invalidateTrades(qc, slug)
-      qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })
+      await persistChanges(slug, model, editor, columns, event?.money_enabled ?? false)
+      // Wait for the refetched server truth to land BEFORE clearing local staged
+      // changes, otherwise the UI briefly falls back to stale cache (the flash).
+      await Promise.all([
+        invalidateTrades(qc, slug),
+        qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] }),
+      ])
       editor.reset()
     } catch (err) {
       setSaveError(
-        err instanceof Error ? err.message : 'Failed to save. Please try again.'
+        err instanceof Error ? err.message : t('trades.errors.saveFailed')
       )
     } finally {
       setSaving(false)
     }
-  }, [slug, model, editor, myListings, qc, event?.money_enabled])
+  }, [slug, model, editor, columns, qc, event?.money_enabled, t])
 
   if (eventLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4 px-4 py-8 sm:px-6 animate-pulse">
+      <div className="mx-auto max-w-7xl space-y-4 px-4 py-8 sm:px-6 animate-pulse">
         <div className="h-8 w-2/3 rounded bg-gray-100" />
         <div className="h-64 rounded-xl bg-gray-100" />
       </div>
@@ -1545,12 +1828,10 @@ export default function MyWantsPage() {
 
   if (eventError || !event) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <p className="text-sm font-medium text-red-700">{t('trades.notFoundError')}</p>
+          <BackButton to="/events" className="mt-3">{t('trades.backToEvents')}</BackButton>
         </div>
       </div>
     )
@@ -1558,13 +1839,13 @@ export default function MyWantsPage() {
 
   if (!event.is_participant && !event.is_organizer) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
         <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-yellow-700">
-            You must join this event before building your want list.
+            {t('trades.mustJoinToBuild')}
           </p>
           <Link to={`/events/${slug}`} className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Go to event page to join
+            {t('trades.goToEventToJoin')}
           </Link>
         </div>
       </div>
@@ -1572,56 +1853,61 @@ export default function MyWantsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 px-4 py-8 sm:px-6">
-      <Link
-        to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-moss/70 transition-colors hover:text-indigo-600"
-      >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to {event.name}
-      </Link>
+    <div className="mx-auto max-w-7xl space-y-5 px-4 py-8 sm:px-6">
+      {confirmAdvanced && (
+        <ConfirmDialog
+          title={t('trades.myWants.confirmAdvancedTitle')}
+          body={t('trades.myWants.confirmAdvancedBody')}
+          confirmLabel={t('trades.myWants.confirmAdvancedButton')}
+          onConfirm={() => {
+            setConfirmAdvanced(false)
+            navigate(`/events/${slug}/builder`)
+          }}
+          onCancel={() => setConfirmAdvanced(false)}
+        />
+      )}
+      <BackButton to={`/events/${slug}`}>{t('trades.backToEvent', { name: event.name })}</BackButton>
 
       <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-ink">My Wants</h1>
+            <h1 className="text-xl font-bold text-ink">{t('trades.myWants.pageTitle')}</h1>
             <p className="mt-1 text-sm text-moss">
               {event.name}
               <span className="mx-2 text-moss/40">·</span>
-              For each item you offer, pick the games you'd accept in return.
+              {t('trades.myWants.pageSubtitle')}
             </p>
           </div>
-          <Link
-            to={`/events/${slug}/builder`}
-            className="text-xs text-moss/70 underline hover:text-indigo-600"
+          <button
+            type="button"
+            onClick={() => setConfirmAdvanced(true)}
+            className="rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
-            Advanced (X-to-Y) builder
-          </Link>
+            {t('trades.myWants.advancedBuilderButton')}
+          </button>
         </div>
       </div>
 
       {event.inputs_locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          This event is locked for matching — want lists can no longer be edited.
+          {t('trades.lockedBanner')}
         </div>
       )}
 
       {myListings.length === 0 ? (
         <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
-          You have no items in this event yet.{' '}
+          {t('trades.myWants.noItemsPrefix')}{' '}
           <Link to={`/events/${slug}`} className="font-medium underline">
-            Add copies from the event page
+            {t('trades.myWants.addCopiesLinkShort')}
           </Link>{' '}
-          first.
+          {t('trades.myWants.noItemsSuffix')}
         </div>
       ) : (
         <>
           {/* Mode tabs */}
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex rounded-2xl border border-ink/15 bg-white p-0.5">
-              {(['almanac', 'visual', 'grid'] as ViewMode[]).map((m) => (
+              {(['catalog', 'visual', 'grid'] as ViewMode[]).map((m) => (
                 <button
                   key={m}
                   onClick={() => setView(m)}
@@ -1629,30 +1915,32 @@ export default function MyWantsPage() {
                     view === m ? 'bg-butter text-ink shadow-pop-sm' : 'text-moss hover:text-ink'
                   }`}
                 >
-                  {m}
+                  {t(`trades.myWants.viewMode.${m}`)}
                 </button>
               ))}
             </div>
             <p className="text-xs text-moss/70">
-              {myListings.length} item{myListings.length !== 1 ? 's' : ''} · {wantGameCount} game
-              {wantGameCount !== 1 ? 's' : ''} wanted
+              {t('trades.itemsCount', { count: myListings.length })} · {t('trades.gamesWantedCount', { count: wantGameCount })}
             </p>
           </div>
 
-          {view === 'almanac' && (
-            <GameBrowse
-              slug={slug!}
-              editor={editor}
-              myListings={myListings}
-              username={user?.username}
-              customWantGroups={customWantGroups}
-              moneyEnabled={event.money_enabled}
-            />
-          )}
-          {view === 'visual' && <VisualMode myListings={myListings} editor={editor} />}
-          {view === 'grid' && (
-            <GridMode slug={slug!} myListings={myListings} editor={editor} username={user?.username} ratings={rmap} />
-          )}
+          <div className={event.inputs_locked ? 'pointer-events-none opacity-60' : undefined}>
+            {view === 'catalog' && (
+              <GameBrowse
+                slug={slug!}
+                editor={editor}
+                columns={columns}
+                username={user?.username}
+                customWantGroups={customWantGroups}
+                moneyEnabled={event.money_enabled}
+                combos={combos}
+              />
+            )}
+            {view === 'visual' && <VisualMode columns={columns} editor={editor} combos={combos} />}
+            {view === 'grid' && (
+              <GridMode slug={slug!} columns={columns} editor={editor} username={user?.username} ratings={rmap} moneyEnabled={event.money_enabled} combos={combos} />
+            )}
+          </div>
         </>
       )}
 
@@ -1660,7 +1948,7 @@ export default function MyWantsPage() {
       {editor.dirtyCount > 0 && !event.inputs_locked && (
         <div className="sticky bottom-4 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full border border-ink/20 bg-white px-5 py-2.5 shadow-lg">
           <span className="text-sm text-moss">
-            {editor.dirtyCount} unsaved change{editor.dirtyCount !== 1 ? 's' : ''}
+            {t('trades.unsavedChangesCount', { count: editor.dirtyCount })}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -1668,14 +1956,14 @@ export default function MyWantsPage() {
               disabled={saving}
               className="rounded-full px-3 py-1.5 text-sm text-moss hover:text-ink disabled:opacity-50"
             >
-              Discard
+              {t('trades.discard')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="rounded-full border-2 border-ink bg-butter px-5 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('trades.saving') : t('common.save')}
             </button>
           </div>
         </div>

@@ -10,12 +10,12 @@ individual user copies grouped underneath.
 
 ## Tech stack
 
-**Backend** — Django 5.2 + Django REST Framework, dj-rest-auth + django-allauth
+**Backend**: Django 5.2 + Django REST Framework, dj-rest-auth + django-allauth
 (token auth, OAuth-ready), django-filter, drf-spectacular (OpenAPI 3), Celery
 (eager mode without a broker), Channels-ready for WebSocket push. SQLite for v1,
 swappable to Postgres via settings.
 
-**Frontend** — React 18 + Vite + TypeScript, Tailwind CSS, React Router v6,
+**Frontend**: React 18 + Vite + TypeScript, Tailwind CSS, React Router v6,
 TanStack Query, axios, @dnd-kit (drag-and-drop want-list builder),
 react-hook-form + zod, zustand.
 
@@ -45,9 +45,29 @@ Run the tests:
 python manage.py test
 ```
 
+### Google Sign-In (optional)
+
+"Sign in with Google" uses the Google Identity Services ID-token flow. To enable it,
+create an OAuth client (Google Cloud Console) whose **Authorized JavaScript origin**
+is `http://localhost:5173`, then set:
+
+```bash
+# Backend (environment)
+export GOOGLE_OAUTH_CLIENT_ID=<your-client-id>
+export GOOGLE_OAUTH_CLIENT_SECRET=<your-client-secret>
+```
+
+```bash
+# Frontend: frontend/.env (gitignored; client ID is public)
+VITE_GOOGLE_CLIENT_ID=<your-client-id>
+```
+
+The button is hidden until `VITE_GOOGLE_CLIENT_ID` is set; password login works
+without any of this.
+
 ### Database
 
-By default the backend uses SQLite — no setup required. To run Postgres locally
+By default the backend uses SQLite, no setup required. To run Postgres locally
 (matches production):
 
 ```bash

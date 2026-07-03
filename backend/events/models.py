@@ -23,8 +23,11 @@ Notes:
     - slug is auto-generated from name on create (not on update).
 """
 
+import base64
+import os
+
 from django.conf import settings
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils.text import slugify
 
 
@@ -44,6 +47,7 @@ ALLOWED_TRANSITIONS: dict[str, list[str]] = {
 }
 
 WANTLIST_LOCKED_STATUSES = {"MATCHING", "MATCH_REVIEW", "FINALIZATION", "SHIPPING", "ARCHIVED"}
+SUBMISSIONS_LOCKED_STATUSES = {"WANTLIST_OPEN"} | WANTLIST_LOCKED_STATUSES
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +100,10 @@ class TradeEvent(models.Model):
     max_distance_km       = models.PositiveIntegerField(null=True, blank=True)
     trade_policies        = models.TextField(blank=True)
 
+    # Cover image (URL only; no binary upload) + cached reverse-geocoded center name.
+    image_url    = models.CharField(max_length=500, blank=True, default="")
+    center_place = models.CharField(max_length=255, blank=True, default="")
+
     # Solver configuration
     algorithm_settings = models.JSONField(default=dict)
 
@@ -145,6 +153,11 @@ class TradeEvent(models.Model):
     def inputs_locked(self) -> bool:
         """True once matching has begun — wants and listings are read-only."""
         return self.status in WANTLIST_LOCKED_STATUSES
+
+    @property
+    def submissions_locked(self) -> bool:
+        """True once want-lists open — listings and combos are read-only."""
+        return self.status in SUBMISSIONS_LOCKED_STATUSES
 
 
 # ---------------------------------------------------------------------------
@@ -212,3 +225,80 @@ class EventListing(models.Model):
 
     def __str__(self):
         return f"EventListing({self.copy.listing_code} @ {self.event.slug})"
+
+
+# ---------------------------------------------------------------------------
+# Combo — a bundle of >=2 of a user's own EventListings, traded as one unit
+# ---------------------------------------------------------------------------
+
+COMBO_CODE_RETRIES = 10
+
+
+def _generate_combo_code():
+    """Generate "K-XXXXXX": 6 random uppercase base32 chars. Mirrors
+    Copy.listing_code but with a "K-" prefix so combo tokens never collide
+    with copies' "C-"."""
+    raw = os.urandom(4)
+    encoded = base64.b32encode(raw).decode("ascii")
+    chars = encoded.rstrip("=")[:6]
+    return f"K-{chars}"
+
+
+class Combo(models.Model):
+    """A user-defined bundle of their own EventListings in one event."""
+
+    event = models.ForeignKey(
+        TradeEvent, on_delete=models.CASCADE, related_name="combos"
+    )
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="combos"
+    )
+    name = models.CharField(max_length=120)
+    combo_code = models.CharField(max_length=12, unique=True, db_index=True)
+    active = models.BooleanField(default=True)
+    # Bundle cash ask; null => barter-only (no per-game fallback — a combo has
+    # no single game).
+    sell_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created"]
+
+    def save(self, *args, **kwargs):
+        if not self.combo_code:
+            for _ in range(COMBO_CODE_RETRIES):
+                code = _generate_combo_code()
+                if not Combo.objects.filter(combo_code=code).exists():
+                    self.combo_code = code
+                    break
+            else:
+                raise IntegrityError(
+                    "Could not generate a unique combo_code after "
+                    f"{COMBO_CODE_RETRIES} attempts."
+                )
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Combo({self.combo_code}, {self.name!r}, event={self.event.slug})"
+
+
+class ComboItem(models.Model):
+    """One EventListing member of a Combo."""
+
+    combo = models.ForeignKey(
+        Combo, on_delete=models.CASCADE, related_name="items"
+    )
+    event_listing = models.ForeignKey(
+        EventListing, on_delete=models.CASCADE, related_name="combo_memberships"
+    )
+
+    class Meta:
+        unique_together = [("combo", "event_listing")]
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"ComboItem(combo={self.combo_id}, listing={self.event_listing_id})"

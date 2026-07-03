@@ -36,22 +36,11 @@ class ThumbnailFieldTests(MatchingTestBase):
         data = ShipmentSerializer(s, context={"request": req}).data
         self.assertEqual(data["board_game_thumbnail"], "")
 
-    def test_want_group_item_thumbnail_board_game(self):
-        from trades.serializers import WantGroupItemSerializer
-        wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg")
-        item = WantGroupItem.objects.create(
-            want_group=wg, target_type=WantGroupItem.TargetType.BOARD_GAME,
-            board_game=self.game_brass,
-        )
-        data = WantGroupItemSerializer(item).data
-        self.assertEqual(data["board_game_thumbnail"], "https://img/brass.jpg")
-
     def test_want_group_item_thumbnail_listing(self):
         from trades.serializers import WantGroupItemSerializer
         wg = WantGroup.objects.create(event=self.event, user=self.user_a, name="wg2")
         item = WantGroupItem.objects.create(
-            want_group=wg, target_type=WantGroupItem.TargetType.LISTING,
-            event_listing=self.el_a1,
+            want_group=wg, event_listing=self.el_a1,
         )
         data = WantGroupItemSerializer(item).data
         self.assertEqual(data["board_game_thumbnail"], "https://img/brass.jpg")

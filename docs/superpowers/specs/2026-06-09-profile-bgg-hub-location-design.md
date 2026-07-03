@@ -5,7 +5,7 @@
 **Area:** Profile page (`frontend/src/features/profile/ProfilePage.tsx`) + `accounts` backend (`geo.py`, `views.py`, `urls.py`).
 
 Second of three specs from a larger QOL request. **Spec A** (event page) is done.
-**Spec C** (almanac tab + enriched dropdown) follows. Coupling: **B before C** —
+**Spec C** (catalog tab + enriched dropdown) follows. Coupling: **B before C** —
 Profile must host the BGG buttons before C strips them from My Wants.
 
 ## Problem
@@ -23,7 +23,7 @@ Profile must host the BGG buttons before C strips them from My Wants.
 
 - Ratings tab is **review-only**: list + client-side filter of ratings you've
   already set, plus the BGG ratings-import button. No inline editing, no global
-  catalog search. (Setting ratings happens via BGG import and, later, the almanac in
+  catalog search. (Setting ratings happens via BGG import and, later, the catalog in
   Spec C.)
 - **No buy-price in the Profile.** Buy-price is per-event (lives on `WantGroupItem`);
   it is not shown or aggregated here. Ratings are global and shown as-is.

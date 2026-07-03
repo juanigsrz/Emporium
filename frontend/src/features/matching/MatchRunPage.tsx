@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, Link } from 'react-router-dom'
+import BackButton from '../../components/BackButton'
 import { useEvent } from '../../api/events'
 import type { EventStatus } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
@@ -12,7 +14,7 @@ import {
   useUploadSolution,
   fetchWantsExport,
 } from '../../api/matching'
-import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
+import type { MatchRunListItem, MatchRunDetail, TradeAssignment } from '../../api/matching'
 import { useShipments, useUpdateShipment } from '../../api/shipping'
 import { ShippingOverviewTab } from './ShippingOverviewTab'
 import type { Shipment } from '../../api/shipping'
@@ -34,7 +36,7 @@ function formatDate(iso: string | null): string {
   })
 }
 
-function extractErrorMsg(err: unknown): string {
+function extractErrorMsg(err: unknown): string | null {
   if (err && typeof err === 'object' && 'response' in err) {
     const resp = (err as { response?: { data?: unknown } }).response
     const data = resp?.data
@@ -47,7 +49,7 @@ function extractErrorMsg(err: unknown): string {
     }
     if (typeof data === 'string') return data
   }
-  return 'An unexpected error occurred.'
+  return null
 }
 
 // ---- Status pill ----
@@ -62,6 +64,7 @@ const STATUS_PILL: Record<RunStatus, string> = {
 }
 
 function StatusPill({ status }: { status: RunStatus }) {
+  const { t } = useTranslation()
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_PILL[status]}`}
@@ -69,7 +72,7 @@ function StatusPill({ status }: { status: RunStatus }) {
       {status === 'RUNNING' && (
         <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
       )}
-      {status}
+      {t('matching.runStatus.' + status, { defaultValue: status })}
     </span>
   )
 }
@@ -85,6 +88,7 @@ function RunListItem({
   selected: boolean
   onSelect: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onSelect}
@@ -104,9 +108,9 @@ function RunListItem({
       </div>
       {run.summary && run.status === 'DONE' && (
         <div className="mt-1.5 flex items-center gap-3 text-xs text-moss">
-          <span>{run.summary.cycles} cycle{run.summary.cycles !== 1 ? 's' : ''}</span>
-          <span>{run.summary.matched_wishes} matched</span>
-          <span>{run.summary.unmatched} unmatched</span>
+          <span>{t('matching.run.cyclesCount', { count: run.summary.cycles })}</span>
+          <span>{t('matching.run.matched', { count: run.summary.matched_wishes })}</span>
+          <span>{t('matching.run.unmatched', { count: run.summary.unmatched })}</span>
         </div>
       )}
     </button>
@@ -116,6 +120,7 @@ function RunListItem({
 // ---- Trigger button (organizer only, MATCHING state only) ----
 
 function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (id: number) => void }) {
+  const { t } = useTranslation()
   const trigger = useTriggerMatchRun()
   const [error, setError] = useState<string | null>(null)
 
@@ -125,7 +130,7 @@ function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (i
       const run = await trigger.mutateAsync(slug)
       onTriggered(run.id)
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -136,7 +141,7 @@ function TriggerRunButton({ slug, onTriggered }: { slug: string; onTriggered: (i
         disabled={trigger.isPending}
         className="rounded-2xl border-2 border-ink bg-violet-400 px-4 py-2 text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
       >
-        {trigger.isPending ? 'Triggering…' : 'Run matching'}
+        {trigger.isPending ? t('matching.run.triggering') : t('matching.run.trigger')}
       </button>
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
     </div>
@@ -149,19 +154,19 @@ type ObjectiveKey = 'trades' | 'users' | 'distance'
 
 interface ObjectiveRow {
   key: ObjectiveKey
-  label: string
   checked: boolean
 }
 
 // Default: only 'trades' on (matches solver default; distance off => no locations
 // emitted until opted in). List order = solver priority (topmost optimized first).
 const DEFAULT_OBJECTIVES: ObjectiveRow[] = [
-  { key: 'trades', label: 'Trades', checked: true },
-  { key: 'users', label: 'Users', checked: false },
-  { key: 'distance', label: 'Distance', checked: false },
+  { key: 'trades', checked: true },
+  { key: 'users', checked: false },
+  { key: 'distance', checked: false },
 ]
 
 function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: number) => void }) {
+  const { t } = useTranslation()
   const upload = useUploadSolution()
   const [output, setOutput] = useState('')
   const [open, setOpen] = useState(false)
@@ -191,16 +196,16 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
     setDownloading(true)
     try {
       const text = await fetchWantsExport(slug, kpi)
-      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${slug}-wants.txt`
+      a.download = `${slug}-wants.json`
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     } finally {
       setDownloading(false)
     }
@@ -214,7 +219,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
   async function handleUpload() {
     setError(null)
     if (!output.trim()) {
-      setError('Paste or load the solver output first.')
+      setError(t('matching.run.pasteOutputFirst'))
       return
     }
     try {
@@ -223,7 +228,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
       setOutput('')
       setOpen(false)
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -231,53 +236,56 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
     <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 space-y-2 w-full sm:w-80">
       <div className="space-y-1">
         <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
-          Objectives (priority order)
+          {t('matching.run.objectivesHeading')}
         </p>
-        {objectives.map((o, i) => (
-          <div key={o.key} className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={o.checked}
-              onChange={() => toggleObjective(i)}
-              className="rounded border-ink/30 text-violet-500 focus:ring-violet-500"
-            />
-            <span className="w-5 text-xs text-violet-600">{i + 1}.</span>
-            <span className="flex-1">{o.label}</span>
-            <button
-              type="button"
-              onClick={() => moveObjective(i, -1)}
-              disabled={i === 0}
-              aria-label={`Move ${o.label} up`}
-              className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              onClick={() => moveObjective(i, 1)}
-              disabled={i === objectives.length - 1}
-              aria-label={`Move ${o.label} down`}
-              className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
-            >
-              ↓
-            </button>
-          </div>
-        ))}
+        {objectives.map((o, i) => {
+          const label = t(`matching.run.objectives.${o.key}`)
+          return (
+            <div key={o.key} className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={o.checked}
+                onChange={() => toggleObjective(i)}
+                className="rounded border-ink/30 text-violet-500 focus:ring-violet-500"
+              />
+              <span className="w-5 text-xs text-violet-600">{i + 1}.</span>
+              <span className="flex-1">{label}</span>
+              <button
+                type="button"
+                onClick={() => moveObjective(i, -1)}
+                disabled={i === 0}
+                aria-label={t('matching.run.moveUp', { label })}
+                className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => moveObjective(i, 1)}
+                disabled={i === objectives.length - 1}
+                aria-label={t('matching.run.moveDown', { label })}
+                className="px-1.5 text-violet-600 disabled:opacity-30 hover:text-violet-800"
+              >
+                ↓
+              </button>
+            </div>
+          )
+        })}
       </div>
       <button
         onClick={handleDownload}
         disabled={downloading || kpi.length === 0}
         className="w-full rounded-2xl border-2 border-ink bg-violet-400 px-4 py-2 text-sm font-bold text-white shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
       >
-        {downloading ? 'Preparing…' : 'Download wants.txt'}
+        {downloading ? t('matching.run.preparing') : t('matching.run.downloadWants')}
       </button>
       {kpi.length === 0 ? (
-        <p className="text-xs text-red-600">Select at least one objective.</p>
+        <p className="text-xs text-red-600">{t('matching.run.selectAtLeastOneObjective')}</p>
       ) : (
         <p className="text-xs text-violet-600">
-          Objectives: <code className="font-mono">--kpi {kpi.join(',')}</code>
+          {t('matching.run.objectivesLabel')} <code className="font-mono">--kpi {kpi.join(',')}</code>
           <br />
-          Pass this flag when running the solver locally (Gurobi), then upload its output.
+          {t('matching.run.objectivesHint')}
         </p>
       )}
       {open ? (
@@ -285,7 +293,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
           <textarea
             value={output}
             onChange={(e) => setOutput(e.target.value)}
-            placeholder="Paste solver output…"
+            placeholder={t('matching.run.pasteOutputPlaceholder')}
             rows={4}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
@@ -300,14 +308,14 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
               onClick={() => { setOpen(false); setError(null) }}
               className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleUpload}
               disabled={upload.isPending}
               className="flex-1 rounded-xl border-2 border-ink bg-violet-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {upload.isPending ? 'Uploading…' : 'Upload solution'}
+              {upload.isPending ? t('matching.run.uploading') : t('matching.run.uploadSolution')}
             </button>
           </div>
         </div>
@@ -316,7 +324,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
           onClick={() => setOpen(true)}
           className="w-full rounded-xl border border-violet-300 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
         >
-          Upload solution…
+          {t('matching.run.uploadSolutionPrompt')}
         </button>
       )}
       {error && <p className="text-xs text-red-600">{error}</p>}
@@ -327,6 +335,7 @@ function XToYSolvePanel({ slug, onUploaded }: { slug: string; onUploaded: (id: n
 // ---- Live run status / log view ----
 
 function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
+  const { t } = useTranslation()
   const { data: run } = useMatchRun(slug, runId)
 
   if (!run) {
@@ -341,37 +350,37 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
   return (
     <div className="rounded-xl border border-ink/15 bg-white p-5 space-y-3">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-semibold text-ink">Run #{run.id}</span>
+        <span className="text-sm font-semibold text-ink">{t('matching.run.runNumber', { id: run.id })}</span>
         <StatusPill status={run.status} />
         {run.status === 'PENDING' || run.status === 'RUNNING' ? (
-          <span className="text-xs text-moss/70 animate-pulse">Polling every 2s…</span>
+          <span className="text-xs text-moss/70 animate-pulse">{t('matching.run.pollingEvery2s')}</span>
         ) : null}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-moss">
         <div>
-          <p className="font-medium text-ink mb-0.5">Algorithm</p>
+          <p className="font-medium text-ink mb-0.5">{t('matching.run.algorithm')}</p>
           <p>{run.algorithm}</p>
         </div>
         <div>
-          <p className="font-medium text-ink mb-0.5">Started</p>
+          <p className="font-medium text-ink mb-0.5">{t('matching.run.started')}</p>
           <p>{formatDate(run.started_at)}</p>
         </div>
         <div>
-          <p className="font-medium text-ink mb-0.5">Finished</p>
+          <p className="font-medium text-ink mb-0.5">{t('matching.run.finished')}</p>
           <p>{formatDate(run.finished_at)}</p>
         </div>
         {run.summary && (
           <div>
-            <p className="font-medium text-ink mb-0.5">Summary</p>
-            <p>{run.summary.cycles} cycles · {run.summary.matched_wishes} matched</p>
+            <p className="font-medium text-ink mb-0.5">{t('matching.run.summary')}</p>
+            <p>{t('matching.run.cyclesCount', { count: run.summary.cycles })} · {t('matching.run.matched', { count: run.summary.matched_wishes })}</p>
           </div>
         )}
       </div>
 
       {run.log && (
         <div>
-          <p className="text-xs font-semibold text-moss uppercase tracking-wide mb-1.5">Log</p>
+          <p className="text-xs font-semibold text-moss uppercase tracking-wide mb-1.5">{t('matching.run.log')}</p>
           <pre className="rounded-xl bg-gray-950 text-gray-200 text-xs p-3 overflow-x-auto whitespace-pre-wrap max-h-56 font-mono leading-relaxed">
             {run.log}
           </pre>
@@ -380,7 +389,7 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 
       {run.status === 'FAILED' && (
         <p className="text-sm text-red-600 font-medium">
-          This run failed. Check the log above for details.
+          {t('matching.run.failedMessage')}
         </p>
       )}
     </div>
@@ -396,6 +405,7 @@ function MyTradesSection({
   assignments: TradeAssignment[]
   currentUsername: string
 }) {
+  const { t } = useTranslation()
   const giveList = assignments.filter((a) => a.giver_username === currentUsername)
   const receiveList = assignments.filter((a) => a.receiver_username === currentUsername)
 
@@ -404,10 +414,10 @@ function MyTradesSection({
       {/* Giving group */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
-          Giving ({giveList.length})
+          {t('matching.trades.giving', { count: giveList.length })}
         </p>
         {giveList.length === 0 ? (
-          <p className="text-sm text-moss/70">You are not giving anything in this run.</p>
+          <p className="text-sm text-moss/70">{t('matching.trades.noGiving')}</p>
         ) : (
           giveList.map((a) => (
             <div
@@ -421,11 +431,11 @@ function MyTradesSection({
               </div>
               <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">You give</p>
+                <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youGive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
                 <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
                 <p className="text-xs text-moss mt-0.5">
-                  to{' '}
+                  {t('matching.trades.to')}{' '}
                   <Link
                     to={`/u/${a.receiver_username}`}
                     className="text-indigo-500 hover:underline font-medium"
@@ -442,10 +452,10 @@ function MyTradesSection({
       {/* Receiving group */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-          Receiving ({receiveList.length})
+          {t('matching.trades.receiving', { count: receiveList.length })}
         </p>
         {receiveList.length === 0 ? (
-          <p className="text-sm text-moss/70">You are not receiving anything in this run.</p>
+          <p className="text-sm text-moss/70">{t('matching.trades.noReceiving')}</p>
         ) : (
           receiveList.map((a) => (
             <div
@@ -459,11 +469,11 @@ function MyTradesSection({
               </div>
               <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">You receive</p>
+                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youReceive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
                 <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
                 <p className="text-xs text-moss mt-0.5">
-                  from{' '}
+                  {t('matching.trades.from')}{' '}
                   <Link
                     to={`/u/${a.giver_username}`}
                     className="text-indigo-500 hover:underline font-medium"
@@ -479,29 +489,32 @@ function MyTradesSection({
 
       {/* Payments — item-level breakdown + net balance (the "why"). Actionable payments live in the Shipping & Payments tab. */}
       {(() => {
+        // Only CASH legs move money; barter is free. cash_amount is null on barter
+        // legs (item_value carries the game's ask even there), so filter and sum on
+        // cash_amount to keep the net in actual money owed.
         const bought = assignments.filter(
-          (a) => a.item_value != null && a.receiver_username === currentUsername
+          (a) => a.cash_amount != null && a.receiver_username === currentUsername
         )
         const sold = assignments.filter(
-          (a) => a.item_value != null && a.giver_username === currentUsername
+          (a) => a.cash_amount != null && a.giver_username === currentUsername
         )
         if (bought.length === 0 && sold.length === 0) return null
 
-        const boughtTotal = bought.reduce((s, a) => s + Number(a.item_value), 0)
-        const soldTotal = sold.reduce((s, a) => s + Number(a.item_value), 0)
+        const boughtTotal = bought.reduce((s, a) => s + Number(a.cash_amount), 0)
+        const soldTotal = sold.reduce((s, a) => s + Number(a.cash_amount), 0)
         const net = boughtTotal - soldTotal // > 0 => you owe
 
         return (
           <div className="space-y-2">
             <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
-              Payments
+              {t('matching.trades.paymentsHeading')}
             </p>
 
             {bought.map((a) => (
               <div key={`buy-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
                 <p className="text-sm text-ink">
-                  You bought <span className="font-semibold">{a.board_game_name}</span> for{' '}
-                  <span className="font-semibold">${a.item_value}</span> from{' '}
+                  {t('matching.trades.youBought')} <span className="font-semibold">{a.board_game_name}</span> {t('matching.trades.forPrice')}{' '}
+                  <span className="font-semibold">${a.cash_amount}</span> {t('matching.trades.from')}{' '}
                   <Link to={`/u/${a.giver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.giver_username}
                   </Link>
@@ -513,8 +526,8 @@ function MyTradesSection({
             {sold.map((a) => (
               <div key={`sell-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
                 <p className="text-sm text-ink">
-                  You sold <span className="font-semibold">{a.board_game_name}</span> for{' '}
-                  <span className="font-semibold">${a.item_value}</span> to{' '}
+                  {t('matching.trades.youSold')} <span className="font-semibold">{a.board_game_name}</span> {t('matching.trades.forPrice')}{' '}
+                  <span className="font-semibold">${a.cash_amount}</span> {t('matching.trades.to')}{' '}
                   <Link to={`/u/${a.receiver_username}`} className="font-semibold text-indigo-500 hover:underline">
                     {a.receiver_username}
                   </Link>
@@ -526,11 +539,11 @@ function MyTradesSection({
             {/* Net balance — the "why" */}
             <div className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
               {net > 0 ? (
-                <span>Net balance: <strong className="text-red-700">you owe ${net.toFixed(2)}</strong></span>
+                <span>{t('matching.trades.netBalancePrefix')} <strong className="text-red-700">{t('matching.money.youOwe', { amount: net.toFixed(2) })}</strong></span>
               ) : net < 0 ? (
-                <span>Net balance: <strong className="text-emerald-700">you're owed ${(-net).toFixed(2)}</strong></span>
+                <span>{t('matching.trades.netBalancePrefix')} <strong className="text-emerald-700">{t('matching.money.youAreOwed', { amount: (-net).toFixed(2) })}</strong></span>
               ) : (
-                <span>Net balance: <strong>even</strong></span>
+                <span>{t('matching.trades.netBalancePrefix')} <strong>{t('matching.money.even')}</strong></span>
               )}
             </div>
 
@@ -541,228 +554,24 @@ function MyTradesSection({
   )
 }
 
-// ---- Cycle visualization ----
-
-/**
- * Renders a single trade cycle as an SVG ring diagram.
- * Nodes = users, directed arrows = listing moving from_user -> to_user.
- * On narrow screens (<= 480px effective width), falls back to a stacked list.
- */
-function CycleDiagram({ cycle }: { cycle: Cycle }) {
-  const n = cycle.steps.length
-  if (n === 0) return null
-
-  // Stacked (mobile) fallback rendered for all sizes < a threshold;
-  // SVG ring for wider. We use a CSS media-query via className and render both,
-  // toggling visibility, so no JS window.innerWidth needed.
-
-  const nodes = cycle.steps.map((s) => s.from_user)
-  const radius = Math.max(70, Math.min(120, 30 * n))
-  const cx = radius + 40
-  const cy = radius + 40
-  const svgSize = (radius + 40) * 2
-
-  // Compute positions on a circle
-  const positions = nodes.map((_, i) => {
-    const angle = (2 * Math.PI * i) / n - Math.PI / 2
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    }
-  })
-
-  const nodeR = 22
-
-  return (
-    <div>
-      {/* SVG diagram — hidden on very narrow screens */}
-      <div className="hidden xs:block overflow-x-auto">
-        <svg
-          width={svgSize}
-          height={svgSize}
-          viewBox={`0 0 ${svgSize} ${svgSize}`}
-          className="mx-auto"
-          aria-label={`Trade cycle with ${n} steps`}
-        >
-          <defs>
-            <marker
-              id={`arrow-${cycle.id}`}
-              markerWidth="8"
-              markerHeight="8"
-              refX="6"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L0,6 L8,3 z" className="fill-indigo-400" />
-            </marker>
-          </defs>
-
-          {/* Edges */}
-          {cycle.steps.map((step, i) => {
-            const from = positions[i]
-            const to = positions[(i + 1) % n]
-            // Shorten line so it doesn't overlap node circles
-            const dx = to.x - from.x
-            const dy = to.y - from.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            const ux = dx / dist
-            const uy = dy / dist
-            const x1 = from.x + ux * nodeR
-            const y1 = from.y + uy * nodeR
-            const x2 = to.x - ux * (nodeR + 8)
-            const y2 = to.y - uy * (nodeR + 8)
-            // Label midpoint
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
-
-            return (
-              <g key={i}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  className="stroke-indigo-400"
-                  strokeWidth={1.5}
-                  markerEnd={`url(#arrow-${cycle.id})`}
-                />
-                {/* Game label on edge */}
-                <text
-                  x={mx}
-                  y={my - 6}
-                  textAnchor="middle"
-                  className="fill-gray-600"
-                  fontSize={9}
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {step.board_game.length > 14
-                    ? step.board_game.slice(0, 13) + '…'
-                    : step.board_game}
-                </text>
-                <text
-                  x={mx}
-                  y={my + 6}
-                  textAnchor="middle"
-                  className="fill-gray-400"
-                  fontSize={8}
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {step.listing_code}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* Nodes */}
-          {nodes.map((username, i) => {
-            const pos = positions[i]
-            const short = username.length > 8 ? username.slice(0, 7) + '…' : username
-            return (
-              <g key={i}>
-                <circle
-                  cx={pos.x}
-                  cy={pos.y}
-                  r={nodeR}
-                  className="fill-indigo-600"
-                />
-                <text
-                  x={pos.x}
-                  y={pos.y + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="fill-white"
-                  fontSize={9}
-                  fontWeight="600"
-                  fontFamily="ui-sans-serif, sans-serif"
-                >
-                  {short}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
-      </div>
-
-      {/* Stacked list — shown on xs screens, hidden on wider (overrides above) */}
-      <div className="xs:hidden space-y-2">
-        {cycle.steps.map((step, i) => (
-          <div key={i} className="flex items-start gap-2 text-sm">
-            <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center font-bold">
-              {i + 1}
-            </span>
-            <div className="min-w-0">
-              <span className="font-medium text-ink">{step.from_user}</span>
-              <span className="text-moss/70 mx-1">gives</span>
-              <span className="text-indigo-700 font-medium">{step.board_game}</span>
-              <span className="text-moss/70 text-xs ml-1 font-mono">({step.listing_code})</span>
-              <span className="text-moss/70 mx-1">to</span>
-              <span className="font-medium text-ink">{step.to_user}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Always show step list as supplementary detail */}
-      <div className="mt-4 space-y-1">
-        {cycle.steps.map((step, i) => (
-          <div
-            key={i}
-            className="flex flex-wrap items-center gap-1 text-xs text-moss border-b border-gray-50 last:border-0 py-1"
-          >
-            <span className="font-semibold text-ink">{step.from_user}</span>
-            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <span className="font-mono text-indigo-700">{step.listing_code}</span>
-            <span className="text-moss">"{step.board_game}"</span>
-            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <span className="font-semibold text-ink">{step.to_user}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function CyclesSection({ cycles }: { cycles: Cycle[] }) {
-  if (cycles.length === 0) {
-    return <p className="text-sm text-moss/70">No cycles in this run.</p>
-  }
-
-  return (
-    <div className="space-y-4">
-      {cycles.map((cycle) => (
-        <div
-          key={cycle.id}
-          className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm font-semibold text-ink">Cycle #{cycle.id}</span>
-            <span className="rounded-full bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 font-medium">
-              {cycle.length} step{cycle.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <CycleDiagram cycle={cycle} />
-        </div>
-      ))}
-    </div>
-  )
-}
+// ---- Cycle visualization (removed) ----
+// The SVG ring diagram assumed clean, per-user-balanced cycles. X-to-Y solutions
+// are tangled connected-component flows that don't decompose into rings, so the
+// "All Cycles" tab was dropped; result.cycles is now only summarized in Stats.
 
 // ---- Stats section ----
 
 function StatsSection({ result }: { result: import('../../api/matching').MatchResult }) {
+  const { t } = useTranslation()
   const stats = result.stats
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {(
         [
-          ['Users', stats.users],
-          ['Listings', stats.listings],
-          ['Matched', stats.matched],
-          ['Cycles', stats.cycles],
+          [t('matching.stats.users'), stats.users],
+          [t('matching.stats.listings'), stats.listings],
+          [t('matching.stats.matched'), stats.matched],
+          [t('matching.stats.cycles'), stats.cycles],
         ] as [string, number][]
       ).map(([label, val]) => (
         <div
@@ -780,17 +589,18 @@ function StatsSection({ result }: { result: import('../../api/matching').MatchRe
 // ---- Unmatched section ----
 
 function UnmatchedSection({ unmatched }: { unmatched: import('../../api/matching').UnmatchedWish[] }) {
+  const { t } = useTranslation()
   if (unmatched.length === 0) return null
 
   return (
     <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
       <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">
-        Unmatched wishes ({unmatched.length})
+        {t('matching.stats.unmatchedHeading', { count: unmatched.length })}
       </p>
       <div className="space-y-1.5">
         {unmatched.map((u) => (
           <div key={u.wish_id} className="flex items-start gap-2 text-xs">
-            <span className="text-amber-600 font-mono shrink-0">Wish #{u.wish_id}</span>
+            <span className="text-amber-600 font-mono shrink-0">{t('matching.stats.wishNumber', { id: u.wish_id })}</span>
             <span className="text-amber-700">{u.reason}</span>
           </div>
         ))}
@@ -808,16 +618,18 @@ const SHIPMENT_STATUS_PILL: Record<Shipment['status'], string> = {
 }
 
 function ShipmentStatusBadge({ status }: { status: Shipment['status'] }) {
+  const { t } = useTranslation()
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${SHIPMENT_STATUS_PILL[status]}`}
     >
-      {status}
+      {t('matching.shipmentStatus.' + status, { defaultValue: status })}
     </span>
   )
 }
 
 function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
+  const { t } = useTranslation()
   const { data: shipments = [], isLoading } = useShipments(slug)
   const update = useUpdateShipment(slug)
 
@@ -835,7 +647,7 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
   }
 
   if (shipments.length === 0) {
-    return <p className="text-sm text-moss/70">No shipments found for this event.</p>
+    return <p className="text-sm text-moss/70">{t('matching.shipping.empty')}</p>
   }
 
   return (
@@ -843,10 +655,10 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
       {/* Sending */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
-          Sending ({sending.length})
+          {t('matching.shipping.sendingHeading', { count: sending.length })}
         </p>
         {sending.length === 0 ? (
-          <p className="text-sm text-moss/70">Nothing to send.</p>
+          <p className="text-sm text-moss/70">{t('matching.nothingToSend')}</p>
         ) : (
           sending.map((s) => (
             <ShipmentSenderCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
@@ -857,10 +669,10 @@ function ShippingTab({ slug, readOnly }: { slug: string; readOnly: boolean }) {
       {/* Receiving */}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-          Receiving ({receiving.length})
+          {t('matching.shipping.receivingHeading', { count: receiving.length })}
         </p>
         {receiving.length === 0 ? (
-          <p className="text-sm text-moss/70">Nothing to receive.</p>
+          <p className="text-sm text-moss/70">{t('matching.nothingToReceive')}</p>
         ) : (
           receiving.map((s) => (
             <ShipmentReceiverCard key={s.id} shipment={s} readOnly={readOnly} onUpdate={update} />
@@ -887,15 +699,16 @@ function ShippingPaymentsTab({
 }
 
 function OverviewTab({ slug, moneyEnabled }: { slug: string; moneyEnabled: boolean }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-ink">Shipping</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">{t('matching.shipping.heading')}</h2>
         <ShippingOverviewTab slug={slug} />
       </div>
       {moneyEnabled && (
         <div>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Settlement payments</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">{t('matching.payments.settlementHeading')}</h2>
           <PaymentsOverviewTab slug={slug} />
         </div>
       )}
@@ -912,6 +725,7 @@ function ShipmentSenderCard({
   readOnly: boolean
   onUpdate: ReturnType<typeof useUpdateShipment>
 }) {
+  const { t } = useTranslation()
   const [shippingInfo, setShippingInfo] = useState(s.shipping_info)
   const [error, setError] = useState<string | null>(null)
 
@@ -920,7 +734,7 @@ function ShipmentSenderCard({
     try {
       await onUpdate.mutateAsync({ id: s.id, body: { status: 'SENT', shipping_info: shippingInfo } })
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -933,7 +747,7 @@ function ShipmentSenderCard({
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
             <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
             <p className="text-xs text-moss mt-0.5">
-              to{' '}
+              {t('matching.trades.to')}{' '}
               <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
                 {s.receiver_username}
               </Link>
@@ -949,7 +763,7 @@ function ShipmentSenderCard({
             type="text"
             value={shippingInfo}
             onChange={(e) => setShippingInfo(e.target.value)}
-            placeholder="Tracking number or shipping notes…"
+            placeholder={t('matching.shipping.trackingPlaceholder')}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
@@ -957,7 +771,7 @@ function ShipmentSenderCard({
             disabled={onUpdate.isPending}
             className="rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {onUpdate.isPending ? 'Saving…' : 'Mark sent'}
+            {onUpdate.isPending ? t('matching.saving') : t('matching.shipping.markSent')}
           </button>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
@@ -965,7 +779,7 @@ function ShipmentSenderCard({
 
       {s.status !== 'PENDING' && s.shipping_info && (
         <p className="text-xs text-moss">
-          <span className="font-medium">Shipping info:</span> {s.shipping_info}
+          <span className="font-medium">{t('matching.shipping.infoLabel')}</span> {s.shipping_info}
         </p>
       )}
     </div>
@@ -981,6 +795,7 @@ function ShipmentReceiverCard({
   readOnly: boolean
   onUpdate: ReturnType<typeof useUpdateShipment>
 }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
   async function handleMarkReceived() {
@@ -988,7 +803,7 @@ function ShipmentReceiverCard({
     try {
       await onUpdate.mutateAsync({ id: s.id, body: { status: 'RECEIVED' } })
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -1001,7 +816,7 @@ function ShipmentReceiverCard({
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
             <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
             <p className="text-xs text-moss mt-0.5">
-              from{' '}
+              {t('matching.trades.from')}{' '}
               <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">
                 {s.giver_username}
               </Link>
@@ -1013,7 +828,7 @@ function ShipmentReceiverCard({
 
       {s.shipping_info && (
         <p className="text-xs text-moss">
-          <span className="font-medium">Shipping info:</span> {s.shipping_info}
+          <span className="font-medium">{t('matching.shipping.infoLabel')}</span> {s.shipping_info}
         </p>
       )}
 
@@ -1024,7 +839,7 @@ function ShipmentReceiverCard({
             disabled={onUpdate.isPending}
             className="rounded-xl border-2 border-ink bg-emerald-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {onUpdate.isPending ? 'Saving…' : 'Mark received'}
+            {onUpdate.isPending ? t('matching.saving') : t('matching.shipping.markReceived')}
           </button>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
@@ -1042,9 +857,10 @@ const PAYMENT_STATUS_PILL: Record<SettlementPayment['status'], string> = {
 }
 
 function PaymentStatusBadge({ status }: { status: SettlementPayment['status'] }) {
+  const { t } = useTranslation()
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${PAYMENT_STATUS_PILL[status]}`}>
-      {status}
+      {t('matching.paymentStatus.' + status, { defaultValue: status })}
     </span>
   )
 }
@@ -1056,6 +872,7 @@ function PaymentPayerCard({
   readOnly: boolean
   onUpdate: ReturnType<typeof useUpdatePayment>
 }) {
+  const { t } = useTranslation()
   const [note, setNote] = useState(p.note)
   const [error, setError] = useState<string | null>(null)
 
@@ -1064,7 +881,7 @@ function PaymentPayerCard({
     try {
       await onUpdate.mutateAsync({ id: p.id, body: { status: 'PAID', note } })
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -1072,7 +889,7 @@ function PaymentPayerCard({
     <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="text-sm text-ink">
-          Pay{' '}
+          {t('matching.payments.pay')}{' '}
           <Link to={`/u/${p.to_username}`} className="font-semibold text-indigo-500 hover:underline">
             {p.to_username}
           </Link>{' '}
@@ -1087,7 +904,7 @@ function PaymentPayerCard({
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Payment reference or notes…"
+            placeholder={t('matching.payments.notePlaceholder')}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <button
@@ -1095,14 +912,14 @@ function PaymentPayerCard({
             disabled={onUpdate.isPending}
             className="rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {onUpdate.isPending ? 'Saving…' : 'Mark paid'}
+            {onUpdate.isPending ? t('matching.saving') : t('matching.payments.markPaid')}
           </button>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       )}
 
       {p.status !== 'PENDING' && p.note && (
-        <p className="text-xs text-moss"><span className="font-medium">Reference:</span> {p.note}</p>
+        <p className="text-xs text-moss"><span className="font-medium">{t('matching.payments.referenceLabel')}</span> {p.note}</p>
       )}
     </div>
   )
@@ -1115,6 +932,7 @@ function PaymentPayeeCard({
   readOnly: boolean
   onUpdate: ReturnType<typeof useUpdatePayment>
 }) {
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
   async function handleConfirm() {
@@ -1122,7 +940,7 @@ function PaymentPayeeCard({
     try {
       await onUpdate.mutateAsync({ id: p.id, body: { status: 'CONFIRMED' } })
     } catch (err) {
-      setError(extractErrorMsg(err))
+      setError(extractErrorMsg(err) ?? t('matching.errors.unexpected'))
     }
   }
 
@@ -1130,7 +948,7 @@ function PaymentPayeeCard({
     <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <p className="text-sm text-ink">
-          Receive <span className="font-semibold">${p.amount}</span> from{' '}
+          {t('matching.payments.receive')} <span className="font-semibold">${p.amount}</span> {t('matching.trades.from')}{' '}
           <Link to={`/u/${p.from_username}`} className="font-semibold text-indigo-500 hover:underline">
             {p.from_username}
           </Link>
@@ -1139,7 +957,7 @@ function PaymentPayeeCard({
       </div>
 
       {p.note && (
-        <p className="text-xs text-moss"><span className="font-medium">Reference:</span> {p.note}</p>
+        <p className="text-xs text-moss"><span className="font-medium">{t('matching.payments.referenceLabel')}</span> {p.note}</p>
       )}
 
       {!readOnly && p.status === 'PAID' && (
@@ -1149,7 +967,7 @@ function PaymentPayeeCard({
             disabled={onUpdate.isPending}
             className="rounded-xl border-2 border-ink bg-emerald-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
-            {onUpdate.isPending ? 'Saving…' : 'Confirm received'}
+            {onUpdate.isPending ? t('matching.saving') : t('matching.payments.confirmReceived')}
           </button>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
@@ -1159,6 +977,7 @@ function PaymentPayeeCard({
 }
 
 function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean }) {
+  const { t } = useTranslation()
   const { data: payments = [], isLoading } = useMyPayments(slug, true)
   const update = useUpdatePayment(slug)
   const paying = payments.filter((p) => p.my_role === 'payer')
@@ -1171,18 +990,18 @@ function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean 
     <>
       <div className="space-y-2">
         <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
-          Payments to send ({paying.length})
+          {t('matching.payments.toSendHeading', { count: paying.length })}
         </p>
         {paying.length === 0
-          ? <p className="text-sm text-moss/70">Nothing to pay.</p>
+          ? <p className="text-sm text-moss/70">{t('matching.nothingToPay')}</p>
           : paying.map((p) => <PaymentPayerCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
       </div>
       <div className="space-y-2">
         <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-          Payments to receive ({receiving.length})
+          {t('matching.payments.toReceiveHeading', { count: receiving.length })}
         </p>
         {receiving.length === 0
-          ? <p className="text-sm text-moss/70">Nothing to receive.</p>
+          ? <p className="text-sm text-moss/70">{t('matching.nothingToReceive')}</p>
           : receiving.map((p) => <PaymentPayeeCard key={p.id} payment={p} readOnly={readOnly} onUpdate={update} />)}
       </div>
     </>
@@ -1192,6 +1011,7 @@ function PaymentsSections({ slug, readOnly }: { slug: string; readOnly: boolean 
 // ---- Run result view ----
 
 function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { slug: string; run: MatchRunDetail; eventStatus: EventStatus; isOrganizer: boolean; moneyEnabled: boolean }) {
+  const { t } = useTranslation()
   const isDone = run.status === 'DONE'
   const { data: result, isLoading: resultLoading, isError: resultError } = useMatchResult(slug, run.id, isDone)
   const { data: mineData, isLoading: mineLoading } = useMyAssignments(slug, run.id, isDone)
@@ -1199,18 +1019,17 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
   const currentUsername = user?.username ?? ''
 
   const showShipping = eventStatus === 'SHIPPING' || eventStatus === 'ARCHIVED'
-  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping-payments' | 'overview'>('my-trades')
+  const [activeTab, setActiveTab] = useState<'my-trades' | 'stats' | 'shipping-payments' | 'overview'>('my-trades')
 
   if (!isDone) {
     return <LiveRunView slug={slug} runId={run.id} />
   }
 
   const tabs: { id: typeof activeTab; label: string }[] = [
-    { id: 'my-trades', label: 'My Trades' },
-    { id: 'cycles', label: 'All Cycles' },
-    { id: 'stats', label: 'Stats & Unmatched' },
-    ...(showShipping ? [{ id: 'shipping-payments' as const, label: 'Shipping & Payments' }] : []),
-    ...(showShipping && isOrganizer ? [{ id: 'overview' as const, label: 'Overview' }] : []),
+    { id: 'my-trades', label: t('matching.tabs.myTrades') },
+    { id: 'stats', label: t('matching.tabs.statsUnmatched') },
+    ...(showShipping ? [{ id: 'shipping-payments' as const, label: t('matching.tabs.shippingPayments') }] : []),
+    ...(showShipping && isOrganizer ? [{ id: 'overview' as const, label: t('matching.tabs.overview') }] : []),
   ]
 
   return (
@@ -1253,31 +1072,13 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
           </div>
         )}
 
-        {activeTab === 'cycles' && (
-          <div>
-            {resultLoading && (
-              <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div key={i} className="h-40 rounded-xl bg-gray-100 animate-pulse" />
-                ))}
-              </div>
-            )}
-            {resultError && (
-              <p className="text-sm text-red-600">
-                Failed to load result data. The run may still be processing.
-              </p>
-            )}
-            {result && <CyclesSection cycles={result.cycles} />}
-          </div>
-        )}
-
         {activeTab === 'stats' && (
           <div className="space-y-4">
             {resultLoading && (
               <div className="h-24 rounded-xl bg-gray-100 animate-pulse" />
             )}
             {resultError && (
-              <p className="text-sm text-red-600">Failed to load stats.</p>
+              <p className="text-sm text-red-600">{t('matching.run.statsLoadError')}</p>
             )}
             {result && (
               <>
@@ -1307,6 +1108,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
 // ---- Main page ----
 
 export default function MatchRunPage() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const { token } = useAuthStore()
 
@@ -1336,7 +1138,7 @@ export default function MatchRunPage() {
 
   if (eventLoading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
         <div className="h-8 w-1/3 bg-gray-100 rounded" />
         <div className="h-24 bg-gray-100 rounded-xl" />
         <div className="h-48 bg-gray-100 rounded-xl" />
@@ -1346,12 +1148,10 @@ export default function MatchRunPage() {
 
   if (!event) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm text-red-700">Event not found.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <p className="text-sm text-red-700">{t('matching.eventNotFound')}</p>
+          <BackButton to="/events" className="mt-3">{t('matching.backToEvents')}</BackButton>
         </div>
       </div>
     )
@@ -1359,42 +1159,39 @@ export default function MatchRunPage() {
 
   if (!showMatchingSection) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-ink/15 bg-gray-50 px-5 py-10 text-center">
           <p className="text-sm text-moss">
-            Matching is not yet available for this event.
+            {t('matching.notAvailable')}
           </p>
           <p className="text-xs text-moss/70 mt-1">
-            The event must be in MATCHING state or later.
+            {t('matching.notAvailableHint')}
           </p>
-          <Link
-            to={`/events/${slug}`}
-            className="mt-4 inline-block text-sm text-indigo-600 hover:underline"
-          >
-            Back to event
-          </Link>
+          <BackButton to={`/events/${slug}`} className="mt-4">{t('matching.backToEvent')}</BackButton>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-moss/70">
-        <Link to="/events" className="hover:text-indigo-600 transition-colors">Events</Link>
+        <Link to="/events" className="hover:text-indigo-600 transition-colors">{t('matching.breadcrumbEvents')}</Link>
         <span>/</span>
         <Link to={`/events/${slug}`} className="hover:text-indigo-600 transition-colors truncate max-w-xs">
           {event.name}
         </Link>
         <span>/</span>
-        <span className="text-moss">Matching</span>
+        <span className="text-moss">{t('matching.title')}</span>
       </div>
+
+      <BackButton to={`/events/${slug}`}>{t('matching.backToEvent')}</BackButton>
 
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">Matching</h1>
+          <h1 className="text-xl font-bold text-ink">{t('matching.title')}</h1>
           <p className="text-sm text-moss mt-0.5">{event.name}</p>
         </div>
         {canTrigger && token && (
@@ -1405,7 +1202,7 @@ export default function MatchRunPage() {
         )}
         {!canTrigger && event.is_organizer && event.status !== 'MATCHING' && (
           <p className="text-xs text-moss/70">
-            Advance event to MATCHING state to run the matcher.
+            {t('matching.advanceHint')}
           </p>
         )}
       </div>
@@ -1414,7 +1211,7 @@ export default function MatchRunPage() {
         {/* Run list sidebar */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-moss uppercase tracking-wide mb-1">
-            Runs {runsData && `(${runsData.count})`}
+            {t('matching.runsHeading')} {runsData && `(${runsData.count})`}
           </p>
 
           {runsLoading && (
@@ -1427,10 +1224,10 @@ export default function MatchRunPage() {
 
           {!runsLoading && runs.length === 0 && (
             <div className="rounded-2xl border border-dashed border-ink/15 p-4 text-center">
-              <p className="text-xs text-moss/70">No runs yet.</p>
+              <p className="text-xs text-moss/70">{t('matching.noRunsYet')}</p>
               {canTrigger && (
                 <p className="text-xs text-moss/70 mt-1">
-                  Use the action above to create the first run.
+                  {t('matching.noRunsHint')}
                 </p>
               )}
             </div>
@@ -1450,7 +1247,7 @@ export default function MatchRunPage() {
         <div>
           {activeRunId == null ? (
             <div className="rounded-xl border border-dashed border-ink/15 p-8 text-center">
-              <p className="text-sm text-moss/70">Select a run to view details.</p>
+              <p className="text-sm text-moss/70">{t('matching.selectRunPrompt')}</p>
             </div>
           ) : activeRun ? (
             <RunResultView key={activeRun.id} slug={slug!} run={activeRun} eventStatus={event.status} isOrganizer={!!event.is_organizer} moneyEnabled={!!event.money_enabled} />

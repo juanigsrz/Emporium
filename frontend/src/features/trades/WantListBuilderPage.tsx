@@ -1,10 +1,14 @@
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
 import type { EventListing, EventGame } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
 import { GameThumb } from '../../components/GameThumb'
+import BackButton from '../../components/BackButton'
 
 import {
   useOfferGroups,
@@ -21,6 +25,9 @@ import {
   useDeleteWish,
   setWantBid,
   deleteWantBid,
+  listGamePrices,
+  setGamePrice,
+  deleteGamePrice,
 } from '../../api/trades'
 import type {
   OfferGroup,
@@ -29,11 +36,16 @@ import type {
   WantGroupItem,
   WantGroupItemPayload,
   TradeWish,
+  GamePrice,
 } from '../../api/trades'
+import { useCombos } from '../../api/combos'
+import type { Combo } from '../../api/combos'
+import { useCaps, useCreateCap, usePatchCap, useDeleteCap } from '../../api/caps'
+import type { Cap, CapKind } from '../../api/caps'
 
 // ---- Helpers ----
 
-function extractErrorMsg(err: unknown): string {
+function extractErrorMsg(t: TFunction, err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
     const resp = (err as { response?: { data?: unknown } }).response
     const data = resp?.data
@@ -45,7 +57,7 @@ function extractErrorMsg(err: unknown): string {
     if (typeof data === 'string') return data
   }
   if (err instanceof Error) return err.message
-  return 'An error occurred. Please try again.'
+  return t('trades.errors.generic')
 }
 
 // ============================================================
@@ -60,6 +72,7 @@ interface OfferGroupsPanelProps {
 }
 
 function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroupsPanelProps) {
+  const { t } = useTranslation()
   const { data: groups = [], isLoading } = useOfferGroups(slug)
   const createGroup = useCreateOfferGroup()
   const patchGroup = usePatchOfferGroup()
@@ -88,7 +101,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
       )}
 
       {groups.length === 0 && !showForm && (
-        <p className="text-xs text-moss/70 py-2">No offer groups yet. Create one to specify what you're offering.</p>
+        <p className="text-xs text-moss/70 py-2">{t('trades.offerGroups.empty')}</p>
       )}
 
       {groups.map((group) =>
@@ -105,7 +118,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
                 await patchGroup.mutateAsync({ slug, id: group.id, payload })
                 setEditingId(null)
               } catch (e) {
-                setError(extractErrorMsg(e))
+                setError(extractErrorMsg(t, e))
               }
             }}
             onCancel={() => setEditingId(null)}
@@ -121,7 +134,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
               try {
                 await deleteGroup.mutateAsync({ slug, id: group.id })
               } catch (e) {
-                setError(extractErrorMsg(e))
+                setError(extractErrorMsg(t, e))
               }
             }}
             isDeleting={deleteGroup.isPending}
@@ -141,7 +154,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
               await createGroup.mutateAsync({ slug, payload })
               setShowForm(false)
             } catch (e) {
-              setError(extractErrorMsg(e))
+              setError(extractErrorMsg(t, e))
             }
           }}
           onCancel={() => setShowForm(false)}
@@ -154,7 +167,7 @@ function OfferGroupsPanel({ slug, myListings, moneyEnabled, locked }: OfferGroup
           onClick={() => setShowForm(true)}
           className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
         >
-          + New offer group
+          {t('trades.offerGroups.newButton')}
         </button>
       )}
     </div>
@@ -170,6 +183,7 @@ interface OfferGroupCardProps {
 }
 
 function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGroupCardProps) {
+  const { t } = useTranslation()
   const [confirmDelete, setConfirmDelete] = useState(false)
   return (
     <div className="rounded-2xl border border-ink/15 bg-white p-3">
@@ -177,7 +191,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
         <div>
           <span className="text-sm font-semibold text-ink">{group.name}</span>
           <span className="ml-2 inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
-            Give up to {group.max_give}
+            {t('trades.offerGroups.giveUpTo', { max: group.max_give })}
           </span>
         </div>
         {!locked && (
@@ -186,7 +200,7 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
               onClick={onEdit}
               className="text-xs text-moss/70 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
-              Edit
+              {t('trades.edit')}
             </button>
             {confirmDelete ? (
               <span className="flex items-center gap-1">
@@ -195,13 +209,13 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
                   disabled={isDeleting}
                   className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
                 >
-                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                  {isDeleting ? t('trades.deleting') : t('trades.confirm')}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
                   className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </span>
             ) : (
@@ -209,26 +223,36 @@ function OfferGroupCard({ group, onEdit, onDelete, isDeleting, locked }: OfferGr
                 onClick={() => setConfirmDelete(true)}
                 className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
-                Delete
+                {t('common.delete')}
               </button>
             )}
           </div>
         )}
       </div>
       {group.items.length === 0 ? (
-        <p className="text-xs text-moss/70 italic">No listings in this group.</p>
+        <p className="text-xs text-moss/70 italic">{t('trades.offerGroups.noListingsInGroup')}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {group.items.map((item) => (
-            <span
-              key={item.id}
-              className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink"
-            >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              <span className="font-mono text-moss/70">{item.listing_code}</span>
-              {item.board_game_name}
-            </span>
-          ))}
+          {group.items.map((item) =>
+            item.combo != null ? (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
+              >
+                🎁 {item.combo_name}
+                <span className="font-mono text-amber-700/70">{item.combo_code}</span>
+              </span>
+            ) : (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink"
+              >
+                <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
+                <span className="font-mono text-moss/70">{item.listing_code}</span>
+                {item.board_game_name}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>
@@ -244,16 +268,31 @@ interface OfferGroupFormProps {
     name: string
     max_give: number
     item_listing_ids: number[]
+    item_combo_ids: number[]
   }) => Promise<void>
   onCancel: () => void
   isSaving: boolean
 }
 
-function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+function OfferGroupForm({ slug, myListings, moneyEnabled, existing, onSave, onCancel, isSaving }: OfferGroupFormProps) {
+  const { t } = useTranslation()
+  const { data: combosData } = useCombos(slug, { mine: true })
+  const myCombos = combosData?.results ?? []
   const [name, setName] = useState(existing?.name ?? '')
   const [maxGive, setMaxGive] = useState(String(existing?.max_give ?? 1))
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    new Set(existing?.items.map((i) => i.event_listing) ?? [])
+    new Set(
+      (existing?.items ?? [])
+        .filter((i) => i.event_listing != null)
+        .map((i) => i.event_listing as number)
+    )
+  )
+  const [selectedComboIds, setSelectedComboIds] = useState<Set<number>>(
+    new Set(
+      (existing?.items ?? [])
+        .filter((i) => i.combo != null)
+        .map((i) => i.combo as number)
+    )
   )
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -266,16 +305,31 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
     })
   }
 
+  function toggleCombo(id: number) {
+    setSelectedComboIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
-    if (!name.trim()) { setFormError('Name is required.'); return }
+    if (!name.trim()) { setFormError(t('trades.errors.nameRequired')); return }
     const mg = parseInt(maxGive, 10)
-    if (isNaN(mg) || mg < 1) { setFormError('Max give must be at least 1.'); return }
-    if (selectedIds.size === 0) { setFormError('Select at least one listing.'); return }
-    if (mg > selectedIds.size) { setFormError(`Max give (${mg}) cannot exceed the number of selected listings (${selectedIds.size}).`); return }
+    if (isNaN(mg) || mg < 1) { setFormError(t('trades.errors.maxGiveMin')); return }
+    const totalSelected = selectedIds.size + selectedComboIds.size
+    if (totalSelected === 0) { setFormError(t('trades.errors.selectAtLeastOne')); return }
+    if (mg > totalSelected) { setFormError(t('trades.errors.maxGiveExceeds', { max: mg, total: totalSelected })); return }
 
-    await onSave({ name: name.trim(), max_give: mg, item_listing_ids: Array.from(selectedIds) })
+    await onSave({
+      name: name.trim(),
+      max_give: mg,
+      item_listing_ids: Array.from(selectedIds),
+      item_combo_ids: Array.from(selectedComboIds),
+    })
   }
 
   return (
@@ -288,22 +342,22 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-ink mb-1">Group name</label>
+          <label className="block text-xs font-medium text-ink mb-1">{t('trades.groupNameLabel')}</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="e.g. My heavy games"
+            placeholder={t('trades.offerGroups.namePlaceholder')}
           />
         </div>
         <div>
           <label className="block text-xs font-medium text-ink mb-1">
-            Max give (X) — give up to this many
+            {t('trades.offerGroups.maxGiveLabel')}
           </label>
           <input
             type="number"
             min={1}
-            max={myListings.length || 1}
+            max={(myListings.length + myCombos.length) || 1}
             value={maxGive}
             onChange={(e) => setMaxGive(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -313,11 +367,11 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
 
       <div>
         <p className="text-xs font-medium text-ink mb-1.5">
-          Select listings to offer ({selectedIds.size} selected)
+          {t('trades.offerGroups.selectListings', { count: selectedIds.size })}
         </p>
         {myListings.length === 0 ? (
           <p className="text-xs text-moss/70 italic">
-            No listings in this event. Add copies first.
+            {t('trades.offerGroups.noListingsInEvent')}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto">
@@ -340,7 +394,7 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
                 <span className="font-mono text-xs text-moss/70">{listing.listing_code}</span>
                 {moneyEnabled && selectedIds.has(listing.id) && (
                   <span className="ml-auto text-xs text-moss/70 italic">
-                    Sell price set in My Listings / Almanac
+                    {t('trades.offerGroups.sellPriceHint')}
                   </span>
                 )}
               </label>
@@ -349,20 +403,50 @@ function OfferGroupForm({ myListings, moneyEnabled, existing, onSave, onCancel, 
         )}
       </div>
 
+      {myCombos.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-ink mb-1.5">
+            {t('trades.offerGroups.orOfferCombo', { count: selectedComboIds.size })}
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto">
+            {myCombos.map((c: Combo) => (
+              <label
+                key={c.id}
+                className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer transition-colors text-sm ${
+                  selectedComboIds.has(c.id)
+                    ? 'border-indigo-400 bg-white text-indigo-800'
+                    : 'border-ink/15 bg-white text-ink hover:border-indigo-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedComboIds.has(c.id)}
+                  onChange={() => toggleCombo(c.id)}
+                  className="h-3.5 w-3.5 rounded border-ink/20 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="font-medium">{c.name}</span>
+                <span className="font-mono text-xs text-moss/70">{c.combo_code}</span>
+                <span className="ml-auto text-xs text-moss/60">{t('trades.offerGroups.comboItemsCount', { count: c.items.length })}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2 pt-1">
         <button
           type="button"
           onClick={onCancel}
           className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="submit"
           disabled={isSaving}
           className="flex-1 rounded-xl border-2 border-ink bg-butter px-3 py-1.5 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          {isSaving ? 'Saving…' : existing ? 'Save changes' : 'Create group'}
+          {isSaving ? t('trades.saving') : existing ? t('trades.saveChanges') : t('trades.createGroup')}
         </button>
       </div>
     </form>
@@ -384,20 +468,21 @@ interface WantGroupsPanelProps {
 interface DraftWantItem {
   // Unique local key for DnD (not the backend id)
   localId: string
-  target_type: 'BOARD_GAME' | 'LISTING'
-  board_game: number | null
   board_game_name: string | null
   event_listing: number | null
   listing_code: string | null
+  combo: number | null
+  combo_code: string | null
+  combo_name: string | null
   bid: string  // '' = none
 }
 
 function makeDraftKey(item: WantGroupItem | DraftWantItem): string {
-  if (item.target_type === 'BOARD_GAME') return `bg-${item.board_game}`
-  return `listing-${item.event_listing}`
+  return item.combo != null ? `combo-${item.combo}` : `listing-${item.event_listing}`
 }
 
 function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPanelProps) {
+  const { t } = useTranslation()
   const { data: groups = [], isLoading } = useWantGroups(slug)
   const createGroup = useCreateWantGroup()
   const patchGroup = usePatchWantGroup()
@@ -426,7 +511,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
       )}
 
       {groups.length === 0 && !showForm && (
-        <p className="text-xs text-moss/70 py-2">No want groups yet. Create one by adding games you'd like to receive.</p>
+        <p className="text-xs text-moss/70 py-2">{t('trades.wantGroups.empty')}</p>
       )}
 
       {groups.map((group) =>
@@ -449,7 +534,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
               try {
                 await deleteGroup.mutateAsync({ slug, id: group.id })
               } catch (e) {
-                setError(extractErrorMsg(e))
+                setError(extractErrorMsg(t, e))
               }
             }}
             isDeleting={deleteGroup.isPending}
@@ -458,7 +543,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
               try {
                 await patchGroup.mutateAsync({ slug, id: group.id, payload: { duplicate_protection: value } })
               } catch (e) {
-                setError(extractErrorMsg(e))
+                setError(extractErrorMsg(t, e))
               }
             }}
             locked={locked}
@@ -476,7 +561,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
               try {
                 await createGroup.mutateAsync({ slug, payload: created })
               } catch (e) {
-                setError(extractErrorMsg(e))
+                setError(extractErrorMsg(t, e))
                 return
               }
             }
@@ -491,7 +576,7 @@ function WantGroupsPanel({ slug, username, moneyEnabled, locked }: WantGroupsPan
           onClick={() => setShowForm(true)}
           className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-purple-300 hover:text-purple-500 transition-colors"
         >
-          + New want group
+          {t('trades.wantGroups.newButton')}
         </button>
       )}
     </div>
@@ -508,6 +593,7 @@ interface WantGroupCardProps {
 }
 
 function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateProtection, locked }: WantGroupCardProps) {
+  const { t } = useTranslation()
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -516,7 +602,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
         <div>
           <span className="text-sm font-semibold text-ink">{group.name}</span>
           <span className="ml-2 inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
-            Receive at least {group.min_receive}
+            {t('trades.wantGroups.receiveAny', { min: group.min_receive })}
           </span>
         </div>
         {!locked && (
@@ -525,7 +611,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
               onClick={onEdit}
               className="text-xs text-moss/70 hover:text-indigo-600 transition-colors px-1.5 py-0.5 rounded"
             >
-              Edit
+              {t('trades.edit')}
             </button>
             {confirmDelete ? (
               <span className="flex items-center gap-1">
@@ -534,13 +620,13 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
                   disabled={isDeleting}
                   className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
                 >
-                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                  {isDeleting ? t('trades.deleting') : t('trades.confirm')}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
                   className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </span>
             ) : (
@@ -548,7 +634,7 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
                 onClick={() => setConfirmDelete(true)}
                 className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
-                Delete
+                {t('common.delete')}
               </button>
             )}
           </div>
@@ -563,37 +649,38 @@ function WantGroupCard({ group, onEdit, onDelete, isDeleting, onToggleDuplicateP
           disabled={locked}
           className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
-        Duplication-protected (never award more than one copy of the same game)
+        {t('trades.wantGroups.dupProtectLabel')}
       </label>
 
       {group.items.length === 0 ? (
-        <p className="text-xs text-moss/70 italic">No targets yet.</p>
+        <p className="text-xs text-moss/70 italic">{t('trades.wantGroups.noTargets')}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {group.items.map((item) => (
-            <span
-              key={item.id}
-              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs ${
-                item.target_type === 'BOARD_GAME'
-                  ? 'bg-purple-50 text-purple-700'
-                  : 'bg-blue-50 text-blue-700'
-              }`}
-            >
-              <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
-              {item.target_type === 'LISTING' && (
+          {group.items.map((item) =>
+            item.combo != null ? (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-amber-100 text-amber-800"
+              >
+                🎁 {item.combo_name}
+                <span className="font-mono text-amber-700/70">{item.combo_code}</span>
+              </span>
+            ) : (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-blue-50 text-blue-700"
+              >
+                <GameThumb src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-6 w-6" />
                 <span className="font-mono text-moss/70">{item.listing_code}</span>
-              )}
-              {item.board_game_name}
-              {item.target_type === 'BOARD_GAME' && (
-                <span className="text-moss/70">(any copy)</span>
-              )}
-              {item.resolved_bid != null && (
-                <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
-                  pay ≤${item.resolved_bid}
-                </span>
-              )}
-            </span>
-          ))}
+                {item.board_game_name}
+                {item.resolved_bid != null && (
+                  <span className="rounded bg-emerald-100 px-1 font-semibold text-emerald-700">
+                    {t('trades.payUpToAmount', { amount: item.resolved_bid })}
+                  </span>
+                )}
+              </span>
+            )
+          )}
         </div>
       )}
     </div>
@@ -619,11 +706,12 @@ interface GameCopyPickerProps {
   game: EventGame
   username: string
   existingItemIds: Set<string>
-  onCommit: (selections: { anycopy: boolean; listings: EventListing[] }) => void
+  onCommit: (listings: EventListing[]) => void
   onCancel: () => void
 }
 
 function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCancel }: GameCopyPickerProps) {
+  const { t } = useTranslation()
   const { data: listingsData } = useEventListings(slug, { board_game: game.bgg_id })
   const otherCopies = (listingsData?.results ?? []).filter(
     (l) => l.copy_owner_username !== username
@@ -641,39 +729,32 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
     })
   }
 
-  const bgKey = `bg-${game.bgg_id}`
-  const anyCopyAlreadyAdded = existingItemIds.has(bgKey)
-
-  const hasSelection = (anyCopy && !anyCopyAlreadyAdded) || checkedIds.size > 0
+  const hasSelection = anyCopy || checkedIds.size > 0
 
   return (
     <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 space-y-2">
       <p className="text-xs font-semibold text-purple-700">
         {game.name}
         {game.year_published && <span className="ml-1 font-normal text-moss">({game.year_published})</span>}
-        {' '}— choose what to add:
+        {' '}{t('trades.gameCopyPicker.chooseWhatToAddSuffix')}
       </p>
       <label className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm transition-colors ${
-        anyCopyAlreadyAdded
-          ? 'border-ink/15 bg-white text-moss/40 cursor-not-allowed'
-          : anyCopy
+        anyCopy
           ? 'border-purple-400 bg-white text-purple-800'
           : 'border-ink/15 bg-white text-ink hover:border-purple-200'
       }`}>
         <input
           type="checkbox"
           checked={anyCopy}
-          disabled={anyCopyAlreadyAdded}
           onChange={(e) => setAnyCopy(e.target.checked)}
           className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500 disabled:cursor-not-allowed"
         />
-        <span className="font-medium">Any copy</span>
-        <span className="text-xs text-purple-500 ml-1">(accept any trader's copy)</span>
-        {anyCopyAlreadyAdded && <span className="ml-auto text-xs text-moss/70">already added</span>}
+        <span className="font-medium">{t('trades.gameCopyPicker.anyCopy')}</span>
+        <span className="text-xs text-purple-500 ml-1">{t('trades.gameCopyPicker.anyCopyHint')}</span>
       </label>
       {otherCopies.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs text-moss">Or specific copies from other traders:</p>
+          <p className="text-xs text-moss">{t('trades.gameCopyPicker.orSpecificCopies')}</p>
           {otherCopies.map((listing) => {
             const key = `listing-${listing.id}`
             const alreadyAdded = existingItemIds.has(key)
@@ -700,14 +781,14 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
                 {listing.copy_condition && (
                   <span className="text-xs text-moss/70">{listing.copy_condition}</span>
                 )}
-                {alreadyAdded && <span className="ml-auto text-xs text-moss/70">already added</span>}
+                {alreadyAdded && <span className="ml-auto text-xs text-moss/70">{t('trades.gameCopyPicker.alreadyAdded')}</span>}
               </label>
             )
           })}
         </div>
       )}
       {otherCopies.length === 0 && listingsData && (
-        <p className="text-xs text-moss/70 italic">No copies from other traders in this event.</p>
+        <p className="text-xs text-moss/70 italic">{t('trades.gameCopyPicker.noOtherCopies')}</p>
       )}
       <div className="flex gap-2 pt-1">
         <button
@@ -715,15 +796,15 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
           onClick={onCancel}
           className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
-          onClick={() => onCommit({ anycopy: anyCopy && !anyCopyAlreadyAdded, listings: otherCopies.filter((l) => checkedIds.has(l.id)) })}
+          onClick={() => onCommit(anyCopy ? otherCopies : otherCopies.filter((l) => checkedIds.has(l.id)))}
           disabled={!hasSelection}
           className="flex-1 rounded-xl border-2 border-ink bg-purple-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          Add to want group
+          {t('trades.gameCopyPicker.addToWantGroup')}
         </button>
       </div>
     </div>
@@ -731,6 +812,7 @@ function GameCopyPicker({ slug, game, username, existingItemIds, onCommit, onCan
 }
 
 function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreating }: WantGroupEditorProps) {
+  const { t } = useTranslation()
   const patchGroup = usePatchWantGroup()
 
   const [name, setName] = useState(group?.name ?? '')
@@ -739,11 +821,12 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   const [items, setItems] = useState<DraftWantItem[]>(() =>
     (group?.items ?? []).map((i) => ({
       localId: makeDraftKey(i),
-      target_type: i.target_type,
-      board_game: i.board_game,
       board_game_name: i.board_game_name,
       event_listing: i.event_listing,
       listing_code: i.listing_code,
+      combo: i.combo,
+      combo_code: i.combo_code,
+      combo_name: i.combo_name,
       bid: i.bid_is_override ? (i.resolved_bid ?? '') : '',
     }))
   )
@@ -761,51 +844,27 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
 
   const existingItemIds = new Set(items.map((i) => i.localId))
 
-  function addBoardGame(game: EventGame) {
-    const key = `bg-${game.bgg_id}`
-    if (items.some((i) => i.localId === key)) {
-      setDuplicateWarn(`"${game.name}" is already in this want group.`)
-      setTimeout(() => setDuplicateWarn(null), 3000)
-      return
-    }
-    setItems((prev) => [
-      ...prev,
-      {
-        localId: key,
-        target_type: 'BOARD_GAME',
-        board_game: game.bgg_id,
-        board_game_name: game.name,
-        event_listing: null,
-        listing_code: null,
-        bid: '',
-      },
-    ])
-  }
-
-  function addListing(listing: EventListing) {
-    const key = `listing-${listing.id}`
-    if (items.some((i) => i.localId === key)) {
-      setDuplicateWarn(`Listing "${listing.board_game_name} (${listing.listing_code})" is already in this want group.`)
-      setTimeout(() => setDuplicateWarn(null), 3000)
-      return
-    }
-    setItems((prev) => [
-      ...prev,
-      {
-        localId: key,
-        target_type: 'LISTING',
-        board_game: null,
-        board_game_name: listing.board_game_name,
-        event_listing: listing.id,
-        listing_code: listing.listing_code,
-        bid: '',
-      },
-    ])
-  }
-
-  function handlePickerCommit(game: EventGame, sel: { anycopy: boolean; listings: EventListing[] }) {
-    if (sel.anycopy) addBoardGame(game)
-    for (const listing of sel.listings) addListing(listing)
+  function handlePickerCommit(listings: EventListing[]) {
+    setItems((prev) => {
+      const have = new Set(prev.map((i) => i.localId))
+      const additions: DraftWantItem[] = []
+      for (const listing of listings) {
+        const localId = `listing-${listing.id}`
+        if (have.has(localId)) continue
+        have.add(localId)
+        additions.push({
+          localId,
+          board_game_name: listing.board_game_name,
+          event_listing: listing.id,
+          listing_code: listing.listing_code,
+          combo: null,
+          combo_code: null,
+          combo_name: null,
+          bid: '',
+        })
+      }
+      return [...prev, ...additions]
+    })
     setActiveGame(null)
     setGameSearch('')
   }
@@ -819,45 +878,33 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
   }
 
   function buildPayloadItems(): WantGroupItemPayload[] {
-    return items.map((item) => {
-      const base: WantGroupItemPayload = { target_type: item.target_type }
-      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-        base.board_game = item.board_game
-      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-        base.event_listing = item.event_listing
-      }
-      return base
-    })
+    return items.map((item) =>
+      item.combo != null ? { combo: item.combo } : { event_listing: item.event_listing as number }
+    )
   }
 
-  // Persist per-target buy bids as WantBid overrides (decoupled from the want item).
+  // Persist per-listing buy bids as WantBid overrides (decoupled from the want item).
   async function saveWantBids() {
     if (!moneyEnabled) return
     for (const item of items) {
+      if (item.combo != null) continue
+      const listingId = item.event_listing as number
       const trimmed = item.bid.trim()
-      if (item.target_type === 'BOARD_GAME' && item.board_game != null) {
-        if (trimmed === '') {
-          await deleteWantBid(slug, { board_game: item.board_game })
-        } else {
-          await setWantBid(slug, { target_type: 'BOARD_GAME', board_game: item.board_game, amount: trimmed })
-        }
-      } else if (item.target_type === 'LISTING' && item.event_listing != null) {
-        if (trimmed === '') {
-          await deleteWantBid(slug, { event_listing: item.event_listing })
-        } else {
-          await setWantBid(slug, { target_type: 'LISTING', event_listing: item.event_listing, amount: trimmed })
-        }
+      if (trimmed === '') {
+        await deleteWantBid(slug, { event_listing: listingId })
+      } else {
+        await setWantBid(slug, { event_listing: listingId, amount: trimmed })
       }
     }
   }
 
   async function handleSave() {
     setFormError(null)
-    if (!name.trim()) { setFormError('Name is required.'); return }
+    if (!name.trim()) { setFormError(t('trades.errors.nameRequired')); return }
     const mr = parseInt(minReceive, 10)
-    if (isNaN(mr) || mr < 1) { setFormError('Min receive must be at least 1.'); return }
-    if (items.length === 0) { setFormError('Add at least one want target.'); return }
-    if (mr > items.length) { setFormError(`Min receive (${mr}) cannot exceed total targets (${items.length}).`); return }
+    if (isNaN(mr) || mr < 1) { setFormError(t('trades.errors.minReceiveMin')); return }
+    if (items.length === 0) { setFormError(t('trades.errors.addAtLeastOneTarget')); return }
+    if (mr > items.length) { setFormError(t('trades.errors.minReceiveExceeds', { min: mr, total: items.length })); return }
 
     setIsSaving(true)
     try {
@@ -878,10 +925,10 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
       try {
         await saveWantBids()
       } catch (e) {
-        setDuplicateWarn(`Group saved, but money bids could not be updated: ${extractErrorMsg(e)}`)
+        setDuplicateWarn(t('trades.wantGroups.bidsUpdateFailed', { error: extractErrorMsg(t, e) }))
       }
     } catch (e) {
-      setFormError(extractErrorMsg(e))
+      setFormError(extractErrorMsg(t, e))
     } finally {
       setIsSaving(false)
     }
@@ -891,17 +938,17 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
     <div className="rounded-2xl border border-purple-200 bg-purple-50 p-3 space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-ink mb-1">Group name</label>
+          <label className="block text-xs font-medium text-ink mb-1">{t('trades.groupNameLabel')}</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-            placeholder="e.g. Strategy games I want"
+            placeholder={t('trades.wantGroups.namePlaceholder')}
           />
         </div>
         <div>
           <label className="block text-xs font-medium text-ink mb-1">
-            Min receive (Y) — receive at least this many
+            {t('trades.wantGroups.minReceiveLabel')}
           </label>
           <input
             type="number"
@@ -920,8 +967,8 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           onChange={(e) => setDupProtect(e.target.checked)}
           className="h-3.5 w-3.5 rounded border-ink/20 text-purple-600 focus:ring-purple-500"
         />
-        Protect against duplicates
-        <span className="text-moss/70">(don't receive more than one copy of the same game)</span>
+        {t('trades.wantGroups.protectAgainstDuplicates')}
+        <span className="text-moss/70">{t('trades.wantGroups.protectAgainstDuplicatesHint')}</span>
       </label>
 
       {(formError || duplicateWarn) && (
@@ -933,12 +980,12 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
       {/* Targets list */}
       <div>
         <p className="text-xs font-medium text-moss mb-2">
-          Games you'd like to receive ({items.length})
+          {t('trades.wantGroups.targetsHeading', { count: items.length })}
         </p>
         <div className="space-y-1.5 min-h-[40px]">
           {items.length === 0 ? (
             <div className="rounded-xl border-2 border-dashed border-purple-200 py-4 text-center text-xs text-moss/70">
-              Search below to add games you want
+              {t('trades.wantGroups.searchBelowHint')}
             </div>
           ) : (
             items.map((item) => (
@@ -947,18 +994,25 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                 className="rounded-xl border border-ink/15 bg-white px-3 py-2 flex items-center justify-between gap-2"
               >
                 <div className="min-w-0">
-                  <span className="text-sm text-ink font-medium truncate block">
-                    {item.board_game_name}
-                  </span>
-                  {item.target_type === 'LISTING' ? (
-                    <span className="text-xs text-blue-600 font-mono">{item.listing_code} (specific)</span>
+                  {item.combo != null ? (
+                    <>
+                      <span className="text-sm text-ink font-medium truncate block">
+                        🎁 {item.combo_name}
+                      </span>
+                      <span className="text-xs text-amber-600 font-mono">{item.combo_code}</span>
+                    </>
                   ) : (
-                    <span className="text-xs text-purple-500">any copy</span>
+                    <>
+                      <span className="text-sm text-ink font-medium truncate block">
+                        {item.board_game_name}
+                      </span>
+                      <span className="text-xs text-blue-600 font-mono">{item.listing_code}</span>
+                    </>
                   )}
                 </div>
-                {moneyEnabled && (
+                {moneyEnabled && item.combo == null && (
                   <div className="flex shrink-0 items-center gap-1">
-                    <span className="text-xs text-moss/70">pay ≤$</span>
+                    <span className="text-xs text-moss/70">{t('trades.payUpToLabel')}</span>
                     <input
                       type="number"
                       min={0}
@@ -966,7 +1020,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                       value={item.bid}
                       onChange={(e) => setMoney(item.localId, e.target.value)}
                       placeholder="0"
-                      title="Most money you'll pay to receive this game (needs a seller who accepts money)"
+                      title={t('trades.wantGroups.bidInputTitle')}
                       className="w-20 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </div>
@@ -975,7 +1029,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                   type="button"
                   onClick={() => removeItem(item.localId)}
                   className="shrink-0 text-xs text-moss/40 hover:text-red-500 transition-colors"
-                  aria-label="Remove target"
+                  aria-label={t('trades.wantGroups.removeTargetAriaLabel')}
                 >
                   ✕
                 </button>
@@ -987,11 +1041,11 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
 
       {/* Add game target via event-scoped search */}
       <div className="space-y-1.5">
-        <p className="text-xs font-medium text-ink">Search game in this event:</p>
+        <p className="text-xs font-medium text-ink">{t('trades.wantGroups.searchGameLabel')}</p>
         <input
           value={gameSearch}
           onChange={(e) => { setGameSearch(e.target.value); setActiveGame(null) }}
-          placeholder="Type a game name…"
+          placeholder={t('trades.wantGroups.searchGamePlaceholder')}
           className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
         />
         {!activeGame && gameSearch.length >= 2 && gameResults && gameResults.results.length > 0 && (
@@ -1007,13 +1061,13 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
                 {game.year_published && (
                   <span className="ml-1 text-xs text-moss/70">({game.year_published})</span>
                 )}
-                <span className="ml-2 text-xs text-moss/70">{game.copies_count} {game.copies_count === 1 ? 'copy' : 'copies'}</span>
+                <span className="ml-2 text-xs text-moss/70">{t('trades.copiesCount', { count: game.copies_count })}</span>
               </button>
             ))}
           </div>
         )}
         {!activeGame && gameSearch.length >= 2 && gameResults?.results.length === 0 && (
-          <p className="text-xs text-moss/70">No games found in this event.</p>
+          <p className="text-xs text-moss/70">{t('trades.wantGroups.noGamesFound')}</p>
         )}
         {activeGame && (
           <GameCopyPicker
@@ -1022,7 +1076,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
             game={activeGame}
             username={username}
             existingItemIds={existingItemIds}
-            onCommit={(sel) => handlePickerCommit(activeGame, sel)}
+            onCommit={(listings) => handlePickerCommit(listings)}
             onCancel={() => { setActiveGame(null); setGameSearch('') }}
           />
         )}
@@ -1034,7 +1088,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           onClick={() => onClose()}
           className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
         <button
           type="button"
@@ -1042,7 +1096,7 @@ function WantGroupEditor({ slug, group, username, moneyEnabled, onClose, isCreat
           disabled={isSaving}
           className="flex-1 rounded-xl border-2 border-ink bg-purple-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          {isSaving ? 'Saving…' : group ? 'Save changes' : 'Create group'}
+          {isSaving ? t('trades.saving') : group ? t('trades.saveChanges') : t('trades.createGroup')}
         </button>
       </div>
     </div>
@@ -1061,6 +1115,7 @@ interface WishesPanelProps {
 }
 
 function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps) {
+  const { t } = useTranslation()
   const { data: wishes = [], isLoading } = useWishes(slug)
   const createWish = useCreateWish()
   const toggleWish = useToggleWish()
@@ -1074,14 +1129,14 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
   async function handleCreate() {
     setError(null)
     if (!selectedOG || !selectedWG) {
-      setError('Select both an offer group and a want group.')
+      setError(t('trades.errors.selectBothGroups'))
       return
     }
     const ogId = parseInt(selectedOG, 10)
     const wgId = parseInt(selectedWG, 10)
     // Check duplicate
     if (wishes.some((w) => w.offer_group === ogId && w.want_group === wgId)) {
-      setError('This offer → want combination already exists.')
+      setError(t('trades.errors.wishAlreadyExists'))
       return
     }
     try {
@@ -1090,7 +1145,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
       setSelectedOG('')
       setSelectedWG('')
     } catch (e) {
-      setError(extractErrorMsg(e))
+      setError(extractErrorMsg(t, e))
     }
   }
 
@@ -1114,7 +1169,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
 
       {wishes.length === 0 && !showForm && (
         <p className="text-xs text-moss/70 py-2">
-          No wishes yet. Link an offer group to a want group to express a trade preference.
+          {t('trades.wishes.empty')}
         </p>
       )}
 
@@ -1129,7 +1184,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
             try {
               await toggleWish.mutateAsync({ slug, id: wish.id, active: !wish.active })
             } catch (e) {
-              setError(extractErrorMsg(e))
+              setError(extractErrorMsg(t, e))
             }
           }}
           onDelete={async () => {
@@ -1137,7 +1192,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
             try {
               await deleteWish.mutateAsync({ slug, id: wish.id })
             } catch (e) {
-              setError(extractErrorMsg(e))
+              setError(extractErrorMsg(t, e))
             }
           }}
           isToggling={toggleWish.isPending}
@@ -1148,42 +1203,42 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
 
       {showForm ? (
         <div className="rounded-2xl border border-green-200 bg-green-50 p-3 space-y-3">
-          <p className="text-xs font-semibold text-green-700">New wish — link an offer to a want</p>
+          <p className="text-xs font-semibold text-green-700">{t('trades.wishes.newWishHeading')}</p>
 
           <div className="grid grid-cols-1 gap-2">
             <div>
-              <label className="block text-xs font-medium text-ink mb-1">Offer group (what you give)</label>
+              <label className="block text-xs font-medium text-ink mb-1">{t('trades.wishes.offerGroupLabel')}</label>
               {offerGroups.length === 0 ? (
-                <p className="text-xs text-moss/70 italic">Create an offer group first.</p>
+                <p className="text-xs text-moss/70 italic">{t('trades.wishes.createOfferGroupFirst')}</p>
               ) : (
                 <select
                   value={selectedOG}
                   onChange={(e) => setSelectedOG(e.target.value)}
                   className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="">Select offer group…</option>
+                  <option value="">{t('trades.wishes.selectOfferGroupPlaceholder')}</option>
                   {offerGroups.map((og) => (
                     <option key={og.id} value={og.id}>
-                      {og.name} (give up to {og.max_give})
+                      {t('trades.wishes.offerGroupOption', { name: og.name, max: og.max_give })}
                     </option>
                   ))}
                 </select>
               )}
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink mb-1">Want group (what you receive)</label>
+              <label className="block text-xs font-medium text-ink mb-1">{t('trades.wishes.wantGroupLabel')}</label>
               {wantGroups.length === 0 ? (
-                <p className="text-xs text-moss/70 italic">Create a want group first.</p>
+                <p className="text-xs text-moss/70 italic">{t('trades.wishes.createWantGroupFirst')}</p>
               ) : (
                 <select
                   value={selectedWG}
                   onChange={(e) => setSelectedWG(e.target.value)}
                   className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="">Select want group…</option>
+                  <option value="">{t('trades.wishes.selectWantGroupPlaceholder')}</option>
                   {wantGroups.map((wg) => (
                     <option key={wg.id} value={wg.id}>
-                      {wg.name} (receive at least {wg.min_receive})
+                      {t('trades.wishes.wantGroupOption', { name: wg.name, min: wg.min_receive })}
                     </option>
                   ))}
                 </select>
@@ -1203,7 +1258,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
                 </span>
                 <span className="font-semibold text-purple-700">{wg.name}</span>
                 <span className="ml-2 text-moss/70">
-                  — give up to {og.max_give}, receive at least {wg.min_receive}
+                  {t('trades.wishes.summarySuffix', { max: og.max_give, min: wg.min_receive })}
                 </span>
               </div>
             )
@@ -1215,7 +1270,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
               onClick={() => { setShowForm(false); setError(null); setSelectedOG(''); setSelectedWG('') }}
               className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -1223,7 +1278,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
               disabled={createWish.isPending || offerGroups.length === 0 || wantGroups.length === 0}
               className="flex-1 rounded-xl border-2 border-ink bg-green-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {createWish.isPending ? 'Creating…' : 'Create wish'}
+              {createWish.isPending ? t('trades.wishes.creating') : t('trades.wishes.createWish')}
             </button>
           </div>
         </div>
@@ -1232,7 +1287,7 @@ function WishesPanel({ slug, offerGroups, wantGroups, locked }: WishesPanelProps
           onClick={() => setShowForm(true)}
           className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-green-300 hover:text-green-500 transition-colors"
         >
-          + New wish
+          {t('trades.wishes.newWishButton')}
         </button>
       ) : null}
     </div>
@@ -1251,6 +1306,7 @@ interface WishCardProps {
 }
 
 function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling, isDeleting, locked }: WishCardProps) {
+  const { t } = useTranslation()
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   return (
@@ -1274,30 +1330,32 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
             </span>
           </div>
           <p className="text-xs text-moss/70">
-            Give up to <strong>{wish.max_give}</strong> → Receive at least <strong>{wish.min_receive}</strong>
+            {t('trades.wishes.giveAnyPrefix')} <strong>{wish.max_give}</strong> {t('trades.wishes.itemsArrowReceiveAny')} <strong>{wish.min_receive}</strong> {t('trades.wishes.itemsSuffix')}
           </p>
 
           {(offerItems.length > 0 || wantItems.length > 0) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {offerItems.map((item) => (
-                <GameThumb
-                  key={item.id}
-                  src={item.board_game_thumbnail}
-                  alt={item.board_game_name ?? ''}
-                  className="h-7 w-7"
-                />
-              ))}
-              <svg className="h-4 w-4 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label="trades for">
+              {offerItems.map((item) =>
+                item.combo != null ? (
+                  <span key={item.id} className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title={item.combo_name ?? t('trades.comboFallback')}>
+                    🎁 {item.combo_code}
+                  </span>
+                ) : (
+                  <GameThumb key={item.id} src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-7 w-7" />
+                )
+              )}
+              <svg className="h-4 w-4 shrink-0 text-moss/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-label={t('trades.tradesForAriaLabel')}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
-              {wantItems.map((item) => (
-                <GameThumb
-                  key={item.id}
-                  src={item.board_game_thumbnail}
-                  alt={item.board_game_name ?? ''}
-                  className="h-7 w-7"
-                />
-              ))}
+              {wantItems.map((item) =>
+                item.combo != null ? (
+                  <span key={item.id} className="inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800" title={item.combo_name ?? t('trades.comboFallback')}>
+                    🎁 {item.combo_code}
+                  </span>
+                ) : (
+                  <GameThumb key={item.id} src={item.board_game_thumbnail} alt={item.board_game_name ?? ''} className="h-7 w-7" />
+                )
+              )}
             </div>
           )}
         </div>
@@ -1312,9 +1370,9 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
                   ? 'text-moss hover:text-ink bg-gray-100 hover:bg-gray-200'
                   : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'
               }`}
-              title={wish.active ? 'Deactivate wish' : 'Activate wish'}
+              title={wish.active ? t('trades.wishes.deactivateTitle') : t('trades.wishes.activateTitle')}
             >
-              {wish.active ? 'Pause' : 'Activate'}
+              {wish.active ? t('trades.wishes.pause') : t('trades.wishes.activate')}
             </button>
             {confirmDelete ? (
               <span className="flex items-center gap-1">
@@ -1323,13 +1381,13 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
                   disabled={isDeleting}
                   className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded"
                 >
-                  {isDeleting ? 'Deleting…' : 'Confirm'}
+                  {isDeleting ? t('trades.deleting') : t('trades.confirm')}
                 </button>
                 <button
                   onClick={() => setConfirmDelete(false)}
                   className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </span>
             ) : (
@@ -1337,7 +1395,7 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
                 onClick={() => setConfirmDelete(true)}
                 className="text-xs text-moss/70 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded"
               >
-                Delete
+                {t('common.delete')}
               </button>
             )}
           </div>
@@ -1346,9 +1404,399 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
 
       {!wish.active && (
         <span className="mt-1.5 inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-moss/70">
-          Paused
+          {t('trades.wishes.paused')}
         </span>
       )}
+    </div>
+  )
+}
+
+// ============================================================
+// CAPS PANEL — user-defined takecap / givecap
+// ============================================================
+
+interface CapsPanelProps {
+  slug: string
+  username: string
+  locked?: boolean
+}
+
+function CapsPanel({ slug, username, locked }: CapsPanelProps) {
+  const { t } = useTranslation()
+  const { data: capsData, isLoading } = useCaps(slug)
+  const deleteCap = useDeleteCap()
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Cap | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const caps = capsData?.results ?? []
+
+  async function handleDelete(id: number) {
+    setError(null)
+    try {
+      await deleteCap.mutateAsync({ slug, id })
+    } catch (e) {
+      setError(extractErrorMsg(t, e))
+    }
+  }
+
+  if (isLoading) {
+    return <div className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-moss/70">
+        {t('trades.caps.descPrefix')} (<strong>{t('trades.caps.takeWord')}</strong>) {t('trades.caps.descMid')}
+        {' '}(<strong>{t('trades.caps.giveWord')}</strong>) {t('trades.caps.descSuffix')}
+      </p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      {(showForm || editing) && !locked && (
+        <CapForm
+          key={editing?.id ?? 'new'}
+          slug={slug}
+          username={username}
+          editing={editing}
+          onClose={() => { setShowForm(false); setEditing(null) }}
+        />
+      )}
+
+      {caps.length === 0 && !showForm && !editing && (
+        <p className="text-xs text-moss/70 py-2">{t('trades.caps.empty')}</p>
+      )}
+
+      {caps.map((cap) => (
+        <CapCard
+          key={cap.id}
+          cap={cap}
+          locked={locked}
+          onEdit={() => { setEditing(cap); setShowForm(false) }}
+          onDelete={() => handleDelete(cap.id)}
+          isDeleting={deleteCap.isPending}
+        />
+      ))}
+
+      {!locked && !showForm && !editing && (
+        <button
+          onClick={() => { setEditing(null); setShowForm(true) }}
+          className="w-full rounded-2xl border-2 border-dashed border-ink/15 py-3 text-xs font-medium text-moss/70 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+        >
+          {t('trades.caps.newButton')}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function CapCard({ cap, locked, onEdit, onDelete, isDeleting }: {
+  cap: Cap
+  locked?: boolean
+  onEdit: () => void
+  onDelete: () => void
+  isDeleting: boolean
+}) {
+  const { t } = useTranslation()
+  const [confirm, setConfirm] = useState(false)
+  const verb = t(`trades.capVerb.${cap.kind}`)
+  return (
+    <div className="rounded-2xl border border-ink/15 bg-white p-3">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+          {t('trades.caps.atMost', { verb, n: cap.n })}
+        </span>
+        {!locked && (
+          <div className="flex gap-1 shrink-0">
+            <button onClick={onEdit} className="text-xs text-moss/70 hover:text-indigo-600 px-1.5 py-0.5 rounded">{t('trades.edit')}</button>
+            {confirm ? (
+              <span className="flex items-center gap-1">
+                <button onClick={onDelete} disabled={isDeleting} className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50 px-1.5 py-0.5 rounded">
+                  {isDeleting ? t('trades.deleting') : t('trades.confirm')}
+                </button>
+                <button onClick={() => setConfirm(false)} className="text-xs text-moss/70 hover:text-moss px-1.5 py-0.5 rounded">{t('common.cancel')}</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirm(true)} className="text-xs text-moss/70 hover:text-red-500 px-1.5 py-0.5 rounded">{t('common.delete')}</button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {cap.items.map((it) =>
+          it.combo != null ? (
+            <span key={it.id} className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              🎁 {it.combo_name} <span className="font-mono text-amber-700/70">{it.combo_code}</span>
+            </span>
+          ) : (
+            <span key={it.id} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs text-ink">
+              <span className="font-mono text-moss/70">{it.listing_code}</span>
+              {it.board_game_name}
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CapForm({ slug, username, editing, onClose }: {
+  slug: string
+  username: string
+  editing: Cap | null
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const createCap = useCreateCap()
+  const patchCap = usePatchCap()
+  const { data: listingsData } = useEventListings(slug, { page_size: 200 })
+  const { data: combosData } = useCombos(slug)
+  const allListings = listingsData?.results ?? []
+  const allCombos = combosData?.results ?? []
+
+  const [kind, setKind] = useState<CapKind>(editing?.kind ?? 'TAKE')
+  const [n, setN] = useState(String(editing?.n ?? 1))
+  const [listingIds, setListingIds] = useState<Set<number>>(
+    new Set((editing?.items ?? []).filter((i) => i.event_listing != null).map((i) => i.event_listing as number))
+  )
+  const [comboIds, setComboIds] = useState<Set<number>>(
+    new Set((editing?.items ?? []).filter((i) => i.combo != null).map((i) => i.combo as number))
+  )
+  const [error, setError] = useState<string | null>(null)
+  const saving = createCap.isPending || patchCap.isPending
+
+  // GIVE: only your own items can be capped. TAKE: any item.
+  const listings = kind === 'GIVE'
+    ? allListings.filter((l) => l.copy_owner_username === username)
+    : allListings
+  const combos = kind === 'GIVE'
+    ? allCombos.filter((c) => c.owner_username === username)
+    : allCombos
+
+  function toggle(set: Set<number>, setter: (s: Set<number>) => void, id: number) {
+    const next = new Set(set)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setter(next)
+  }
+
+  async function handleSave() {
+    setError(null)
+    const nn = parseInt(n, 10)
+    if (isNaN(nn) || nn < 1) { setError(t('trades.errors.nMin')); return }
+    if (listingIds.size + comboIds.size === 0) { setError(t('trades.errors.pickAtLeastOneItem')); return }
+    const payload = {
+      kind, n: nn,
+      item_listing_ids: Array.from(listingIds),
+      item_combo_ids: Array.from(comboIds),
+    }
+    try {
+      if (editing) await patchCap.mutateAsync({ slug, id: editing.id, payload })
+      else await createCap.mutateAsync({ slug, payload })
+      onClose()
+    } catch (e) {
+      setError(extractErrorMsg(t, e))
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-3 space-y-3">
+      <p className="text-xs font-semibold text-indigo-700">{editing ? t('trades.caps.editHeading') : t('trades.caps.newHeading')}</p>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">{t('trades.caps.kindLabel')}</label>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as CapKind)}
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="TAKE">{t('trades.caps.kindTakeOption')}</option>
+            <option value="GIVE">{t('trades.caps.kindGiveOption')}</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">{t('trades.caps.nLabel')}</label>
+          <input
+            type="number" min={1} value={n}
+            onChange={(e) => setN(e.target.value)}
+            className="w-full rounded-xl border border-ink/20 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-ink mb-1.5">
+          {t('trades.caps.itemsHeading', { count: listingIds.size + comboIds.size })}
+          {kind === 'GIVE' && <span className="ml-1 text-moss/60">{t('trades.caps.ownItemsOnlyHint')}</span>}
+        </p>
+        <div className="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto">
+          {listings.map((l: EventListing) => (
+            <label key={`l-${l.id}`} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm ${
+              listingIds.has(l.id) ? 'border-indigo-400 bg-white text-indigo-800' : 'border-ink/15 bg-white text-ink hover:border-indigo-200'
+            }`}>
+              <input type="checkbox" checked={listingIds.has(l.id)} onChange={() => toggle(listingIds, setListingIds, l.id)} />
+              <span className="font-medium">{l.board_game_name}</span>
+              <span className="font-mono text-xs text-moss/70">{l.listing_code}</span>
+            </label>
+          ))}
+          {combos.map((c) => (
+            <label key={`c-${c.id}`} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer text-sm ${
+              comboIds.has(c.id) ? 'border-amber-400 bg-white text-amber-800' : 'border-ink/15 bg-white text-ink hover:border-amber-200'
+            }`}>
+              <input type="checkbox" checked={comboIds.has(c.id)} onChange={() => toggle(comboIds, setComboIds, c.id)} />
+              <span className="font-medium">🎁 {c.name}</span>
+              <span className="font-mono text-xs text-moss/70">{c.combo_code}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button onClick={handleSave} disabled={saving} className="rounded-xl border-2 border-ink bg-indigo-400 px-3 py-1.5 text-xs font-bold text-white shadow-pop-sm disabled:opacity-60">
+          {saving ? t('trades.saving') : editing ? t('common.save') : t('trades.caps.createButton')}
+        </button>
+        <button onClick={onClose} className="rounded-xl border border-ink/20 px-3 py-1.5 text-xs font-medium text-ink hover:bg-gray-50">{t('common.cancel')}</button>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// PRICES PANEL — per-copy bid overrides (+ per-game defaults)
+// ============================================================
+
+interface PricesPanelProps {
+  slug: string
+  username: string
+  locked?: boolean
+}
+
+function PricesPanel({ slug, locked }: PricesPanelProps) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const { data: wantGroups = [] } = useWantGroups(slug)
+  const { data: gamePrices = [] } = useQuery({
+    queryKey: ['trades', 'game-prices', slug],
+    queryFn: () => listGamePrices(slug),
+    staleTime: 30_000,
+  })
+
+  // Unique wanted listing targets (a copy may appear in several want groups).
+  const byListing = new Map<number, WantGroupItem>()
+  for (const wg of wantGroups) {
+    for (const it of wg.items) {
+      if (it.event_listing != null && !byListing.has(it.event_listing)) {
+        byListing.set(it.event_listing, it)
+      }
+    }
+  }
+  const wantedCopies = Array.from(byListing.values())
+
+  return (
+    <div className="space-y-5">
+      <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        {t('trades.prices.descPrefix')} <strong>{t('trades.prices.bidWord')}</strong> {t('trades.prices.descSuffix')}
+      </p>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">{t('trades.prices.perCopyBidsHeading')}</h3>
+        {wantedCopies.length === 0 ? (
+          <p className="text-xs text-moss/70">{t('trades.prices.noWantedCopies')}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {wantedCopies.map((it) => (
+              <CopyBidRow key={it.event_listing as number} slug={slug} item={it} locked={locked} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-ink mb-2">{t('trades.prices.perGameDefaultsHeading')}</h3>
+        {gamePrices.length === 0 ? (
+          <p className="text-xs text-moss/70">{t('trades.prices.noGamePrices')}</p>
+        ) : (
+          <div className="space-y-1.5">
+            {gamePrices.map((gp: GamePrice) => (
+              <GamePriceRow key={gp.id} slug={slug} gp={gp} locked={locked} onChanged={() => qc.invalidateQueries({ queryKey: ['trades', 'game-prices', slug] })} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CopyBidRow({ slug, item, locked }: { slug: string; item: WantGroupItem; locked?: boolean }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const isOverride = item.bid_is_override === true
+  const [value, setValue] = useState(isOverride ? (item.resolved_bid ?? '') : '')
+  const [busy, setBusy] = useState(false)
+  const elId = item.event_listing as number
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteWantBid(slug, { event_listing: elId })
+      else await setWantBid(slug, { event_listing: elId, amount: v })
+      qc.invalidateQueries({ queryKey: ['trades', 'want-groups', slug] })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <div className="min-w-0">
+        <span className="block truncate text-sm text-ink">{item.board_game_name}</span>
+        <span className="font-mono text-xs text-moss/70">{item.listing_code}</span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">{t('trades.bidUpToLabel')}</span>
+        <input
+          type="number" min={0} step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          placeholder={!isOverride && item.resolved_bid ? item.resolved_bid : t('trades.defaultPlaceholder')}
+          title={t('trades.prices.copyBidTitle')}
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
+    </div>
+  )
+}
+
+function GamePriceRow({ slug, gp, locked, onChanged }: { slug: string; gp: GamePrice; locked?: boolean; onChanged: () => void }) {
+  const [value, setValue] = useState(gp.price)
+  const [busy, setBusy] = useState(false)
+
+  async function commit() {
+    setBusy(true)
+    try {
+      const v = value.trim()
+      if (v === '') await deleteGamePrice(slug, gp.board_game)
+      else await setGamePrice(slug, gp.board_game, v)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-ink/15 bg-white px-3 py-2">
+      <span className="truncate text-sm text-ink">{gp.board_game_name}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-moss/70">$</span>
+        <input
+          type="number" min="0.01" step="0.01" disabled={locked || busy}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={commit}
+          className="no-spinner w-24 rounded border border-ink/20 px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+        />
+      </div>
     </div>
   )
 }
@@ -1357,9 +1805,10 @@ function WishCard({ wish, offerItems, wantItems, onToggle, onDelete, isToggling,
 // MAIN PAGE
 // ============================================================
 
-type BuilderTab = 'offers' | 'wants' | 'wishes'
+type BuilderTab = 'offers' | 'wants' | 'wishes' | 'caps' | 'prices'
 
 export default function WantListBuilderPage() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const { user } = useAuthStore()
 
@@ -1374,7 +1823,7 @@ export default function WantListBuilderPage() {
 
   if (eventLoading) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-4 animate-pulse">
         <div className="h-8 w-2/3 bg-gray-100 rounded" />
         <div className="h-4 w-1/3 bg-gray-100 rounded" />
         <div className="h-64 bg-gray-100 rounded-xl" />
@@ -1384,12 +1833,10 @@ export default function WantListBuilderPage() {
 
   if (eventError || !event) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm font-medium text-red-700">Event not found or failed to load.</p>
-          <Link to="/events" className="mt-3 inline-block text-sm text-indigo-600 hover:underline">
-            Back to events
-          </Link>
+          <p className="text-sm font-medium text-red-700">{t('trades.notFoundError')}</p>
+          <BackButton to="/events" className="mt-3">{t('trades.backToEvents')}</BackButton>
         </div>
       </div>
     )
@@ -1397,16 +1844,16 @@ export default function WantListBuilderPage() {
 
   if (!event.is_participant && !event.is_organizer) {
     return (
-      <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-8 text-center">
           <p className="text-sm font-medium text-yellow-700">
-            You must join this event before building your want list.
+            {t('trades.mustJoinToBuild')}
           </p>
           <Link
             to={`/events/${slug}`}
             className="mt-3 inline-block text-sm text-indigo-600 hover:underline"
           >
-            Go to event page to join
+            {t('trades.goToEventToJoin')}
           </Link>
         </div>
       </div>
@@ -1414,50 +1861,45 @@ export default function WantListBuilderPage() {
   }
 
   const tabs: { id: BuilderTab; label: string; count?: number }[] = [
-    { id: 'offers', label: 'Offer Groups', count: offerGroupsData.length },
-    { id: 'wants', label: 'Want Groups', count: wantGroupsData.length },
-    { id: 'wishes', label: 'Wishes' },
+    { id: 'offers', label: t('trades.builder.tabs.offers'), count: offerGroupsData.length },
+    { id: 'wants', label: t('trades.builder.tabs.wants'), count: wantGroupsData.length },
+    { id: 'wishes', label: t('trades.builder.tabs.wishes') },
+    { id: 'caps', label: t('trades.builder.tabs.caps') },
+    ...(event.money_enabled ? [{ id: 'prices' as BuilderTab, label: t('trades.builder.tabs.prices') }] : []),
   ]
 
   const locked = event.inputs_locked
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-8 space-y-6">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8 space-y-6">
       {/* Back link */}
-      <Link
-        to={`/events/${slug}`}
-        className="inline-flex items-center gap-1 text-xs text-moss/70 hover:text-indigo-600 transition-colors"
-      >
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to {event.name}
-      </Link>
+      <BackButton to={`/events/${slug}`}>{t('trades.backToEvent', { name: event.name })}</BackButton>
 
       {/* Header */}
       <div className="rounded-xl border border-ink/15 bg-white p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-ink">Want List Builder</h1>
+        <h1 className="text-xl font-bold text-ink">{t('trades.builder.title')}</h1>
         <p className="text-sm text-moss mt-1">
           {event.name}
           <span className="mx-2 text-moss/40">·</span>
-          Build offer groups, want groups, and link them into wishes
+          {t('trades.builder.subtitle')}
         </p>
 
         {/* X:Y explained */}
         <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2.5 text-xs text-moss">
-          <strong className="text-indigo-700">How it works:</strong> An{' '}
-          <span className="font-semibold text-indigo-600">Offer Group</span> is a set of your listings
-          with a max-give (X).{' '}
-          A <span className="font-semibold text-purple-600">Want Group</span> is a list of
-          games/listings you want, with a min-receive (Y).{' '}
-          A <span className="font-semibold text-green-600">Wish</span> links them:{' '}
-          "Give up to X → Receive at least Y."
+          <strong className="text-indigo-700">{t('trades.builder.howItWorksLabel')}</strong> {t('trades.builder.offerGroupSentence1')}{' '}
+          <span className="font-semibold text-indigo-600">{t('trades.builder.offerGroupTerm')}</span>{' '}
+          {t('trades.builder.offerGroupSentence2')}{' '}
+          {t('trades.builder.wantGroupSentence1')} <span className="font-semibold text-purple-600">{t('trades.builder.wantGroupTerm')}</span>{' '}
+          {t('trades.builder.wantGroupSentence2')}{' '}
+          {t('trades.builder.wishSentence1')} <span className="font-semibold text-green-600">{t('trades.builder.wishTerm')}</span>{' '}
+          {t('trades.builder.wishSentence2')}{' '}
+          {t('trades.builder.example')}
           {event.money_enabled && (
             <>
               {' '}
-              <span className="font-semibold text-emerald-700">Money:</span> set the most
-              you'll <em>pay</em> for a wanted game here. Your sell price is set in My
-              Listings / Almanac. A money trade happens only when a buyer's max ≥ a seller's min.
+              <span className="font-semibold text-emerald-700">{t('trades.builder.moneyTerm')}</span>{' '}
+              {t('trades.builder.moneySentence1')} <em>{t('trades.builder.payWord')}</em>{' '}
+              {t('trades.builder.moneySentence2')}
             </>
           )}
         </div>
@@ -1465,7 +1907,7 @@ export default function WantListBuilderPage() {
 
       {locked && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          This event is locked for matching — want lists can no longer be edited.
+          {t('trades.lockedBanner')}
         </div>
       )}
 
@@ -1501,17 +1943,17 @@ export default function WantListBuilderPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">
-                Offer Groups
+                {t('trades.builder.tabs.offers')}
               </h2>
               <p className="text-xs text-moss/70">
-                {myListings.length} listing{myListings.length !== 1 ? 's' : ''} in this event
+                {t('trades.listingsInEventCount', { count: myListings.length })}
               </p>
             </div>
             {myListings.length === 0 && (
               <div className="rounded-xl bg-yellow-50 border border-yellow-200 px-3 py-2.5 text-xs text-yellow-700">
-                You have no listings in this event yet.{' '}
+                {t('trades.builder.noListingsPrefix')}{' '}
                 <Link to={`/events/${slug}`} className="underline font-medium">
-                  Add copies from the event page.
+                  {t('trades.builder.addCopiesLink')}
                 </Link>
               </div>
             )}
@@ -1523,10 +1965,10 @@ export default function WantListBuilderPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">
-                Want Groups
+                {t('trades.builder.tabs.wants')}
               </h2>
               <p className="text-xs text-moss/70">
-                Games you'd like to receive
+                {t('trades.builder.wantsSubtitle')}
               </p>
             </div>
             <WantGroupsPanel slug={slug!} username={user?.username ?? ''} moneyEnabled={event.money_enabled} locked={locked} />
@@ -1537,18 +1979,38 @@ export default function WantListBuilderPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">
-                Wishes — X:Y links
+                {t('trades.builder.wishesTabHeading')}
               </h2>
               <p className="text-xs text-moss/70">
-                {offerGroupsData.length} offer · {wantGroupsData.length} want
+                {t('trades.builder.offerWantSummary', { offerCount: offerGroupsData.length, wantCount: wantGroupsData.length })}
               </p>
             </div>
             {(offerGroupsData.length === 0 || wantGroupsData.length === 0) && (
               <div className="rounded-xl bg-blue-50 border border-blue-200 px-3 py-2.5 text-xs text-blue-700">
-                Create at least one offer group and one want group first.
+                {t('trades.builder.createGroupsFirstHint')}
               </div>
             )}
             <WishesPanel slug={slug!} offerGroups={offerGroupsData} wantGroups={wantGroupsData} locked={locked} />
+          </div>
+        )}
+
+        {activeTab === 'caps' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">{t('trades.builder.capsTabHeading')}</h2>
+              <p className="text-xs text-moss/70">{t('trades.builder.capsTabSubtitle')}</p>
+            </div>
+            <CapsPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
+          </div>
+        )}
+
+        {activeTab === 'prices' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">{t('trades.builder.pricesTabHeading')}</h2>
+              <p className="text-xs text-moss/70">{t('trades.builder.pricesTabSubtitle')}</p>
+            </div>
+            <PricesPanel slug={slug!} username={user?.username ?? ''} locked={locked} />
           </div>
         )}
       </div>

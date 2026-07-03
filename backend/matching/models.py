@@ -37,6 +37,9 @@ class MatchRun(models.Model):
     summary     = models.JSONField(default=dict)  # counts: matched_wishes, cycles, unmatched
     result      = models.JSONField(default=dict)  # full result blob per DATA_MODEL schema
     log         = models.TextField(blank=True)    # human-readable progress log
+    # Set once apply_carryover has flipped traded copies + minted fresh ones for
+    # this run's receivers (idempotency guard).
+    carried_over = models.BooleanField(default=False)
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
@@ -64,6 +67,13 @@ class TradeAssignment(models.Model):
         "events.EventListing",
         on_delete=models.CASCADE,
         related_name="trade_assignments",
+        null=True, blank=True,
+    )
+    combo = models.ForeignKey(
+        "events.Combo",
+        on_delete=models.CASCADE,
+        related_name="trade_assignments",
+        null=True, blank=True,
     )
     giver = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -97,6 +107,13 @@ class TradeAssignment(models.Model):
 
     class Meta:
         ordering = ["cycle_id", "id"]
+        constraints = [
+            models.CheckConstraint(
+                check=(models.Q(event_listing__isnull=False) & models.Q(combo__isnull=True))
+                | (models.Q(event_listing__isnull=True) & models.Q(combo__isnull=False)),
+                name="assignment_exactly_one_target",
+            ),
+        ]
 
     def __str__(self):
         return (

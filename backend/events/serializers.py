@@ -12,7 +12,11 @@ Serializers for F4 Trade Events:
 
 from rest_framework import serializers
 
-from .models import EventListing, EventParticipation, TradeEvent
+from django.db import transaction
+
+from accounts.geo import reverse_geocode
+
+from .models import Combo, ComboItem, EventListing, EventParticipation, TradeEvent
 
 
 class TradeEventSerializer(serializers.ModelSerializer):
@@ -24,6 +28,7 @@ class TradeEventSerializer(serializers.ModelSerializer):
     is_organizer        = serializers.SerializerMethodField()
     is_participant      = serializers.SerializerMethodField()
     inputs_locked       = serializers.BooleanField(read_only=True)
+    submissions_locked  = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TradeEvent
@@ -47,12 +52,15 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "shipping_rules",
             "regional_restrictions",
             "trade_policies",
+            "image_url",
+            "center_place",
             "algorithm_settings",
             "allowed_transitions",
             "participants_count",
             "is_organizer",
             "is_participant",
             "inputs_locked",
+            "submissions_locked",
             "created",
             "updated",
         ]
@@ -62,11 +70,13 @@ class TradeEventSerializer(serializers.ModelSerializer):
             "organizer",
             "organizer_username",
             "status",
+            "center_place",
             "allowed_transitions",
             "participants_count",
             "is_organizer",
             "is_participant",
             "inputs_locked",
+            "submissions_locked",
             "created",
             "updated",
         ]
@@ -103,6 +113,26 @@ class TradeEventSerializer(serializers.ModelSerializer):
         if user is None:
             return False
         return obj.participations.filter(user=user).exists()
+
+    @staticmethod
+    def _resolve_center_place(validated_data, instance):
+        coords_changed = "center_latitude" in validated_data or "center_longitude" in validated_data
+        if not coords_changed:
+            return
+        lat = validated_data.get("center_latitude", getattr(instance, "center_latitude", None))
+        lng = validated_data.get("center_longitude", getattr(instance, "center_longitude", None))
+        if lat is not None and lng is not None:
+            validated_data["center_place"] = reverse_geocode(lat, lng) or ""
+        else:
+            validated_data["center_place"] = ""
+
+    def create(self, validated_data):
+        self._resolve_center_place(validated_data, None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        self._resolve_center_place(validated_data, instance)
+        return super().update(instance, validated_data)
 
 
 class EventParticipationSerializer(serializers.ModelSerializer):
@@ -154,16 +184,22 @@ class EventListingSerializer(serializers.ModelSerializer):
     ask_is_override = serializers.SerializerMethodField()
 
     def get_resolved_ask(self, obj):
+        request = self.context.get("request")
+        if request is None or obj.copy.owner_id != request.user.id:
+            return None
         from trades.pricing import resolve_ask
         v = resolve_ask(obj)
         return f"{v:.2f}" if v is not None else None
 
     def get_ask_is_override(self, obj):
+        request = self.context.get("request")
+        if request is None or obj.copy.owner_id != request.user.id:
+            return None
         return obj.sell_price is not None
 
     def validate_sell_price(self, value):
-        if value is not None and value < 0:
-            raise serializers.ValidationError("sell_price cannot be negative.")
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("sell_price must be greater than 0.")
         return value
 
     class Meta:
@@ -260,3 +296,119 @@ class TransitionSerializer(serializers.Serializer):
                 f"Choices: {valid_statuses}"
             )
         return value
+
+
+class ComboItemSerializer(serializers.ModelSerializer):
+    """Read-only member of a combo, with the member listing's game identity."""
+
+    event_listing = serializers.IntegerField(source="event_listing_id", read_only=True)
+    listing_code = serializers.CharField(
+        source="event_listing.copy.listing_code", read_only=True
+    )
+    board_game_id = serializers.IntegerField(
+        source="event_listing.copy.board_game_id", read_only=True
+    )
+    board_game_name = serializers.CharField(
+        source="event_listing.copy.board_game.name", read_only=True
+    )
+    board_game_thumbnail = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ComboItem
+        fields = [
+            "id", "event_listing", "listing_code",
+            "board_game_id", "board_game_name", "board_game_thumbnail",
+        ]
+        read_only_fields = fields
+
+    def get_board_game_thumbnail(self, obj):
+        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+
+
+class ComboSerializer(serializers.ModelSerializer):
+    """Read: combo + members. Write: name, sell_price, item_listing_ids."""
+
+    owner = serializers.PrimaryKeyRelatedField(read_only=True)
+    owner_username = serializers.SerializerMethodField()
+    items = ComboItemSerializer(many=True, read_only=True)
+    item_listing_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False, default=list,
+    )
+
+    class Meta:
+        model = Combo
+        fields = [
+            "id", "event", "owner", "owner_username", "name", "combo_code",
+            "active", "sell_price", "items", "item_listing_ids",
+            "created", "updated",
+        ]
+        read_only_fields = [
+            "id", "event", "owner", "owner_username", "combo_code",
+            "items", "created", "updated",
+        ]
+
+    def get_owner_username(self, obj):
+        return obj.owner.username
+
+    def validate_sell_price(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("sell_price must be greater than 0.")
+        return value
+
+    def _resolve_members(self, listing_ids, event, owner, instance=None):
+        if len(set(listing_ids)) < 2:
+            raise serializers.ValidationError(
+                {"item_listing_ids": "A combo needs at least 2 listings."}
+            )
+        listings = list(
+            EventListing.objects.select_related("copy")
+            .filter(id__in=listing_ids, event=event)
+        )
+        found = {el.id for el in listings}
+        missing = set(listing_ids) - found
+        if missing:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings not found in this event: {sorted(missing)}"}
+            )
+        not_owned = [el.id for el in listings if el.copy.owner_id != owner.id]
+        if not_owned:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings not owned by you: {not_owned}"}
+            )
+        clash = ComboItem.objects.filter(
+            combo__event=event, combo__owner=owner, event_listing_id__in=found
+        )
+        if instance is not None:
+            clash = clash.exclude(combo=instance)
+        clash_ids = sorted({ci.event_listing_id for ci in clash})
+        if clash_ids:
+            raise serializers.ValidationError(
+                {"item_listing_ids": f"Listings already in another combo: {clash_ids}"}
+            )
+        return listings
+
+    @transaction.atomic
+    def create(self, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", [])
+        event = validated_data["event"]
+        owner = validated_data["owner"]
+        listings = self._resolve_members(listing_ids, event, owner)
+        combo = Combo.objects.create(**validated_data)
+        for el in listings:
+            ComboItem.objects.create(combo=combo, event_listing=el)
+        return combo
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        listing_ids = validated_data.pop("item_listing_ids", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if listing_ids is not None:
+            listings = self._resolve_members(
+                listing_ids, instance.event, instance.owner, instance=instance
+            )
+            instance.items.all().delete()
+            for el in listings:
+                ComboItem.objects.create(combo=instance, event_listing=el)
+        return instance
