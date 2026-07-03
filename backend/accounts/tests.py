@@ -256,6 +256,37 @@ class WishlistTests(APITestCase):
         resp = self.client.post(WISHLISTS_URL, {"board_game_bgg_id": 224517})
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_list_includes_game_details(self):
+        from catalog.models import BoardGame
+        BoardGame.objects.create(
+            bgg_id=224517, name="Brass: Birmingham", year_published=2018, rank=1,
+            metadata={"thumbnail": "http://img/brass.jpg"},
+        )
+        self.client.post(WISHLISTS_URL, {"board_game_bgg_id": 224517})
+        resp = self.client.get(WISHLISTS_URL)
+        entry = resp.data.get("results", resp.data)[0]
+        self.assertEqual(entry["board_game_name"], "Brass: Birmingham")
+        self.assertEqual(entry["board_game_year"], 2018)
+        self.assertEqual(entry["board_game_rank"], 1)
+        self.assertEqual(entry["board_game_thumbnail"], "http://img/brass.jpg")
+
+    def test_create_response_includes_game_name(self):
+        # The create response has no pre-loaded games_map → exercises the
+        # per-object fallback lookup in the serializer.
+        from catalog.models import BoardGame
+        BoardGame.objects.create(bgg_id=13, name="Catan")
+        resp = self.client.post(WISHLISTS_URL, {"board_game_bgg_id": 13})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["board_game_name"], "Catan")
+
+    def test_missing_game_returns_blank_details(self):
+        # bgg id with no catalog row → detail fields degrade gracefully.
+        self.client.post(WISHLISTS_URL, {"board_game_bgg_id": 999999})
+        resp = self.client.get(WISHLISTS_URL)
+        entry = resp.data.get("results", resp.data)[0]
+        self.assertEqual(entry["board_game_name"], "")
+        self.assertIsNone(entry["board_game_year"])
+
     def test_cannot_delete_other_users_wishlist(self):
         from rest_framework.authtoken.models import Token
         other = User.objects.create_user(

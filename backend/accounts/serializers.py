@@ -131,11 +131,50 @@ class UserBlockSerializer(serializers.ModelSerializer):
 
 class WishlistSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="username", read_only=True)
+    board_game_name = serializers.SerializerMethodField()
+    board_game_thumbnail = serializers.SerializerMethodField()
+    board_game_year = serializers.SerializerMethodField()
+    board_game_rank = serializers.SerializerMethodField()
 
     class Meta:
         model = Wishlist
-        fields = ["id", "user", "board_game_bgg_id", "note", "created", "updated"]
-        read_only_fields = ["id", "user", "created", "updated"]
+        fields = [
+            "id", "user", "board_game_bgg_id", "note",
+            "board_game_name", "board_game_thumbnail", "board_game_year", "board_game_rank",
+            "created", "updated",
+        ]
+        read_only_fields = [
+            "id", "user",
+            "board_game_name", "board_game_thumbnail", "board_game_year", "board_game_rank",
+            "created", "updated",
+        ]
+
+    def _game(self, obj):
+        """Resolve the BoardGame for this entry. List views pre-load a
+        {bgg_id: BoardGame} map into context (one query for the whole page);
+        otherwise fall back to a single lookup (e.g. the create response)."""
+        games = self.context.get("games_map")
+        if games is not None and obj.board_game_bgg_id in games:
+            return games[obj.board_game_bgg_id]
+        return BoardGame.objects.filter(pk=obj.board_game_bgg_id).first()
+
+    def get_board_game_name(self, obj):
+        g = self._game(obj)
+        return g.name if g else ""
+
+    def get_board_game_thumbnail(self, obj):
+        g = self._game(obj)
+        if not g:
+            return ""
+        return (g.metadata or {}).get("thumbnail", "") or g.image_url
+
+    def get_board_game_year(self, obj):
+        g = self._game(obj)
+        return g.year_published if g else None
+
+    def get_board_game_rank(self, obj):
+        g = self._game(obj)
+        return g.rank if g else None
 
     def validate(self, attrs):
         request = self.context.get("request")

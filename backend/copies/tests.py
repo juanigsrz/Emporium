@@ -142,6 +142,20 @@ class CopyCreateTests(CopyTestBase):
         resp = self.client.post(COPIES_URL, payload)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
+    def test_version_thumbnail_reflects_selected_edition(self):
+        version = BoardGameVersion.objects.create(
+            board_game=self.game1, name="Deluxe", thumbnail_url="http://img/deluxe.jpg",
+        )
+        resp = self.client.post(COPIES_URL, {"board_game": 224517, "version": version.id})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["version_thumbnail"], "http://img/deluxe.jpg")
+
+    def test_version_thumbnail_blank_without_version(self):
+        # No version → Unknown fallback edition, which carries no thumbnail.
+        resp = self.client.post(COPIES_URL, {"board_game": 224517})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["version_thumbnail"], "")
+
     def test_create_returns_listing_code(self):
         payload = {"board_game": 224517, "condition": "NEW"}
         resp = self.client.post(COPIES_URL, payload)

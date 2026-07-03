@@ -268,34 +268,39 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
           </div>
         )}
 
-        {/* Top: thumbnail + listing code + status + game link */}
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <GameThumb src={copy.board_game_thumbnail} alt={copy.board_game_name} className="h-24 w-24" />
-          <span className="ml-auto max-w-[60%] truncate text-m font-bold text-ink">
-            {copy.board_game_name}
-          </span>
-          <span className="font-mono text-xs text-moss border border-ink/10 rounded-full px-2 py-0.5">
-            #{copy.listing_code}
-          </span>
-          <span className={`text-xs border rounded-full px-2 py-0.5 font-semibold ${statusClass}`}>
-            {t('copies.status.' + copy.status, { defaultValue: copy.status })}
-          </span>
-
+        {/* Header: edition thumbnail + title / edition / code / status */}
+        <div className="flex gap-3">
+          <GameThumb
+            src={copy.version_thumbnail || copy.board_game_thumbnail}
+            alt={copy.board_game_name}
+            className="h-20 w-20"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-bold text-ink leading-snug line-clamp-2" title={copy.board_game_name}>
+                {copy.board_game_name}
+              </h3>
+              <span className={`shrink-0 text-xs border rounded-full px-2 py-0.5 font-semibold ${statusClass}`}>
+                {t('copies.status.' + copy.status, { defaultValue: copy.status })}
+              </span>
+            </div>
+            {copy.version_name && copy.version_name !== 'Unknown' && (
+              <p className="mt-0.5 truncate text-xs text-moss" title={copy.version_name}>
+                {copy.version_name}
+              </p>
+            )}
+            <span className="mt-1 inline-block font-mono text-xs text-moss/70">#{copy.listing_code}</span>
+          </div>
         </div>
 
-        {/* Condition + language + edition */}
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        {/* Condition + language + pickup */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
           <span className={`text-xs border rounded-full px-2 py-0.5 font-semibold ${conditionClass}`}>
             {t('copies.condition.' + copy.condition, { defaultValue: copy.condition })}
           </span>
           {copy.language && (
             <span className="text-xs border border-ink/15 rounded-full px-2 py-0.5 text-moss">
               {copy.language}
-            </span>
-          )}
-          {copy.version_name && copy.version_name !== 'Unknown' && (
-            <span className="text-xs border border-ink/10 rounded-full px-2 py-0.5 text-moss/70">
-              {copy.version_name}
             </span>
           )}
           {copy.pickup_available && (

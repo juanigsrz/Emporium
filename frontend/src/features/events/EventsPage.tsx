@@ -119,7 +119,14 @@ function EventCard({ event }: { event: TradeEventListItem }) {
           loading="lazy"
         />
       ) : (
-        <div className="hidden h-24 w-24 shrink-0 rounded-2xl bg-parchment sm:block" aria-hidden="true" />
+        <div
+          className="flex h-24 w-full shrink-0 items-center justify-center rounded-2xl border-2 border-ink/10 bg-parchment text-moss/40 sm:h-24 sm:w-24"
+          aria-hidden="true"
+        >
+          <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
       )}
       {/* Left: title, description, meta */}
       <div className="min-w-0 flex-1">

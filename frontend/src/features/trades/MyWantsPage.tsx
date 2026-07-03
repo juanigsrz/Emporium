@@ -61,6 +61,9 @@ interface GameGroup {
   gameName: string
   thumbnail?: string | null    // canonical game thumbnail (Visual view)
   copyTargets: Target[]        // specific listing selections
+  /** Combo target keys whose bundle includes this game (Grid view). A game
+   *  wanted ONLY inside a bundle has no copyTargets but non-empty comboKeys. */
+  comboKeys?: string[]
 }
 
 function groupTargetsByGame(targets: Target[]): GameGroup[] {
@@ -77,21 +80,22 @@ function groupTargetsByGame(targets: Target[]): GameGroup[] {
 }
 
 function groupKeys(g: GameGroup): string[] {
-  return g.copyTargets.map((t) => t.key)
+  return g.copyTargets.map((t) => t.key).concat(g.comboKeys ?? [])
 }
 
 function groupIsOn(editor: Editor, listingId: number, g: GameGroup): boolean {
   return groupKeys(g).some((k) => editor.isOn(listingId, k))
 }
 
-// Aggregate toggle: on→clear every copy of this game; off→select all its copies.
+// Aggregate toggle: on→clear every copy/bundle of this game; off→select them all.
 function toggleGroup(editor: Editor, listingId: number, g: GameGroup): void {
   const on = groupIsOn(editor, listingId, g)
-  g.copyTargets.forEach((t) => editor.toggle(listingId, t.key, !on))
+  groupKeys(g).forEach((k) => editor.toggle(listingId, k, !on))
 }
 
 function groupBadge(t: TFunction, g: GameGroup): string {
   const n = g.copyTargets.length
+  if (n === 0 && (g.comboKeys?.length ?? 0) > 0) return t('trades.grid.viaBundleBadge')
   return t('trades.copiesCount', { count: n })
 }
 
@@ -102,18 +106,25 @@ function buildGridRows(editor: Editor, combos: Combo[], columns: OfferColumn[]):
   const gameGroups = groupTargetsByGame(
     editor.targets.filter((t) => t.comboId == null && t.gameId < COMBO_GAME_OFFSET)
   )
-  const byGame = new Map<number, GameGroup>(gameGroups.map((g) => [g.gameId, g]))
+  const byGame = new Map<number, GameGroup>(
+    gameGroups.map((g) => [g.gameId, { ...g, comboKeys: [] as string[] }])
+  )
   for (const c of combos) {
     if (!columns.some((col) => editor.isOn(col.id, comboTargetKey(c.id)))) continue
+    const key = comboTargetKey(c.id)
     for (const it of c.items) {
-      if (!byGame.has(it.board_game_id)) {
-        byGame.set(it.board_game_id, {
+      let g = byGame.get(it.board_game_id)
+      if (!g) {
+        g = {
           gameId: it.board_game_id,
           gameName: it.board_game_name,
           thumbnail: it.board_game_thumbnail,
           copyTargets: [],
-        })
+          comboKeys: [],
+        }
+        byGame.set(it.board_game_id, g)
       }
+      if (!g.comboKeys!.includes(key)) g.comboKeys!.push(key)
     }
   }
   return Array.from(byGame.values()).sort((a, b) => a.gameName.localeCompare(b.gameName))
@@ -559,6 +570,11 @@ function GameBrowse({ slug, editor, columns, username, customWantGroups, moneyEn
   const [wishlisted, setWishlisted] = useState(false)
   const [minRating, setMinRating] = useState<number | ''>('')
   const [isExpansion, setIsExpansion] = useState<boolean | undefined>(undefined)
+  const [yearFrom, setYearFrom] = useState<number | ''>('')
+  const [yearTo, setYearTo] = useState<number | ''>('')
+  const [rankMax, setRankMax] = useState<number | ''>('')
+  const [minWeight, setMinWeight] = useState<number | ''>('')
+  const [maxWeight, setMaxWeight] = useState<number | ''>('')
 
   // Game groups keyed by canonical id — drives the per-card "which of my items
   // offer for this want" panel (same model the grid uses, surfaced inline here).
@@ -576,6 +592,11 @@ function GameBrowse({ slug, editor, columns, username, customWantGroups, moneyEn
     wishlisted: wishlisted || undefined,
     min_rating: minRating !== '' ? minRating : undefined,
     is_expansion: isExpansion,
+    year_from: yearFrom !== '' ? yearFrom : undefined,
+    year_to: yearTo !== '' ? yearTo : undefined,
+    rank_max: rankMax !== '' ? rankMax : undefined,
+    min_weight: minWeight !== '' ? minWeight : undefined,
+    max_weight: maxWeight !== '' ? maxWeight : undefined,
   })
   const games = data?.results ?? []
   const count = data?.count ?? 0
@@ -728,6 +749,67 @@ function GameBrowse({ slug, editor, columns, username, customWantGroups, moneyEn
           <option value="false">{t('trades.browse.baseOnlyOption')}</option>
           <option value="true">{t('trades.browse.expansionsOnlyOption')}</option>
         </select>
+
+        <label className="flex items-center gap-1.5 text-xs text-moss">
+          <span>{t('trades.browse.yearLabel')}</span>
+          <input
+            type="number"
+            value={yearFrom}
+            onChange={(e) => { setYearFrom(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder={t('trades.browse.fromPlaceholder')}
+            aria-label={t('trades.browse.yearFromAria')}
+            className="no-spinner w-16 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+          <span>–</span>
+          <input
+            type="number"
+            value={yearTo}
+            onChange={(e) => { setYearTo(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder={t('trades.browse.toPlaceholder')}
+            aria-label={t('trades.browse.yearToAria')}
+            className="no-spinner w-16 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-moss">
+          <span>{t('trades.browse.rankMaxLabel')}</span>
+          <input
+            type="number"
+            min={1}
+            value={rankMax}
+            onChange={(e) => { setRankMax(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder="—"
+            aria-label={t('trades.browse.rankMaxLabel')}
+            className="no-spinner w-16 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs text-moss">
+          <span>{t('trades.browse.complexityLabel')}</span>
+          <input
+            type="number"
+            min={1}
+            max={5}
+            step={0.1}
+            value={minWeight}
+            onChange={(e) => { setMinWeight(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder={t('trades.browse.fromPlaceholder')}
+            aria-label={t('trades.browse.complexityMinAria')}
+            className="no-spinner w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+          <span>–</span>
+          <input
+            type="number"
+            min={1}
+            max={5}
+            step={0.1}
+            value={maxWeight}
+            onChange={(e) => { setMaxWeight(e.target.value === '' ? '' : Number(e.target.value)); setPage(1) }}
+            placeholder={t('trades.browse.toPlaceholder')}
+            aria-label={t('trades.browse.complexityMaxAria')}
+            className="no-spinner w-14 rounded-xl border border-ink/20 px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+          />
+        </label>
 
       </div>
 
@@ -1422,7 +1504,10 @@ function GridMode({ slug, columns, editor, username, ratings, moneyEnabled, comb
                 if (col.isCombo || col.boardGameId == null) continue
                 const ownRating = ratings.get(col.boardGameId)
                 if (ownRating == null) continue
-                if (ownRating <= wantRating && !groupIsOn(editor, col.id, g)) toggleGroup(editor, col.id, g)
+                // Only auto-tick specific copies; never spread bundle (combo) wishes.
+                if (ownRating <= wantRating && !groupIsOn(editor, col.id, g)) {
+                  g.copyTargets.forEach((tgt) => editor.toggle(col.id, tgt.key, true))
+                }
               }
             }
           }}
@@ -1513,6 +1598,8 @@ function GridMode({ slug, columns, editor, username, ratings, moneyEnabled, comb
                   </th>
                   {columns.map((col) => {
                     const on = groupIsOn(editor, col.id, g)
+                    // Bundle-sourced tick: this game is wanted here only via a combo.
+                    const comboOn = (g.comboKeys ?? []).some((k) => editor.isOn(col.id, k))
                     return (
                       <td
                         key={col.id}
@@ -1523,15 +1610,25 @@ function GridMode({ slug, columns, editor, username, ratings, moneyEnabled, comb
                           onClick={() => toggleGroup(editor, col.id, g)}
                           className={`m-1 h-5 w-5 rounded border ${
                             on
-                              ? 'border-ink bg-butter text-ink'
+                              ? comboOn
+                                ? 'border-amber-500 bg-amber-100 text-amber-700'
+                                : 'border-ink bg-butter text-ink'
                               : 'border-ink/20 bg-white text-transparent hover:border-indigo-400'
                           }`}
-                          title={t('trades.grid.cellTitle', { gameName: g.gameName, colName: col.name })}
+                          title={
+                            comboOn
+                              ? t('trades.grid.cellComboTitle', { gameName: g.gameName, colName: col.name })
+                              : t('trades.grid.cellTitle', { gameName: g.gameName, colName: col.name })
+                          }
                           aria-pressed={on}
                         >
-                          <svg className="mx-auto h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
+                          {comboOn ? (
+                            <span className="text-[11px] leading-none">🎁</span>
+                          ) : (
+                            <svg className="mx-auto h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
                         </button>
                       </td>
                     )

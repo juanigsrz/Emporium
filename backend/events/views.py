@@ -480,6 +480,27 @@ class TradeEventViewSet(
         if is_expansion in ("true", "false"):
             qs = qs.filter(is_expansion=(is_expansion == "true"))
 
+        # Numeric catalog filters (all optional). Year/rank are real columns;
+        # complexity lives in metadata.average_weight (BGG weight, ~1–5).
+        year_from = request.query_params.get("year_from")
+        if year_from:
+            qs = qs.filter(year_published__gte=int(year_from))
+        year_to = request.query_params.get("year_to")
+        if year_to:
+            qs = qs.filter(year_published__lte=int(year_to))
+
+        rank_max = request.query_params.get("rank_max")
+        if rank_max:
+            # rank > 0 also drops the unranked (null / 0) games.
+            qs = qs.filter(rank__gt=0, rank__lte=int(rank_max))
+
+        min_weight = request.query_params.get("min_weight")
+        if min_weight:
+            qs = qs.filter(metadata__average_weight__gte=float(min_weight))
+        max_weight = request.query_params.get("max_weight")
+        if max_weight:
+            qs = qs.filter(metadata__average_weight__lte=float(max_weight))
+
         ordering = request.query_params.get("ordering", "-copies_count")
         order_map = {
             "name": ["name"],

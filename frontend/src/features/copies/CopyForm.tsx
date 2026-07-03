@@ -97,11 +97,11 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
   }, [versionsLoading])
 
   const versionSel = watch('version_sel')
-  const derivedLanguage = useMemo(() => {
-    if (versionSel === '' || versionSel === 'UNKNOWN') return 'Unknown'
-    const v = versions.find((vv) => String(vv.id) === versionSel)
-    return v?.language || 'Unknown'
-  }, [versionSel, versions])
+  const selectedVersion = useMemo(
+    () => (versionSel && versionSel !== 'UNKNOWN' ? versions.find((v) => String(v.id) === versionSel) : undefined),
+    [versionSel, versions]
+  )
+  const derivedLanguage = selectedVersion?.language || 'Unknown'
 
   const submit = handleSubmit(async (values) => {
     await onSubmit({
@@ -149,6 +149,13 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
         </select>
         {errors.version_sel && <p className="mt-1 text-xs text-red-600">{errors.version_sel.message}</p>}
         <p className="mt-1 text-xs text-moss">{t('copies.form.languagePrefix')} <span className="font-semibold text-ink">{derivedLanguage}</span> {t('copies.form.languageSuffix')}</p>
+        {selectedVersion?.thumbnail_url && (
+          <img
+            src={selectedVersion.thumbnail_url}
+            alt=""
+            className="mt-2 h-24 w-24 rounded-xl border-2 border-ink/15 bg-parchment object-cover"
+          />
+        )}
       </div>
 
       {/* Condition — required */}

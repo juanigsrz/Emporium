@@ -20,6 +20,8 @@ import {
 } from '../../api/profiles'
 import { useStartImport, useImportJob, type ImportKind } from '../../api/bgg'
 import { useMyRatings } from '../../api/ratings'
+import { useGamesList } from '../../api/games'
+import { GameThumb } from '../../components/GameThumb'
 
 // ---- Shared BGG import button (used by Wishlist + Ratings tabs) ----
 function BggImportButton({
@@ -444,7 +446,8 @@ function BlocksSection() {
 function WishlistSection() {
   const { t } = useTranslation()
   const qc = useQueryClient()
-  const [bggId, setBggId] = useState('')
+  const [q, setQ] = useState('')
+  const [picked, setPicked] = useState<{ bgg_id: number; name: string; thumbnail: string } | null>(null)
   const [note, setNote] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
 
@@ -453,12 +456,17 @@ function WishlistSection() {
     queryFn: fetchWishlists,
   })
 
+  // Typeahead over the global catalog — users pick a game instead of typing a BGG id.
+  const { data: searchData } = useGamesList({ search: q.trim(), ordering: 'rank' })
+  const results = q.trim().length >= 2 && !picked ? (searchData?.results ?? []).slice(0, 8) : []
+
   const addMutation = useMutation({
     mutationFn: () =>
-      createWishlistEntry({ board_game_bgg_id: parseInt(bggId, 10), note: note || undefined }),
+      createWishlistEntry({ board_game_bgg_id: picked!.bgg_id, note: note || undefined }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['wishlists'] })
-      setBggId('')
+      setPicked(null)
+      setQ('')
       setNote('')
       setAddError(null)
     },
@@ -472,16 +480,6 @@ function WishlistSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlists'] }),
   })
 
-  const handleAdd = () => {
-    const parsed = parseInt(bggId, 10)
-    if (!bggId.trim() || isNaN(parsed) || parsed <= 0) {
-      setAddError(t('profile.wishlist.invalidBggId'))
-      return
-    }
-    setAddError(null)
-    addMutation.mutate()
-  }
-
   return (
     <section>
       <h2 className="text-lg font-semibold text-ink mb-3">{t('profile.wishlist.title')}</h2>
@@ -494,29 +492,67 @@ function WishlistSection() {
         />
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4 max-w-lg">
-        <input
-          type="number"
-          placeholder={t('profile.wishlist.bggIdPlaceholder')}
-          value={bggId}
-          min={1}
-          onChange={(e) => setBggId(e.target.value)}
-          className="w-28 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        <input
-          type="text"
-          placeholder={t('profile.wishlist.notePlaceholder')}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          className="flex-1 min-w-0 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={addMutation.isPending || !bggId.trim()}
-          className="rounded-2xl border-2 border-ink bg-butter px-4 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
-        >
-          {t('profile.wishlist.add')}
-        </button>
+      {/* Add: search a game, then optionally note it */}
+      <div className="mb-4 max-w-lg">
+        {!picked ? (
+          <div className="relative">
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('profile.wishlist.searchPlaceholder')}
+              className="w-full rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            {results.length > 0 && (
+              <ul className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-xl border border-ink/15 bg-white shadow-lg">
+                {results.map((g) => (
+                  <li key={g.bgg_id}>
+                    <button
+                      type="button"
+                      onClick={() => setPicked({ bgg_id: g.bgg_id, name: g.name, thumbnail: g.thumbnail })}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50"
+                    >
+                      <GameThumb src={g.thumbnail} alt={g.name} className="h-10 w-10" />
+                      <span className="flex-1 truncate text-ink">{g.name}</span>
+                      <span className="shrink-0 text-xs text-moss/70">{g.year_published ?? ''}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-ink/15 bg-indigo-50/50 px-3 py-1.5">
+              <GameThumb src={picked.thumbnail} alt={picked.name} className="h-10 w-10" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{picked.name}</span>
+              <button
+                type="button"
+                onClick={() => setPicked(null)}
+                className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+              >
+                {t('profile.wishlist.change')}
+              </button>
+            </div>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t('profile.wishlist.notePlaceholder')}
+              className="min-w-0 flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={() => {
+                setAddError(null)
+                addMutation.mutate()
+              }}
+              disabled={addMutation.isPending}
+              className="rounded-2xl border-2 border-ink bg-butter px-4 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {t('profile.wishlist.add')}
+            </button>
+          </div>
+        )}
       </div>
 
       {addError && <p className="mb-3 text-sm text-red-600">{addError}</p>}
@@ -528,15 +564,28 @@ function WishlistSection() {
       ) : (
         <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-lg">
           {entries.map((e) => (
-            <li key={e.id} className="flex items-center justify-between px-3 py-2 gap-2">
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-ink">{t('profile.wishlist.bggIdLabel', { id: e.board_game_bgg_id })}</span>
-                {e.note && <span className="ml-2 text-xs text-moss truncate">{e.note}</span>}
+            <li key={e.id} className="flex items-center gap-3 px-3 py-2">
+              <GameThumb src={e.board_game_thumbnail} alt={e.board_game_name} className="h-12 w-12" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="truncate text-sm font-semibold text-ink">
+                    {e.board_game_name || `BGG #${e.board_game_bgg_id}`}
+                  </span>
+                  {e.board_game_year != null && (
+                    <span className="shrink-0 text-xs text-moss/70">{e.board_game_year}</span>
+                  )}
+                  {e.board_game_rank != null && (
+                    <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">
+                      {t('profile.wishlist.rankLabel', { rank: e.board_game_rank })}
+                    </span>
+                  )}
+                </div>
+                {e.note && <p className="truncate text-xs text-moss">{e.note}</p>}
               </div>
               <button
                 onClick={() => removeMutation.mutate(e.id)}
                 disabled={removeMutation.isPending}
-                className="text-xs text-red-500 hover:text-red-700 disabled:opacity-60 shrink-0"
+                className="shrink-0 text-xs text-red-500 hover:text-red-700 disabled:opacity-60"
               >
                 {t('profile.wishlist.remove')}
               </button>

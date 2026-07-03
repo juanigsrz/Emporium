@@ -39,6 +39,7 @@ class CopySerializer(serializers.ModelSerializer):
         queryset=BoardGameVersion.objects.all(), required=False, allow_null=True
     )
     version_name = serializers.SerializerMethodField()
+    version_thumbnail = serializers.SerializerMethodField()
     in_active_event = serializers.BooleanField(source="is_in_active_event", read_only=True)
 
     class Meta:
@@ -53,6 +54,7 @@ class CopySerializer(serializers.ModelSerializer):
             "board_game_thumbnail",
             "version",
             "version_name",
+            "version_thumbnail",
             "condition",
             "language",
             "edition",
@@ -73,7 +75,7 @@ class CopySerializer(serializers.ModelSerializer):
             "created",
             "updated",
         ]
-        read_only_fields = ["id", "listing_code", "owner", "board_game_thumbnail", "language", "is_pending", "in_active_event", "import_source", "created", "updated"]
+        read_only_fields = ["id", "listing_code", "owner", "board_game_thumbnail", "version_thumbnail", "language", "is_pending", "in_active_event", "import_source", "created", "updated"]
 
     def get_owner_username(self, obj):
         return obj.owner.username
@@ -86,6 +88,9 @@ class CopySerializer(serializers.ModelSerializer):
 
     def get_version_name(self, obj):
         return obj.version.name if obj.version_id else ""
+
+    def get_version_thumbnail(self, obj):
+        return obj.version.thumbnail_url if obj.version_id else ""
 
     def validate(self, attrs):
         version = attrs.get("version")

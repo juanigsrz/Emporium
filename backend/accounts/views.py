@@ -166,6 +166,15 @@ class WishlistListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return Wishlist.objects.filter(user=self.request.user)
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        # Pre-load the games for this page in one query so the serializer's
+        # per-entry detail fields don't fan out into N lookups.
+        from catalog.models import BoardGame
+        bgg_ids = list(self.get_queryset().values_list("board_game_bgg_id", flat=True))
+        ctx["games_map"] = BoardGame.objects.in_bulk(bgg_ids)
+        return ctx
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 

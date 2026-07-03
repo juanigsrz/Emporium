@@ -170,6 +170,11 @@ export interface EventGamesParams {
   wishlisted?: boolean
   min_rating?: number
   is_expansion?: boolean
+  year_from?: number
+  year_to?: number
+  rank_max?: number
+  min_weight?: number
+  max_weight?: number
 }
 
 export interface EventsListParams {
@@ -288,6 +293,11 @@ export async function fetchEventGames(
   if (params.wishlisted != null) p.wishlisted = String(params.wishlisted)
   if (params.min_rating != null) p.min_rating = String(params.min_rating)
   if (params.is_expansion != null) p.is_expansion = String(params.is_expansion)
+  if (params.year_from != null) p.year_from = String(params.year_from)
+  if (params.year_to != null) p.year_to = String(params.year_to)
+  if (params.rank_max != null) p.rank_max = String(params.rank_max)
+  if (params.min_weight != null) p.min_weight = String(params.min_weight)
+  if (params.max_weight != null) p.max_weight = String(params.max_weight)
   const { data } = await apiClient.get<PaginatedResponse<EventGame>>(
     `/events/${slug}/games/`,
     { params: p }

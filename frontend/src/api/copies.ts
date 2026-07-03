@@ -18,6 +18,7 @@ export interface Copy {
   board_game_thumbnail: string
   version: number | null
   version_name: string
+  version_thumbnail: string
   condition: CopyCondition
   language: string
   edition: string

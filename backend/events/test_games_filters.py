@@ -80,6 +80,13 @@ class GamesFiltersTests(APITestCase):
         cls.game_a = BoardGame.objects.get(bgg_id=224517)  # average 8.6
         cls.game_b = BoardGame.objects.get(bgg_id=13)      # average 7.2
 
+        # Complexity lives in metadata.average_weight (BGG weight). Seed distinct
+        # values so the min_weight/max_weight filters can be exercised.
+        cls.game_a.metadata = {**(cls.game_a.metadata or {}), "average_weight": 4.0}
+        cls.game_a.save(update_fields=["metadata"])
+        cls.game_b.metadata = {**(cls.game_b.metadata or {}), "average_weight": 2.0}
+        cls.game_b.save(update_fields=["metadata"])
+
         cls.copy_a = Copy.objects.create(owner=cls.owner, board_game=cls.game_a)
         cls.copy_b = Copy.objects.create(owner=cls.owner, board_game=cls.game_b)
 
@@ -136,3 +143,33 @@ class GamesFiltersTests(APITestCase):
         ids = {g["bgg_id"] for g in r.data["results"]}
         self.assertIn(224517, ids)
         self.assertIn(13, ids)
+
+    # -- F5: year / rank / complexity filters ------------------------------
+
+    def test_year_from_excludes_older_games(self):
+        # game_a=2018, game_b=1995 → year_from=2000 keeps only game_a.
+        r = self.client.get(f"/api/events/{self.slug}/games/?year_from=2000")
+        ids = {g["bgg_id"] for g in r.data["results"]}
+        self.assertEqual(ids, {224517})
+
+    def test_year_to_excludes_newer_games(self):
+        r = self.client.get(f"/api/events/{self.slug}/games/?year_to=2000")
+        ids = {g["bgg_id"] for g in r.data["results"]}
+        self.assertEqual(ids, {13})
+
+    def test_rank_max_keeps_only_top_ranked(self):
+        # game_a rank=1, game_b rank=500 → rank_max=100 keeps only game_a.
+        r = self.client.get(f"/api/events/{self.slug}/games/?rank_max=100")
+        ids = {g["bgg_id"] for g in r.data["results"]}
+        self.assertEqual(ids, {224517})
+
+    def test_min_weight_excludes_lighter_games(self):
+        # weights: game_a=4.0, game_b=2.0 → min_weight=3 keeps only game_a.
+        r = self.client.get(f"/api/events/{self.slug}/games/?min_weight=3")
+        ids = {g["bgg_id"] for g in r.data["results"]}
+        self.assertEqual(ids, {224517})
+
+    def test_max_weight_excludes_heavier_games(self):
+        r = self.client.get(f"/api/events/{self.slug}/games/?max_weight=3")
+        ids = {g["bgg_id"] for g in r.data["results"]}
+        self.assertEqual(ids, {13})

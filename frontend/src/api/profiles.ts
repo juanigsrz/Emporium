@@ -84,6 +84,10 @@ export interface WishlistEntry {
   id: number
   board_game_bgg_id: number
   note: string
+  board_game_name: string
+  board_game_thumbnail: string
+  board_game_year: number | null
+  board_game_rank: number | null
   created_at?: string
 }
 
