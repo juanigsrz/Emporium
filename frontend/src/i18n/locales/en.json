@@ -626,5 +626,136 @@
       "removeAriaLabel": "Remove {{name}}"
     },
     "comboFallback": "combo"
+  },
+  "copies": {
+    "close": "Close",
+    "saveChanges": "Save changes",
+    "saving": "Saving…",
+    "edit": "Edit",
+    "pickup": "Pickup",
+    "lockedInEvent": "Locked (in event)",
+    "lockedInEventTitle": "Listed in an active event — unlist it from the event before editing or withdrawing.",
+    "addToEvent": "Add to event",
+    "addToEventTitle": "Complete details before adding to an event.",
+    "addCopy": "Add a copy",
+    "condition": {
+      "NEW": "New",
+      "LIKE_NEW": "Like New",
+      "EXCELLENT": "Excellent",
+      "GOOD": "Good",
+      "FAIR": "Fair",
+      "POOR": "Poor"
+    },
+    "sleeved": {
+      "UNKNOWN": "Unknown",
+      "NONE": "Not sleeved",
+      "SLEEVED": "Sleeved"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "RESERVED": "Reserved",
+      "TRADED": "Traded",
+      "WITHDRAWN": "Withdrawn"
+    },
+    "statusFilter": {
+      "all": "All statuses"
+    },
+    "errors": {
+      "selectEdition": "Select an edition",
+      "conditionRequired": "Condition is required",
+      "invalidUrl": "Must be a valid URL",
+      "tradeHintTooLong": "Must be 120 characters or less",
+      "saveFailed": "Failed to save. Please try again.",
+      "networkError": "Network error. Please try again."
+    },
+    "form": {
+      "edition": "Edition",
+      "loadingEditions": "Loading editions…",
+      "selectEdition": "Select an edition…",
+      "unknownEdition": "Unknown / Not specified",
+      "languagePrefix": "Language:",
+      "languageSuffix": "(from edition)",
+      "condition": "Condition",
+      "selectCondition": "Select condition…",
+      "sleeved": "Sleeved",
+      "includesExpansions": "Includes expansions",
+      "includesExpansionsPlaceholder": "e.g. Stonemaier Expansions",
+      "missingComponents": "Missing components",
+      "upgradedComponents": "Upgraded components",
+      "nonePlaceholder": "None",
+      "componentNotes": "Component notes",
+      "ownerNotes": "Owner notes",
+      "tradeValueHint": "Trade value hint",
+      "tradeValueHintPlaceholder": "e.g. ~$40 retail",
+      "shippingConstraints": "Shipping constraints",
+      "shippingConstraintsPlaceholder": "e.g. Domestic only",
+      "pickupAvailable": "Pickup available",
+      "photoUrls": "Photo URLs",
+      "removeUrlAriaLabel": "Remove URL",
+      "addPhotoUrl": "+ Add photo URL"
+    },
+    "editModal": {
+      "ariaLabel": "Edit copy",
+      "title": "Edit copy"
+    },
+    "withdraw": {
+      "title": "Withdraw copy?",
+      "body": "This will mark copy #{{code}} as withdrawn.",
+      "hint": "The copy will no longer appear in game listings. You can still see it here.",
+      "withdrawing": "Withdrawing…",
+      "action": "Withdraw"
+    },
+    "pending": {
+      "language": "language",
+      "condition": "condition",
+      "completeDetails": "Complete details: {{fields}}",
+      "complete": "Complete"
+    },
+    "rating": {
+      "label": "My rating:",
+      "ariaLabel": "My rating (1–10)"
+    },
+    "import": {
+      "title": "Import from BGG",
+      "skipDuplicates": "Skip existing duplicates",
+      "fromCollection": "From your collection",
+      "usernamePrefix": "Set your",
+      "usernameLinkText": "BGG username",
+      "usernameSuffix": "first.",
+      "usernameRequiredTitle": "Set your BGG username in your profile first.",
+      "importOwned": "Import owned from BGG",
+      "importing": "Importing…",
+      "fromGeeklist": "From a geeklist",
+      "geeklistIdLabel": "Geeklist ID",
+      "geeklistIdPlaceholder": "e.g. 123456",
+      "importFromGeeklist": "Import from geeklist",
+      "resultCreated_one": "Import done — {{count}} created",
+      "resultCreated_other": "Import done — {{count}} created",
+      "resultSkipped_one": ", {{count}} skipped",
+      "resultSkipped_other": ", {{count}} skipped",
+      "resultPending_one": ", {{count}} needs details",
+      "resultPending_other": ", {{count}} need details",
+      "failed": "Import failed. Check your BGG username or geeklist ID.",
+      "startFailed": "Failed to start import. Please try again.",
+      "enterGeeklistId": "Enter a geeklist ID."
+    },
+    "addModal": {
+      "changeGame": "Change game",
+      "searchPlaceholder": "Search the catalog for a game you own…",
+      "adding": "Adding…",
+      "submit": "Add copy"
+    },
+    "list": {
+      "activeCount_one": "{{count}} active",
+      "activeCount_other": "{{count}} active",
+      "totalSuffix": " · {{total}} total",
+      "filterByStatusAriaLabel": "Filter by status",
+      "clear": "Clear",
+      "clearFilter": "Clear filter",
+      "loadError": "Could not load your copies. Please try again.",
+      "emptyTitle": "No copies yet",
+      "emptyBody": "Add the board games you own so you can list them in trade events.",
+      "noStatusMatch": "No copies with status \"{{status}}\"."
+    }
   }
 }

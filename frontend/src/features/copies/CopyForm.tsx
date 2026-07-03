@@ -2,33 +2,32 @@ import { useEffect, useMemo } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { CONDITION_LABELS } from './constants'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { useGameVersions } from '../../api/games'
 
 const CONDITION_VALUES = ['NEW', 'LIKE_NEW', 'EXCELLENT', 'GOOD', 'FAIR', 'POOR'] as const
 const SLEEVED_VALUES = ['UNKNOWN', 'NONE', 'SLEEVED'] as const
-const SLEEVED_LABELS: Record<string, string> = {
-  UNKNOWN: 'Unknown', NONE: 'Not sleeved', SLEEVED: 'Sleeved',
-}
 
 // version_sel: "" = untouched (fails required); "UNKNOWN" = explicit Unknown; "<id>" = a real version.
-export const copyFormSchema = z.object({
-  version_sel: z.string().min(1, 'Select an edition'),
-  condition: z.enum(CONDITION_VALUES, { error: 'Condition is required' }),
-  sleeved: z.enum(SLEEVED_VALUES).optional(),
-  includes_expansions: z.string().optional(),
-  missing_components: z.string().optional(),
-  upgraded_components: z.string().optional(),
-  component_notes: z.string().optional(),
-  owner_notes: z.string().optional(),
-  trade_value_hint: z.string().max(120).optional(),
-  shipping_constraints: z.string().optional(),
-  pickup_available: z.boolean().optional(),
-  photo_urls: z
-    .array(z.object({ url: z.string().url('Must be a valid URL').or(z.literal('')) }))
-    .optional(),
-})
-export type CopyFormValues = z.infer<typeof copyFormSchema>
+const makeCopyFormSchema = (t: TFunction) =>
+  z.object({
+    version_sel: z.string().min(1, t('copies.errors.selectEdition')),
+    condition: z.enum(CONDITION_VALUES, { error: t('copies.errors.conditionRequired') }),
+    sleeved: z.enum(SLEEVED_VALUES).optional(),
+    includes_expansions: z.string().optional(),
+    missing_components: z.string().optional(),
+    upgraded_components: z.string().optional(),
+    component_notes: z.string().optional(),
+    owner_notes: z.string().optional(),
+    trade_value_hint: z.string().max(120, t('copies.errors.tradeHintTooLong')).optional(),
+    shipping_constraints: z.string().optional(),
+    pickup_available: z.boolean().optional(),
+    photo_urls: z
+      .array(z.object({ url: z.string().url(t('copies.errors.invalidUrl')).or(z.literal('')) }))
+      .optional(),
+  })
+export type CopyFormValues = z.infer<ReturnType<typeof makeCopyFormSchema>>
 
 export interface CopySubmitPayload {
   version: number | null
@@ -54,7 +53,9 @@ export interface CopyFormProps {
 }
 
 export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }: CopyFormProps) {
+  const { t } = useTranslation()
   const { data: versions = [], isLoading: versionsLoading } = useGameVersions(boardGameId)
+  const copyFormSchema = useMemo(() => makeCopyFormSchema(t), [t])
 
   const {
     register, handleSubmit, control, watch, setValue,
@@ -135,11 +136,11 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
       {/* Version (Edition) — required */}
       <div>
         <label className="block text-sm font-semibold text-ink mb-1">
-          Edition <span className="text-red-500">*</span>
+          {t('copies.form.edition')} <span className="text-red-500">*</span>
         </label>
         <select {...register('version_sel')} className={inputCls(!!errors.version_sel)} disabled={versionsLoading}>
-          <option value="" disabled>{versionsLoading ? 'Loading editions…' : 'Select an edition…'}</option>
-          <option value="UNKNOWN">Unknown / Not specified</option>
+          <option value="" disabled>{versionsLoading ? t('copies.form.loadingEditions') : t('copies.form.selectEdition')}</option>
+          <option value="UNKNOWN">{t('copies.form.unknownEdition')}</option>
           {versions.map((v) => (
             <option key={v.id} value={String(v.id)}>
               {v.name}{v.language ? ` (${v.language})` : ''}{v.year_published ? ` ${v.year_published}` : ''}
@@ -147,68 +148,68 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
           ))}
         </select>
         {errors.version_sel && <p className="mt-1 text-xs text-red-600">{errors.version_sel.message}</p>}
-        <p className="mt-1 text-xs text-moss">Language: <span className="font-semibold text-ink">{derivedLanguage}</span> (from edition)</p>
+        <p className="mt-1 text-xs text-moss">{t('copies.form.languagePrefix')} <span className="font-semibold text-ink">{derivedLanguage}</span> {t('copies.form.languageSuffix')}</p>
       </div>
 
       {/* Condition — required */}
       <div>
         <label className="block text-sm font-semibold text-ink mb-1">
-          Condition <span className="text-red-500">*</span>
+          {t('copies.form.condition')} <span className="text-red-500">*</span>
         </label>
         <select {...register('condition')} className={inputCls(!!errors.condition)}>
-          <option value="">Select condition…</option>
-          {Object.entries(CONDITION_LABELS).map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+          <option value="">{t('copies.form.selectCondition')}</option>
+          {CONDITION_VALUES.map((v) => (<option key={v} value={v}>{t('copies.condition.' + v)}</option>))}
         </select>
         {errors.condition && <p className="mt-1 text-xs text-red-600">{errors.condition.message}</p>}
       </div>
 
       {/* Sleeved */}
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Sleeved</label>
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.sleeved')}</label>
         <select {...register('sleeved')} className={inputCls(false)}>
-          {Object.entries(SLEEVED_LABELS).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+          {SLEEVED_VALUES.map((v) => (
+            <option key={v} value={v}>{t('copies.sleeved.' + v)}</option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Includes expansions</label>
-        <input {...register('includes_expansions')} placeholder="e.g. Stonemaier Expansions" className={inputCls(false)} />
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.includesExpansions')}</label>
+        <input {...register('includes_expansions')} placeholder={t('copies.form.includesExpansionsPlaceholder')} className={inputCls(false)} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-semibold text-ink mb-1">Missing components</label>
-          <input {...register('missing_components')} placeholder="None" className={inputCls(false)} />
+          <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.missingComponents')}</label>
+          <input {...register('missing_components')} placeholder={t('copies.form.nonePlaceholder')} className={inputCls(false)} />
         </div>
         <div>
-          <label className="block text-sm font-semibold text-ink mb-1">Upgraded components</label>
-          <input {...register('upgraded_components')} placeholder="None" className={inputCls(false)} />
+          <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.upgradedComponents')}</label>
+          <input {...register('upgraded_components')} placeholder={t('copies.form.nonePlaceholder')} className={inputCls(false)} />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Component notes</label>
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.componentNotes')}</label>
         <textarea {...register('component_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Owner notes</label>
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.ownerNotes')}</label>
         <textarea {...register('owner_notes')} rows={2} className={`${inputCls(false)} resize-none`} />
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Trade value hint</label>
-        <input {...register('trade_value_hint')} placeholder="e.g. ~$40 retail" className={inputCls(!!errors.trade_value_hint)} />
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.tradeValueHint')}</label>
+        <input {...register('trade_value_hint')} placeholder={t('copies.form.tradeValueHintPlaceholder')} className={inputCls(!!errors.trade_value_hint)} />
         {errors.trade_value_hint && (
           <p className="mt-1 text-xs text-red-600">{errors.trade_value_hint.message}</p>
         )}
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Shipping constraints</label>
-        <input {...register('shipping_constraints')} placeholder="e.g. Domestic only" className={inputCls(false)} />
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.shippingConstraints')}</label>
+        <input {...register('shipping_constraints')} placeholder={t('copies.form.shippingConstraintsPlaceholder')} className={inputCls(false)} />
       </div>
 
       <div className="flex items-center gap-2">
@@ -219,12 +220,12 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
           className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
         />
         <label htmlFor={`${formId}-pickup`} className="text-sm font-semibold text-ink">
-          Pickup available
+          {t('copies.form.pickupAvailable')}
         </label>
       </div>
 
       <div>
-        <label className="block text-sm font-semibold text-ink mb-1">Photo URLs</label>
+        <label className="block text-sm font-semibold text-ink mb-1">{t('copies.form.photoUrls')}</label>
         <div className="space-y-2">
           {photoFields.map((field, idx) => (
             <div key={field.id} className="flex gap-2">
@@ -237,7 +238,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
                 type="button"
                 onClick={() => removePhoto(idx)}
                 className="shrink-0 text-moss hover:text-red-500 p-1"
-                aria-label="Remove URL"
+                aria-label={t('copies.form.removeUrlAriaLabel')}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -250,7 +251,7 @@ export function CopyForm({ boardGameId, formId, initial, onSubmit, serverError }
             onClick={() => appendPhoto({ url: '' })}
             className="text-xs font-semibold text-ink underline decoration-coral decoration-2 underline-offset-2"
           >
-            + Add photo URL
+            {t('copies.form.addPhotoUrl')}
           </button>
         </div>
       </div>

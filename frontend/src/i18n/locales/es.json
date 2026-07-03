@@ -626,5 +626,136 @@
       "removeAriaLabel": "Quitar {{name}}"
     },
     "comboFallback": "combo"
+  },
+  "copies": {
+    "close": "Cerrar",
+    "saveChanges": "Guardar cambios",
+    "saving": "Guardando…",
+    "edit": "Editar",
+    "pickup": "Retiro en persona",
+    "lockedInEvent": "Bloqueada (en evento)",
+    "lockedInEventTitle": "Publicada en un evento activo — retírala del evento antes de editarla o retirarla.",
+    "addToEvent": "Añadir al evento",
+    "addToEventTitle": "Completa los detalles antes de añadirla a un evento.",
+    "addCopy": "Añadir una copia",
+    "condition": {
+      "NEW": "Nuevo",
+      "LIKE_NEW": "Como nuevo",
+      "EXCELLENT": "Excelente",
+      "GOOD": "Bueno",
+      "FAIR": "Aceptable",
+      "POOR": "Malo"
+    },
+    "sleeved": {
+      "UNKNOWN": "Desconocido",
+      "NONE": "Sin fundas",
+      "SLEEVED": "Enfundado"
+    },
+    "status": {
+      "ACTIVE": "Activa",
+      "RESERVED": "Reservada",
+      "TRADED": "Intercambiada",
+      "WITHDRAWN": "Retirada"
+    },
+    "statusFilter": {
+      "all": "Todos los estados"
+    },
+    "errors": {
+      "selectEdition": "Selecciona una edición",
+      "conditionRequired": "La condición es obligatoria",
+      "invalidUrl": "Debe ser una URL válida",
+      "tradeHintTooLong": "No puede superar los 120 caracteres",
+      "saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+      "networkError": "Error de red. Inténtalo de nuevo."
+    },
+    "form": {
+      "edition": "Edición",
+      "loadingEditions": "Cargando ediciones…",
+      "selectEdition": "Selecciona una edición…",
+      "unknownEdition": "Desconocida / No especificada",
+      "languagePrefix": "Idioma:",
+      "languageSuffix": "(de la edición)",
+      "condition": "Condición",
+      "selectCondition": "Selecciona la condición…",
+      "sleeved": "Enfundado",
+      "includesExpansions": "Incluye expansiones",
+      "includesExpansionsPlaceholder": "p. ej. Expansiones de Stonemaier",
+      "missingComponents": "Componentes faltantes",
+      "upgradedComponents": "Componentes mejorados",
+      "nonePlaceholder": "Ninguno",
+      "componentNotes": "Notas de componentes",
+      "ownerNotes": "Notas del dueño",
+      "tradeValueHint": "Valor de intercambio estimado",
+      "tradeValueHintPlaceholder": "p. ej. ~$40 de precio de venta",
+      "shippingConstraints": "Restricciones de envío",
+      "shippingConstraintsPlaceholder": "p. ej. Solo envíos nacionales",
+      "pickupAvailable": "Retiro en persona disponible",
+      "photoUrls": "URLs de fotos",
+      "removeUrlAriaLabel": "Quitar URL",
+      "addPhotoUrl": "+ Añadir URL de foto"
+    },
+    "editModal": {
+      "ariaLabel": "Editar copia",
+      "title": "Editar copia"
+    },
+    "withdraw": {
+      "title": "¿Retirar copia?",
+      "body": "Esto marcará la copia #{{code}} como retirada.",
+      "hint": "La copia ya no aparecerá en las publicaciones de juegos. Aún podrás verla aquí.",
+      "withdrawing": "Retirando…",
+      "action": "Retirar"
+    },
+    "pending": {
+      "language": "idioma",
+      "condition": "condición",
+      "completeDetails": "Completa los detalles: {{fields}}",
+      "complete": "Completar"
+    },
+    "rating": {
+      "label": "Mi valoración:",
+      "ariaLabel": "Mi valoración (1–10)"
+    },
+    "import": {
+      "title": "Importar de BGG",
+      "skipDuplicates": "Omitir duplicados existentes",
+      "fromCollection": "Desde tu colección",
+      "usernamePrefix": "Define tu",
+      "usernameLinkText": "usuario de BGG",
+      "usernameSuffix": "primero.",
+      "usernameRequiredTitle": "Define tu usuario de BGG en tu perfil primero.",
+      "importOwned": "Importar juegos poseídos desde BGG",
+      "importing": "Importando…",
+      "fromGeeklist": "Desde una geeklist",
+      "geeklistIdLabel": "ID de geeklist",
+      "geeklistIdPlaceholder": "p. ej. 123456",
+      "importFromGeeklist": "Importar desde geeklist",
+      "resultCreated_one": "Importación lista — {{count}} creada",
+      "resultCreated_other": "Importación lista — {{count}} creadas",
+      "resultSkipped_one": ", {{count}} omitida",
+      "resultSkipped_other": ", {{count}} omitidas",
+      "resultPending_one": ", {{count}} necesita detalles",
+      "resultPending_other": ", {{count}} necesitan detalles",
+      "failed": "La importación falló. Revisa tu usuario de BGG o el ID de la geeklist.",
+      "startFailed": "No se pudo iniciar la importación. Inténtalo de nuevo.",
+      "enterGeeklistId": "Ingresa un ID de geeklist."
+    },
+    "addModal": {
+      "changeGame": "Cambiar juego",
+      "searchPlaceholder": "Busca en el catálogo un juego que tengas…",
+      "adding": "Añadiendo…",
+      "submit": "Añadir copia"
+    },
+    "list": {
+      "activeCount_one": "{{count}} activa",
+      "activeCount_other": "{{count}} activas",
+      "totalSuffix": " · {{total}} en total",
+      "filterByStatusAriaLabel": "Filtrar por estado",
+      "clear": "Borrar",
+      "clearFilter": "Borrar filtro",
+      "loadError": "No se pudieron cargar tus copias. Inténtalo de nuevo.",
+      "emptyTitle": "Aún no hay copias",
+      "emptyBody": "Añade los juegos de mesa que tienes para poder publicarlos en eventos de intercambio.",
+      "noStatusMatch": "No hay copias con estado \"{{status}}\"."
+    }
   }
 }
