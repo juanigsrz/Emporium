@@ -35,15 +35,19 @@ def _wants(event, **kw):
 
 
 def _sol(trades=None, combos=None, cash_purchases=None,
-         cash_summary=None, settlement=None):
-    """Serialize a solver-output JSON document as the upload endpoint expects."""
-    return json.dumps({
+         cash_summary=None, settlement=None, version="1.0.0"):
+    """Serialize a solver-output JSON document as the upload endpoint expects.
+    Real solver output always carries a `version` meta; pass version=None to omit."""
+    doc = {
         "trades": trades or [],
         "combos": combos or [],
         "cash_purchases": cash_purchases or [],
         "cash_summary": cash_summary or [],
         "settlement": settlement or [],
-    })
+    }
+    if version is not None:
+        doc["version"] = version
+    return json.dumps(doc)
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +291,11 @@ class UploadXToYTests(MatchingTestBase):
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
         return _sol(trades=[{"give": a1, "take": b1}, {"give": b1, "take": a1}])
 
+    def _solution_no_version(self):
+        a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
+        return _sol(trades=[{"give": a1, "take": b1}, {"give": b1, "take": a1}],
+                    version=None)
+
     def test_upload_with_cash_purchase_creates_assignment(self):
         from decimal import Decimal
         a1, b1 = self.copy_a1.listing_code, self.copy_b1.listing_code
@@ -313,7 +322,8 @@ class UploadXToYTests(MatchingTestBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         run = MatchRun.objects.get(pk=resp.data["id"])
         self.assertEqual(run.status, MatchRun.Status.DONE)
-        self.assertEqual(run.algorithm, "gurobi-xy")
+        # algorithm reflects the solver's version meta ("pareto <version>")
+        self.assertEqual(run.algorithm, "pareto 1.0.0")
 
         assignments = TradeAssignment.objects.filter(match_run=run)
         self.assertEqual(assignments.count(), 2)
@@ -324,6 +334,15 @@ class UploadXToYTests(MatchingTestBase):
         b1_row = assignments.get(event_listing=self.el_b1)
         self.assertEqual(b1_row.giver, self.user_b)
         self.assertEqual(b1_row.receiver, self.user_a)
+
+    def test_upload_without_version_keeps_default_algorithm(self):
+        resp = self.client.post(
+            upload_url(self.slug), data=self._solution_no_version(),
+            content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        run = MatchRun.objects.get(pk=resp.data["id"])
+        self.assertEqual(run.algorithm, "gurobi-xy")
 
     def test_upload_groups_into_one_component(self):
         resp = self.client.post(

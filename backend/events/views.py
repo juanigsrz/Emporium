@@ -225,6 +225,13 @@ class TradeEventViewSet(
         event = self.get_object()
         self._enforce_location_gate(event, request.user)
         self._enforce_single_event(event, request.user)
+        already_in = EventParticipation.objects.filter(
+            event=event, user=request.user
+        ).exists()
+        if not already_in and event.submissions_locked:
+            raise ValidationError(
+                {"detail": "This event is no longer accepting new participants."}
+            )
         participation, created = EventParticipation.objects.get_or_create(
             event=event,
             user=request.user,

@@ -534,6 +534,12 @@ def load_solution(match_run, raw_output: str):
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid solver JSON: {exc}")
 
+    # Record the actual solver (Pareto) version from the output meta, so the run
+    # shows e.g. "pareto 1.0.0" instead of the internal "gurobi-xy" tag.
+    version = doc.get("version")
+    if version:
+        match_run.algorithm = f"pareto {version}"
+
     parsed = parse_gurobi(doc)
 
     def _resolve_token(code):

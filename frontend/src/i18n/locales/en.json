@@ -805,8 +805,8 @@
     "run": {
       "cyclesCount_one": "{{count}} cycle",
       "cyclesCount_other": "{{count}} cycles",
-      "matched_one": "{{count}} matched",
-      "matched_other": "{{count}} matched",
+      "matched_one": "{{count}} wish matched",
+      "matched_other": "{{count}} wishes matched",
       "unmatched": "{{count}} unmatched",
       "triggering": "Triggering…",
       "trigger": "Run matching",
@@ -859,19 +859,10 @@
       "forPrice": "for",
       "netBalancePrefix": "Net balance:"
     },
-    "cycle": {
-      "ariaLabel_one": "Trade cycle with {{count}} step",
-      "ariaLabel_other": "Trade cycle with {{count}} steps",
-      "gives": "gives",
-      "empty": "No cycles in this run.",
-      "number": "Cycle #{{id}}",
-      "stepsCount_one": "{{count}} step",
-      "stepsCount_other": "{{count}} steps"
-    },
     "stats": {
       "users": "Users",
       "listings": "Listings",
-      "matched": "Matched",
+      "matched": "Trades",
       "cycles": "Cycles",
       "unmatchedHeading_one": "Unmatched wish ({{count}})",
       "unmatchedHeading_other": "Unmatched wishes ({{count}})",
@@ -909,7 +900,6 @@
     },
     "tabs": {
       "myTrades": "My Trades",
-      "allCycles": "All Cycles",
       "statsUnmatched": "Stats & Unmatched",
       "shippingPayments": "Shipping & Payments",
       "overview": "Overview"

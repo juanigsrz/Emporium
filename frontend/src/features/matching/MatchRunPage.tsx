@@ -14,7 +14,7 @@ import {
   useUploadSolution,
   fetchWantsExport,
 } from '../../api/matching'
-import type { MatchRunListItem, MatchRunDetail, Cycle, TradeAssignment } from '../../api/matching'
+import type { MatchRunListItem, MatchRunDetail, TradeAssignment } from '../../api/matching'
 import { useShipments, useUpdateShipment } from '../../api/shipping'
 import { ShippingOverviewTab } from './ShippingOverviewTab'
 import type { Shipment } from '../../api/shipping'
@@ -554,217 +554,10 @@ function MyTradesSection({
   )
 }
 
-// ---- Cycle visualization ----
-
-/**
- * Renders a single trade cycle as an SVG ring diagram.
- * Nodes = users, directed arrows = listing moving from_user -> to_user.
- * On narrow screens (<= 480px effective width), falls back to a stacked list.
- */
-function CycleDiagram({ cycle }: { cycle: Cycle }) {
-  const { t } = useTranslation()
-  const n = cycle.steps.length
-  if (n === 0) return null
-
-  // Stacked (mobile) fallback rendered for all sizes < a threshold;
-  // SVG ring for wider. We use a CSS media-query via className and render both,
-  // toggling visibility, so no JS window.innerWidth needed.
-
-  const nodes = cycle.steps.map((s) => s.from_user)
-  const radius = Math.max(70, Math.min(120, 30 * n))
-  const cx = radius + 40
-  const cy = radius + 40
-  const svgSize = (radius + 40) * 2
-
-  // Compute positions on a circle
-  const positions = nodes.map((_, i) => {
-    const angle = (2 * Math.PI * i) / n - Math.PI / 2
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    }
-  })
-
-  const nodeR = 22
-
-  return (
-    <div>
-      {/* SVG diagram — hidden on very narrow screens */}
-      <div className="hidden xs:block overflow-x-auto">
-        <svg
-          width={svgSize}
-          height={svgSize}
-          viewBox={`0 0 ${svgSize} ${svgSize}`}
-          className="mx-auto"
-          aria-label={t('matching.cycle.ariaLabel', { count: n })}
-        >
-          <defs>
-            <marker
-              id={`arrow-${cycle.id}`}
-              markerWidth="8"
-              markerHeight="8"
-              refX="6"
-              refY="3"
-              orient="auto"
-            >
-              <path d="M0,0 L0,6 L8,3 z" className="fill-indigo-400" />
-            </marker>
-          </defs>
-
-          {/* Edges */}
-          {cycle.steps.map((step, i) => {
-            const from = positions[i]
-            const to = positions[(i + 1) % n]
-            // Shorten line so it doesn't overlap node circles
-            const dx = to.x - from.x
-            const dy = to.y - from.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            const ux = dx / dist
-            const uy = dy / dist
-            const x1 = from.x + ux * nodeR
-            const y1 = from.y + uy * nodeR
-            const x2 = to.x - ux * (nodeR + 8)
-            const y2 = to.y - uy * (nodeR + 8)
-            // Label midpoint
-            const mx = (x1 + x2) / 2
-            const my = (y1 + y2) / 2
-
-            return (
-              <g key={i}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  className="stroke-indigo-400"
-                  strokeWidth={1.5}
-                  markerEnd={`url(#arrow-${cycle.id})`}
-                />
-                {/* Game label on edge */}
-                <text
-                  x={mx}
-                  y={my - 6}
-                  textAnchor="middle"
-                  className="fill-gray-600"
-                  fontSize={9}
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {step.board_game.length > 14
-                    ? step.board_game.slice(0, 13) + '…'
-                    : step.board_game}
-                </text>
-                <text
-                  x={mx}
-                  y={my + 6}
-                  textAnchor="middle"
-                  className="fill-gray-400"
-                  fontSize={8}
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {step.listing_code}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* Nodes */}
-          {nodes.map((username, i) => {
-            const pos = positions[i]
-            const short = username.length > 8 ? username.slice(0, 7) + '…' : username
-            return (
-              <g key={i}>
-                <circle
-                  cx={pos.x}
-                  cy={pos.y}
-                  r={nodeR}
-                  className="fill-indigo-600"
-                />
-                <text
-                  x={pos.x}
-                  y={pos.y + 1}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="fill-white"
-                  fontSize={9}
-                  fontWeight="600"
-                  fontFamily="ui-sans-serif, sans-serif"
-                >
-                  {short}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
-      </div>
-
-      {/* Stacked list — shown on xs screens, hidden on wider (overrides above) */}
-      <div className="xs:hidden space-y-2">
-        {cycle.steps.map((step, i) => (
-          <div key={i} className="flex items-start gap-2 text-sm">
-            <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs flex items-center justify-center font-bold">
-              {i + 1}
-            </span>
-            <div className="min-w-0">
-              <span className="font-medium text-ink">{step.from_user}</span>
-              <span className="text-moss/70 mx-1">{t('matching.cycle.gives')}</span>
-              <span className="text-indigo-700 font-medium">{step.board_game}</span>
-              <span className="text-moss/70 text-xs ml-1 font-mono">({step.listing_code})</span>
-              <span className="text-moss/70 mx-1">{t('matching.trades.to')}</span>
-              <span className="font-medium text-ink">{step.to_user}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Always show step list as supplementary detail */}
-      <div className="mt-4 space-y-1">
-        {cycle.steps.map((step, i) => (
-          <div
-            key={i}
-            className="flex flex-wrap items-center gap-1 text-xs text-moss border-b border-gray-50 last:border-0 py-1"
-          >
-            <span className="font-semibold text-ink">{step.from_user}</span>
-            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <span className="font-mono text-indigo-700">{step.listing_code}</span>
-            <span className="text-moss">"{step.board_game}"</span>
-            <svg className="w-3 h-3 text-moss/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-            <span className="font-semibold text-ink">{step.to_user}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function CyclesSection({ cycles }: { cycles: Cycle[] }) {
-  const { t } = useTranslation()
-  if (cycles.length === 0) {
-    return <p className="text-sm text-moss/70">{t('matching.cycle.empty')}</p>
-  }
-
-  return (
-    <div className="space-y-4">
-      {cycles.map((cycle) => (
-        <div
-          key={cycle.id}
-          className="rounded-xl border border-indigo-100 bg-white p-5 shadow-sm"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-sm font-semibold text-ink">{t('matching.cycle.number', { id: cycle.id })}</span>
-            <span className="rounded-full bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 font-medium">
-              {t('matching.cycle.stepsCount', { count: cycle.length })}
-            </span>
-          </div>
-          <CycleDiagram cycle={cycle} />
-        </div>
-      ))}
-    </div>
-  )
-}
+// ---- Cycle visualization (removed) ----
+// The SVG ring diagram assumed clean, per-user-balanced cycles. X-to-Y solutions
+// are tangled connected-component flows that don't decompose into rings, so the
+// "All Cycles" tab was dropped; result.cycles is now only summarized in Stats.
 
 // ---- Stats section ----
 
@@ -1226,7 +1019,7 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
   const currentUsername = user?.username ?? ''
 
   const showShipping = eventStatus === 'SHIPPING' || eventStatus === 'ARCHIVED'
-  const [activeTab, setActiveTab] = useState<'my-trades' | 'cycles' | 'stats' | 'shipping-payments' | 'overview'>('my-trades')
+  const [activeTab, setActiveTab] = useState<'my-trades' | 'stats' | 'shipping-payments' | 'overview'>('my-trades')
 
   if (!isDone) {
     return <LiveRunView slug={slug} runId={run.id} />
@@ -1234,7 +1027,6 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
 
   const tabs: { id: typeof activeTab; label: string }[] = [
     { id: 'my-trades', label: t('matching.tabs.myTrades') },
-    { id: 'cycles', label: t('matching.tabs.allCycles') },
     { id: 'stats', label: t('matching.tabs.statsUnmatched') },
     ...(showShipping ? [{ id: 'shipping-payments' as const, label: t('matching.tabs.shippingPayments') }] : []),
     ...(showShipping && isOrganizer ? [{ id: 'overview' as const, label: t('matching.tabs.overview') }] : []),
@@ -1277,24 +1069,6 @@ function RunResultView({ slug, run, eventStatus, isOrganizer, moneyEnabled }: { 
                 currentUsername={currentUsername}
               />
             )}
-          </div>
-        )}
-
-        {activeTab === 'cycles' && (
-          <div>
-            {resultLoading && (
-              <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div key={i} className="h-40 rounded-xl bg-gray-100 animate-pulse" />
-                ))}
-              </div>
-            )}
-            {resultError && (
-              <p className="text-sm text-red-600">
-                {t('matching.run.resultLoadError')}
-              </p>
-            )}
-            {result && <CyclesSection cycles={result.cycles} />}
           </div>
         )}
 

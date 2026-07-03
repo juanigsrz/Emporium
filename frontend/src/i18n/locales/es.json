@@ -805,8 +805,8 @@
     "run": {
       "cyclesCount_one": "{{count}} ciclo",
       "cyclesCount_other": "{{count}} ciclos",
-      "matched_one": "{{count}} emparejado",
-      "matched_other": "{{count}} emparejados",
+      "matched_one": "{{count}} deseo satisfecho",
+      "matched_other": "{{count}} deseos satisfechos",
       "unmatched": "{{count}} sin emparejar",
       "triggering": "Iniciando…",
       "trigger": "Ejecutar emparejamiento",
@@ -859,19 +859,10 @@
       "forPrice": "por",
       "netBalancePrefix": "Saldo neto:"
     },
-    "cycle": {
-      "ariaLabel_one": "Ciclo de intercambio con {{count}} paso",
-      "ariaLabel_other": "Ciclo de intercambio con {{count}} pasos",
-      "gives": "entrega",
-      "empty": "No hay ciclos en esta ejecución.",
-      "number": "Ciclo #{{id}}",
-      "stepsCount_one": "{{count}} paso",
-      "stepsCount_other": "{{count}} pasos"
-    },
     "stats": {
       "users": "Usuarios",
       "listings": "Publicaciones",
-      "matched": "Emparejados",
+      "matched": "Intercambios",
       "cycles": "Ciclos",
       "unmatchedHeading_one": "Deseo sin emparejar ({{count}})",
       "unmatchedHeading_other": "Deseos sin emparejar ({{count}})",
@@ -909,7 +900,6 @@
     },
     "tabs": {
       "myTrades": "Mis intercambios",
-      "allCycles": "Todos los ciclos",
       "statsUnmatched": "Estadísticas y sin emparejar",
       "shippingPayments": "Envíos y pagos",
       "overview": "Resumen"

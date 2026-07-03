@@ -261,7 +261,7 @@ class MatchRunUploadView(APIView):
         run.status = MatchRun.Status.DONE
         run.finished_at = datetime.now(timezone.utc)
         run.save(update_fields=[
-            "result", "summary", "log", "status", "finished_at",
+            "result", "summary", "log", "status", "finished_at", "algorithm",
         ])
         return Response(
             {"id": run.pk, "status": run.status, "summary": run.summary},
