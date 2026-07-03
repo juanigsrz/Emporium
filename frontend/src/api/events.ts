@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { TFunction } from 'i18next'
 import { apiClient } from './client'
 import type { PaginatedResponse } from './games'
 
@@ -25,15 +26,9 @@ export const EVENT_STATUSES: EventStatus[] = [
   'ARCHIVED',
 ]
 
-export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
-  DRAFT: 'Draft',
-  SUBMISSIONS_OPEN: 'Submissions Open',
-  WANTLIST_OPEN: 'Want List Open',
-  MATCHING: 'Matching',
-  MATCH_REVIEW: 'Match Review',
-  FINALIZATION: 'Finalization',
-  SHIPPING: 'Shipping',
-  ARCHIVED: 'Archived',
+/** Human-readable, translated label for an event status. */
+export function eventStatusLabel(t: TFunction, status: EventStatus): string {
+  return t(`events.status.${status}`, { defaultValue: status })
 }
 
 // ---- Types ----

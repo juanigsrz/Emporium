@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   useEvent,
   useEvents,
@@ -19,7 +21,7 @@ import {
   setListingSellPrice,
   EVENTS_KEYS,
   EVENT_STATUSES,
-  EVENT_STATUS_LABELS,
+  eventStatusLabel,
 } from '../../api/events'
 import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
 import { importTrades } from '../../api/trades'
@@ -37,6 +39,7 @@ import { STATUS_BADGE_CLASSES } from './eventUtils'
 // ---- Lifecycle progress bar ----
 
 function LifecycleProgress({ current }: { current: EventStatus }) {
+  const { t } = useTranslation()
   const currentIdx = EVENT_STATUSES.indexOf(current)
   return (
     <div className="w-full overflow-x-auto pb-1">
@@ -70,7 +73,7 @@ function LifecycleProgress({ current }: { current: EventStatus }) {
                   }`}
                   style={{ fontSize: '10px' }}
                 >
-                  {EVENT_STATUS_LABELS[status]}
+                  {eventStatusLabel(t, status)}
                 </span>
               </div>
               {/* Connector line (except after last) */}
@@ -98,6 +101,7 @@ function JoinLeaveButton({
   event: TradeEvent
   isAuthenticated: boolean
 }) {
+  const { t } = useTranslation()
   const join = useJoinEvent()
   const leave = useLeaveEvent()
   const [confirmLeave, setConfirmLeave] = useState(false)
@@ -109,7 +113,7 @@ function JoinLeaveButton({
         to="/login"
         className="rounded-2xl border-2 border-ink/20 bg-cream px-4 py-2 text-sm font-semibold text-moss hover:bg-sage/40 transition-colors"
       >
-        Login to join
+        {t('events.loginToJoin')}
       </Link>
     )
   }
@@ -131,7 +135,7 @@ function JoinLeaveButton({
     try {
       await join.mutateAsync(event.slug)
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? 'Failed to join. Try again.'
+      const msg = extractErrorMsg(err) ?? t('events.joinFailed')
       setError(msg)
     }
   }
@@ -142,7 +146,7 @@ function JoinLeaveButton({
       await leave.mutateAsync(event.slug)
       setConfirmLeave(false)
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? 'Failed to leave. Try again.'
+      const msg = extractErrorMsg(err) ?? t('events.leaveFailed')
       setError(msg)
       setConfirmLeave(false)
     }
@@ -155,20 +159,20 @@ function JoinLeaveButton({
         confirmLeave ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-moss">
-              Leave this event? This removes all your copies, want lists, and wishes from it.
+              {t('events.leaveConfirmText')}
             </span>
             <button
               onClick={handleLeave}
               disabled={leave.isPending}
               className="text-xs rounded-xl border-2 border-red-300 px-2.5 py-1 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60 transition-colors"
             >
-              {leave.isPending ? 'Leaving…' : 'Confirm leave'}
+              {leave.isPending ? t('events.leaving') : t('events.confirmLeave')}
             </button>
             <button
               onClick={() => setConfirmLeave(false)}
               className="text-xs font-medium text-moss hover:text-ink"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         ) : (
@@ -177,14 +181,14 @@ function JoinLeaveButton({
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              You're participating
+              {t('events.participating')}
             </span>
             {canLeave && (
               <button
                 onClick={() => setConfirmLeave(true)}
                 className="rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
               >
-                Leave
+                {t('events.leave')}
               </button>
             )}
           </div>
@@ -195,10 +199,10 @@ function JoinLeaveButton({
           disabled={join.isPending}
           className="rounded-2xl border-2 border-ink bg-butter px-5 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
         >
-          {join.isPending ? 'Joining…' : event.is_organizer ? 'Join as trader' : 'Join event'}
+          {join.isPending ? t('events.joining') : event.is_organizer ? t('events.joinAsTrader') : t('events.joinEvent')}
         </button>
       ) : (
-        <span className="text-sm text-moss/70">Event not open for joining</span>
+        <span className="text-sm text-moss/70">{t('events.notOpenForJoining')}</span>
       )}
     </div>
   )
@@ -206,17 +210,13 @@ function JoinLeaveButton({
 
 // ---- Organizer: lifecycle transition controls ----
 
-const TRANSITION_LABEL: Partial<Record<EventStatus, string>> = {
-  SUBMISSIONS_OPEN: 'Open Submissions',
-  WANTLIST_OPEN: 'Open Want Lists',
-  MATCHING: 'Start Matching',
-  MATCH_REVIEW: 'Open Match Review',
-  FINALIZATION: 'Move to Finalization',
-  SHIPPING: 'Move to Shipping',
-  ARCHIVED: 'Archive Event',
+/** Human-readable, translated label for the button that advances an event to a given status. */
+function transitionLabel(t: TFunction, status: EventStatus): string {
+  return t(`events.transition.${status}`, { defaultValue: eventStatusLabel(t, status) })
 }
 
 function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
+  const { t } = useTranslation()
   const transition = useTransitionEvent()
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<EventStatus | null>(null)
@@ -231,7 +231,7 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
     try {
       await transition.mutateAsync({ slug: event.slug, to })
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? `Failed to transition to ${to}.`
+      const msg = extractErrorMsg(err) ?? t('events.transitionFailed', { status: eventStatusLabel(t, to) })
       setError(msg)
     } finally {
       setPending(null)
@@ -250,7 +250,7 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
         />
       )}
       <p className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
-        Organizer — Advance lifecycle
+        {t('events.organizerAdvanceLifecycle')}
       </p>
       {error && (
         <p className="text-xs text-red-600 mb-2">{error}</p>
@@ -266,8 +266,8 @@ function OrganizerLifecycleControls({ event }: { event: TradeEvent }) {
             }`}
           >
             {pending === to && transition.isPending
-              ? 'Advancing…'
-              : `Advance to ${TRANSITION_LABEL[to] ?? EVENT_STATUS_LABELS[to]}`}
+              ? t('events.advancing')
+              : t('events.advanceTo', { label: transitionLabel(t, to) })}
           </button>
         ))}
       </div>
@@ -288,18 +288,20 @@ function TransitionConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
       <div className="relative w-full sm:max-w-sm bg-cream border-2 border-ink rounded-3xl shadow-card p-5">
-        <h3 className="font-display text-lg font-bold text-ink mb-2">Advance event status?</h3>
+        <h3 className="font-display text-lg font-bold text-ink mb-2">{t('events.transitionConfirm.title')}</h3>
         <p className="text-sm text-moss mb-1">
-          Move this event from{' '}
-          <span className="font-semibold text-ink">{EVENT_STATUS_LABELS[from]}</span> to{' '}
-          <span className="font-semibold text-ink">{EVENT_STATUS_LABELS[to]}</span>?
+          {t('events.transitionConfirm.moveFromPrefix')}{' '}
+          <span className="font-semibold text-ink">{eventStatusLabel(t, from)}</span>{' '}
+          {t('events.transitionConfirm.toConnector')}{' '}
+          <span className="font-semibold text-ink">{eventStatusLabel(t, to)}</span>?
         </p>
         <p className="text-xs text-moss/70 mb-4">
-          All participants see the new phase immediately, and it may lock submissions or want lists.
+          {t('events.transitionConfirm.warning')}
         </p>
         <div className="flex gap-3">
           <button
@@ -308,7 +310,7 @@ function TransitionConfirmDialog({
             disabled={isPending}
             className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 disabled:opacity-60 transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -316,7 +318,7 @@ function TransitionConfirmDialog({
             disabled={isPending}
             className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
-            {isPending ? 'Advancing…' : 'Confirm'}
+            {isPending ? t('events.advancing') : t('events.confirm')}
           </button>
         </div>
       </div>
@@ -325,26 +327,6 @@ function TransitionConfirmDialog({
 }
 
 // ---- Organizer: edit event form ----
-
-const editEventSchema = z.object({
-  name: z.string().min(3, 'Name must be at least 3 characters').max(200),
-  description: z.string().max(5000).optional(),
-  shipping_rules: z.string().max(2000).optional(),
-  regional_restrictions: z.string().max(2000).optional(),
-  trade_policies: z.string().max(2000).optional(),
-  image_url: z.string().max(500).optional(),
-  submissions_open_at: z.string().optional(),
-  submissions_close_at: z.string().optional(),
-  wantlist_close_at: z.string().optional(),
-  money_enabled: z.boolean().optional(),
-  max_money_per_user: z.string().optional(),
-  require_location: z.boolean().optional(),
-  center_latitude: z.string().optional(),
-  center_longitude: z.string().optional(),
-  max_distance_km: z.string().optional(),
-})
-
-type EditEventFormValues = z.infer<typeof editEventSchema>
 
 function toLocalDatetimeValue(isoString: string | null | undefined): string {
   if (!isoString) return ''
@@ -358,8 +340,33 @@ interface EditEventModalProps {
 }
 
 function EditEventModal({ event, onClose }: EditEventModalProps) {
+  const { t } = useTranslation()
   const patchEvent = usePatchEvent()
   const [serverError, setServerError] = useState<string | null>(null)
+
+  const editEventSchema = useMemo(
+    () =>
+      z.object({
+        name: z.string().min(3, t('events.errors.nameMin')).max(200),
+        description: z.string().max(5000).optional(),
+        shipping_rules: z.string().max(2000).optional(),
+        regional_restrictions: z.string().max(2000).optional(),
+        trade_policies: z.string().max(2000).optional(),
+        image_url: z.string().max(500).optional(),
+        submissions_open_at: z.string().optional(),
+        submissions_close_at: z.string().optional(),
+        wantlist_close_at: z.string().optional(),
+        money_enabled: z.boolean().optional(),
+        max_money_per_user: z.string().optional(),
+        require_location: z.boolean().optional(),
+        center_latitude: z.string().optional(),
+        center_longitude: z.string().optional(),
+        max_distance_km: z.string().optional(),
+      }),
+    [t]
+  )
+
+  type EditEventFormValues = z.infer<typeof editEventSchema>
 
   const {
     register,
@@ -423,7 +430,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       })
       onClose()
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? 'Failed to save. Please try again.'
+      const msg = extractErrorMsg(err) ?? t('events.saveFailed')
       setServerError(msg)
     }
   }
@@ -438,13 +445,13 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Edit event"
+      aria-label={t('events.editModal.ariaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
-          <h2 className="font-display text-lg font-bold text-ink">Edit Event</h2>
-          <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label="Close">
+          <h2 className="font-display text-lg font-bold text-ink">{t('events.editModal.title')}</h2>
+          <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label={t('events.close')}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -461,23 +468,23 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           <form id="edit-event-form" onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-ink mb-1">
-                Event name <span className="text-red-500">*</span>
+                {t('events.form.name')} <span className="text-red-500">*</span>
               </label>
               <input {...register('name')} className={inputCls(!!errors.name)} />
               {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">Description</label>
+              <label className="block text-sm font-semibold text-ink mb-1">{t('events.form.description')}</label>
               <textarea {...register('description')} rows={3} className={`${inputCls(false)} resize-none`} />
             </div>
 
             {/* Cover image URL */}
             <div>
-              <label className="block text-sm font-semibold text-ink mb-1">Cover image URL</label>
+              <label className="block text-sm font-semibold text-ink mb-1">{t('events.form.imageUrl')}</label>
               <input
                 {...register('image_url')}
-                placeholder="https://example.com/cover.jpg"
+                placeholder={t('events.form.imageUrlPlaceholder')}
                 className={inputCls(!!errors.image_url)}
               />
               {errors.image_url && (
@@ -489,13 +496,13 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-bold text-moss uppercase tracking-wide">Dates</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">{t('events.form.dates')}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {(
                   [
-                    ['submissions_open_at', 'Submissions open'],
-                    ['submissions_close_at', 'Submissions close'],
-                    ['wantlist_close_at', 'Want list closes'],
+                    ['submissions_open_at', t('events.form.submissionsOpen')],
+                    ['submissions_close_at', t('events.form.submissionsClose')],
+                    ['wantlist_close_at', t('events.form.wantlistCloses')],
                   ] as const
                 ).map(([field, label]) => (
                   <div key={field}>
@@ -507,12 +514,12 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-bold text-moss uppercase tracking-wide">Policies</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">{t('events.form.policies')}</p>
               {(
                 [
-                  ['shipping_rules', 'Shipping rules'],
-                  ['regional_restrictions', 'Regional restrictions'],
-                  ['trade_policies', 'Trade policies'],
+                  ['shipping_rules', t('events.form.shippingRules')],
+                  ['regional_restrictions', t('events.form.regionalRestrictions')],
+                  ['trade_policies', t('events.form.tradePolicies')],
                 ] as const
               ).map(([field, label]) => (
                 <div key={field}>
@@ -523,25 +530,25 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-bold text-moss uppercase tracking-wide">Money trading</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">{t('events.form.moneyTrading')}</p>
               <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('money_enabled')}
                   className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
-                Allow members to use money in trades
+                {t('events.form.allowMoney')}
               </label>
               {moneyEnabled && (
                 <div>
                   <label className="block text-xs font-semibold text-moss mb-1">
-                    Max money per user (leave blank for no cap)
+                    {t('events.form.maxMoneyLabel')}
                   </label>
                   <input
                     type="number"
                     min={0}
                     step="0.01"
-                    placeholder="e.g. 50.00"
+                    placeholder={t('events.form.maxMoneyPlaceholder')}
                     {...register('max_money_per_user')}
                     className={`${inputCls(false)} sm:max-w-[12rem]`}
                   />
@@ -550,37 +557,37 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-bold text-moss uppercase tracking-wide">Location gate</p>
+              <p className="text-xs font-bold text-moss uppercase tracking-wide">{t('events.form.locationGate')}</p>
               <label className="flex items-center gap-2 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
                   {...register('require_location')}
                   className="h-4 w-4 rounded border-2 border-ink/30 accent-indigo-600 focus:ring-sage"
                 />
-                Require participants to have a geocoded location
+                {t('events.form.requireLocation')}
               </label>
               {requireLocation && (
                 <div className="space-y-3">
                   <p className="text-xs text-gray-400">
-                    Optionally restrict to a geographic radius (leave lat/lng blank to only require location, without radius filtering).
+                    {t('events.form.radiusHint')}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-moss mb-1">Center latitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">{t('events.form.centerLatitude')}</label>
                       <input
                         type="number"
                         step="any"
-                        placeholder="e.g. -34.6"
+                        placeholder={t('events.form.centerLatitudePlaceholder')}
                         {...register('center_latitude')}
                         className={inputCls(false)}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-moss mb-1">Center longitude</label>
+                      <label className="block text-xs font-semibold text-moss mb-1">{t('events.form.centerLongitude')}</label>
                       <input
                         type="number"
                         step="any"
-                        placeholder="e.g. -58.4"
+                        placeholder={t('events.form.centerLongitudePlaceholder')}
                         {...register('center_longitude')}
                         className={inputCls(false)}
                       />
@@ -588,13 +595,13 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-moss mb-1">
-                      Max distance (km, leave blank for no radius limit)
+                      {t('events.form.maxDistance')}
                     </label>
                     <input
                       type="number"
                       min={1}
                       step={1}
-                      placeholder="e.g. 500"
+                      placeholder={t('events.form.maxDistancePlaceholder')}
                       {...register('max_distance_km')}
                       className={`${inputCls(!!errors.max_distance_km)} sm:max-w-[12rem]`}
                     />
@@ -614,7 +621,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             onClick={onClose}
             className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
@@ -622,7 +629,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
             disabled={isSubmitting}
             className="flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
           >
-            {isSubmitting ? 'Saving…' : 'Save changes'}
+            {isSubmitting ? t('events.saving') : t('events.saveChanges')}
           </button>
         </div>
       </div>
@@ -633,6 +640,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
 // ---- Participant money budget ----
 
 function ParticipantBudgetCard({ event, username }: { event: TradeEvent; username: string }) {
+  const { t } = useTranslation()
   const { data: participantsData } = useEventParticipants(event.slug)
   const setBudget = useSetEventBudget()
   const me = participantsData?.results.find((p) => p.username === username)
@@ -653,7 +661,7 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: unknown) {
-      setError(extractErrorMsg(err) ?? 'Failed to save budget.')
+      setError(extractErrorMsg(err) ?? t('events.budget.saveFailed'))
     }
   }
 
@@ -661,11 +669,11 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
   return (
     <div className="rounded-3xl border-2 border-ink/15 bg-emerald-50 p-4">
       <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">
-        Your money budget
+        {t('events.budget.title')}
       </p>
       <p className="text-xs text-emerald-600 mb-2">
-        The most you're willing to spend in this event.
-        {cap ? ` Cap: ${cap}.` : ' No cap set.'}
+        {t('events.budget.description')}
+        {cap ? t('events.budget.cap', { cap }) : t('events.budget.noCap')}
       </p>
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold text-moss">$</span>
@@ -682,9 +690,9 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
           disabled={setBudget.isPending}
           className="rounded-2xl border-2 border-ink bg-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          {setBudget.isPending ? 'Saving…' : 'Save budget'}
+          {setBudget.isPending ? t('events.saving') : t('events.budget.save')}
         </button>
-        {saved && <span className="text-xs font-semibold text-emerald-600">Saved ✓</span>}
+        {saved && <span className="text-xs font-semibold text-emerald-600">{t('events.budget.saved')}</span>}
       </div>
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>
@@ -699,6 +707,7 @@ interface AddListingFormProps {
 }
 
 function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
+  const { t } = useTranslation()
   const { data: copiesData } = useCopies({ mine: true })
   const addListing = useAddEventListing()
   const [selectedCopyId, setSelectedCopyId] = useState<string>('')
@@ -715,7 +724,7 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
       await addListing.mutateAsync({ slug, copyId: Number(selectedCopyId) })
       setSelectedCopyId('')
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? 'Failed to add listing. Try again.'
+      const msg = extractErrorMsg(err) ?? t('events.listings.addFailed')
       setError(msg)
     }
   }
@@ -726,9 +735,9 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
         value={selectedCopyId}
         onChange={(e) => setSelectedCopyId(e.target.value)}
         className="flex-1 py-2.5 pl-3 pr-8 text-sm border-2 border-ink/15 rounded-xl bg-parchment text-ink focus:outline-none focus:border-ink focus:ring-2 focus:ring-sage"
-        aria-label="Select copy to add"
+        aria-label={t('events.listings.selectAriaLabel')}
       >
-        <option value="">Select a copy…</option>
+        <option value="">{t('events.listings.selectPlaceholder')}</option>
         {availableCopies.map((copy) => (
           <option key={copy.id} value={copy.id}>
             {copy.board_game_name} — {copy.listing_code} ({copy.condition.toLowerCase().replace('_', ' ')})
@@ -740,7 +749,7 @@ function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
         disabled={!selectedCopyId || addListing.isPending}
         className="rounded-2xl border-2 border-ink bg-butter px-4 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 whitespace-nowrap"
       >
-        {addListing.isPending ? 'Adding…' : 'Add to event'}
+        {addListing.isPending ? t('events.listings.adding') : t('events.listings.addToEvent')}
       </button>
       {error && <p className="text-xs text-red-600 mt-1 w-full">{error}</p>}
     </div>
@@ -762,6 +771,7 @@ function MyListingCard({
   removePending: boolean
   locked: boolean
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const savedValue = listing.ask_is_override ? (listing.resolved_ask ?? '') : ''
   const [draft, setDraft] = useState(savedValue)
@@ -775,7 +785,7 @@ function MyListingCard({
     setErr(null)
     const trimmed = draft.trim()
     if (trimmed !== '' && Number(trimmed) <= 0) {
-      setErr('Price must be greater than $0.')
+      setErr(t('events.listings.priceMustBePositive'))
       return
     }
     setSaving(true)
@@ -785,7 +795,7 @@ function MyListingCard({
       setDraft(updated.ask_is_override ? (updated.resolved_ask ?? '') : '')
       qc.invalidateQueries({ queryKey: EVENTS_KEYS.listings(event.slug) })
     } catch (e: unknown) {
-      setErr(extractErrorMsg(e) ?? 'Failed to save price.')
+      setErr(extractErrorMsg(e) ?? t('events.listings.savePriceFailed'))
     } finally {
       setSaving(false)
     }
@@ -795,14 +805,14 @@ function MyListingCard({
     <div className="flex flex-col gap-2 rounded-2xl border-2 border-ink/10 bg-parchment p-3">
       {confirmRemove && (
         <ConfirmDialog
-          title="Remove listing?"
+          title={t('events.listings.removeTitle')}
           body={
             <>
-              This removes <span className="font-semibold text-ink">{listing.board_game_name}</span>{' '}
-              (<span className="font-mono">{listing.listing_code}</span>) from the event.
+              {t('events.listings.removePrefix')} <span className="font-semibold text-ink">{listing.board_game_name}</span>{' '}
+              (<span className="font-mono">{listing.listing_code}</span>) {t('events.listings.removeSuffix')}
             </>
           }
-          confirmLabel={removePending ? 'Removing…' : 'Remove'}
+          confirmLabel={removePending ? t('events.removing') : t('events.remove')}
           destructive
           pending={removePending}
           onConfirm={() => {
@@ -828,9 +838,9 @@ function MyListingCard({
             onClick={() => setConfirmRemove(true)}
             disabled={removePending}
             className="shrink-0 rounded-xl border-2 border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-            aria-label="Remove listing"
+            aria-label={t('events.listings.removeAriaLabel')}
           >
-            Remove
+            {t('events.remove')}
           </button>
         )}
       </div>
@@ -844,7 +854,7 @@ function MyListingCard({
           <span className="rounded-full border border-ink/15 px-2 py-0.5 text-moss">{listing.copy_language}</span>
         )}
         <span className="rounded-full border border-ink/15 px-2 py-0.5 text-moss">
-          Rating {myRating != null ? myRating : '—'}
+          {t('events.listings.rating', { rating: myRating != null ? myRating : '—' })}
         </span>
       </div>
 
@@ -852,7 +862,7 @@ function MyListingCard({
       {event.money_enabled && (
         <div className="flex items-end gap-2">
           <div>
-            <label className="block text-[10px] uppercase tracking-wide text-moss/60">Min. ask</label>
+            <label className="block text-[10px] uppercase tracking-wide text-moss/60">{t('events.listings.minAsk')}</label>
             <div className="flex items-center gap-1">
               <span className="text-xs text-moss/60">$</span>
               <input
@@ -863,8 +873,8 @@ function MyListingCard({
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={
                   listing.resolved_ask && !listing.ask_is_override
-                    ? `default ${listing.resolved_ask}`
-                    : 'price'
+                    ? t('events.listings.defaultAsk', { ask: listing.resolved_ask })
+                    : t('events.listings.pricePlaceholder')
                 }
                 className="no-spinner w-20 rounded-lg border-2 border-ink/15 bg-cream px-2 py-1 text-xs text-ink placeholder-moss/40 focus:outline-none focus:ring-2 focus:ring-sage"
               />
@@ -875,7 +885,7 @@ function MyListingCard({
             disabled={!dirty || saving}
             className="rounded-lg border-2 border-ink bg-butter px-3 py-1 text-xs font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? t('events.saving') : t('common.save')}
           </button>
         </div>
       )}
@@ -890,6 +900,7 @@ interface MyListingsSectionProps {
 }
 
 function MyListingsSection({ event, username }: MyListingsSectionProps) {
+  const { t } = useTranslation()
   const { data: listingsData, isLoading } = useEventListings(event.slug, {
     user: username,
     page_size: 100,
@@ -910,30 +921,30 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
     try {
       await removeListing.mutateAsync({ slug: event.slug, listingId })
     } catch (err: unknown) {
-      const msg = extractErrorMsg(err) ?? 'Failed to remove listing.'
+      const msg = extractErrorMsg(err) ?? t('events.listings.removeFailed')
       setRemoveError(msg)
     }
   }
 
   return (
     <section className="rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
-      <h3 className="font-display text-base font-bold text-ink mb-4">My Listings in This Event</h3>
+      <h3 className="font-display text-base font-bold text-ink mb-4">{t('events.listings.sectionTitle')}</h3>
 
       {event.money_enabled && (
         <p className="mb-3 rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          The <strong>Min. ask</strong> is the lowest price you're willing to sell each game for, 
-          you won't be matched below it. Leave it blank to not put it up for sale.
+          {t('events.listings.minAskHintPrefix')} <strong>{t('events.listings.minAsk')}</strong>{' '}
+          {t('events.listings.minAskHintSuffix')}
         </p>
       )}
 
       {/* Add form */}
       {locked ? (
         <p className="mb-4 rounded-xl border-2 border-ink/10 bg-parchment px-3 py-2 text-xs text-moss">
-          Listings are locked — want-lists have opened, so copies can no longer be added or removed.
+          {t('events.listings.locked')}
         </p>
       ) : (
         <div className="mb-4">
-          <p className="text-xs text-moss mb-2">Add one of your active copies:</p>
+          <p className="text-xs text-moss mb-2">{t('events.listings.addHint')}</p>
           <AddListingForm slug={event.slug} existingCopyIds={myListingCopyIds} />
         </div>
       )}
@@ -946,7 +957,7 @@ function MyListingsSection({ event, username }: MyListingsSectionProps) {
           ))}
         </div>
       ) : myListings.length === 0 ? (
-        <p className="text-xs text-moss py-2">No copies added yet.</p>
+        <p className="text-xs text-moss py-2">{t('events.listings.empty')}</p>
       ) : (
         <div className="space-y-2">
           {removeError && <p className="text-xs text-red-600">{removeError}</p>}
@@ -978,6 +989,7 @@ interface MyCombosSectionProps {
 }
 
 function MyCombosSection({ event, username }: MyCombosSectionProps) {
+  const { t } = useTranslation()
   const { data: listingsData } = useEventListings(event.slug, {
     user: username,
     page_size: 100,
@@ -1002,27 +1014,26 @@ function MyCombosSection({ event, username }: MyCombosSectionProps) {
     try {
       await deleteCombo.mutateAsync({ slug: event.slug, id })
     } catch (err: unknown) {
-      setError(extractErrorMsg(err) ?? 'Failed to delete combo.')
+      setError(extractErrorMsg(err) ?? t('events.combos.deleteFailed'))
     }
   }
 
   return (
     <section className="rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-display text-base font-bold text-ink">My Combos in This Event</h3>
+        <h3 className="font-display text-base font-bold text-ink">{t('events.combos.sectionTitle')}</h3>
         {!locked && !showForm && !editing && myListings.length >= 2 && (
           <button
             onClick={() => { setEditing(null); setShowForm(true) }}
             className="rounded-full border-2 border-ink bg-butter px-3 py-1 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5"
           >
-            + New combo
+            {t('events.combos.newComboButton')}
           </button>
         )}
       </div>
 
       <p className="mb-3 text-xs text-moss/80">
-        Bundle two or more of your listings to trade together (e.g. a base game + its
-        expansion). Each listing can be in at most one combo.
+        {t('events.combos.description')}
       </p>
 
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
@@ -1040,9 +1051,9 @@ function MyCombosSection({ event, username }: MyCombosSectionProps) {
       )}
 
       {isLoading ? (
-        <p className="py-2 text-xs text-moss">Loading…</p>
+        <p className="py-2 text-xs text-moss">{t('common.loading')}</p>
       ) : combos.length === 0 ? (
-        <p className="py-2 text-xs text-moss">No combos yet.</p>
+        <p className="py-2 text-xs text-moss">{t('events.combos.empty')}</p>
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {combos.map((c) => (
@@ -1068,6 +1079,7 @@ function ComboCard({ combo, locked, onEdit, onDelete, deletePending }: {
   onDelete: () => void
   deletePending: boolean
 }) {
+  const { t } = useTranslation()
   const [confirming, setConfirming] = useState(false)
   return (
     <div className="rounded-2xl border-2 border-ink/15 bg-parchment p-3">
@@ -1080,17 +1092,17 @@ function ComboCard({ combo, locked, onEdit, onDelete, deletePending }: {
           <div className="flex shrink-0 gap-1">
             <button
               onClick={onEdit}
-              aria-label={`Edit combo ${combo.name}`}
+              aria-label={t('events.combos.editAriaLabel', { name: combo.name })}
               className="rounded-full border border-ink/20 px-2 py-0.5 text-xs text-moss"
             >
-              Edit
+              {t('events.edit')}
             </button>
             <button
               onClick={() => setConfirming(true)}
-              aria-label={`Remove combo ${combo.name}`}
+              aria-label={t('events.combos.removeAriaLabel', { name: combo.name })}
               className="rounded-full border border-red-300 px-2 py-0.5 text-xs text-red-600"
             >
-              Remove
+              {t('events.remove')}
             </button>
           </div>
         )}
@@ -1111,24 +1123,24 @@ function ComboCard({ combo, locked, onEdit, onDelete, deletePending }: {
       </div>
 
       <p className="mt-2 text-xs text-moss/80">
-        {combo.sell_price ? `Bundle price $${combo.sell_price}` : 'Barter only'}
+        {combo.sell_price ? t('events.combos.bundlePrice', { price: combo.sell_price }) : t('events.combos.barterOnly')}
       </p>
 
       {confirming && (
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-2 py-1.5">
-          <span className="text-xs text-red-700">Remove this combo?</span>
+          <span className="text-xs text-red-700">{t('events.combos.removeConfirm')}</span>
           <button
             onClick={onDelete}
             disabled={deletePending}
             className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-cream disabled:opacity-50"
           >
-            {deletePending ? '…' : 'Confirm'}
+            {deletePending ? '…' : t('events.confirm')}
           </button>
           <button
             onClick={() => setConfirming(false)}
             className="rounded-full border border-ink/20 px-2 py-0.5 text-xs text-moss"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -1144,6 +1156,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
   editing: Combo | null
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const createCombo = useCreateCombo()
   const patchCombo = usePatchCombo()
   const editingMemberIds = new Set<number>(
@@ -1167,7 +1180,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
   async function handleSave() {
     setError(null)
     if (selected.size < 2) {
-      setError('Pick at least 2 listings.')
+      setError(t('events.combos.errors.pickAtLeastTwo'))
       return
     }
     const payload = {
@@ -1180,30 +1193,30 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
       else await createCombo.mutateAsync({ slug, payload })
       onClose()
     } catch (err: unknown) {
-      setError(extractErrorMsg(err) ?? 'Failed to save combo.')
+      setError(extractErrorMsg(err) ?? t('events.combos.saveFailed'))
     }
   }
 
   return (
     <div className="mb-3 rounded-2xl border-2 border-ink/15 bg-parchment p-3">
-      <p className="mb-2 text-xs font-semibold text-ink">{editing ? 'Edit combo' : 'New combo'}</p>
+      <p className="mb-2 text-xs font-semibold text-ink">{editing ? t('events.combos.editComboTitle') : t('events.combos.newComboTitle')}</p>
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Combo name (e.g. Wingspan + Europe)"
+        placeholder={t('events.combos.namePlaceholder')}
         className="mb-2 w-full rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-sm"
       />
       {moneyEnabled && (
         <input
           value={sellPrice ?? ''}
           onChange={(e) => setSellPrice(e.target.value)}
-          placeholder="Bundle price (optional)"
+          placeholder={t('events.combos.bundlePricePlaceholder')}
           inputMode="decimal"
           className="mb-2 w-full rounded-xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-sm"
         />
       )}
       <p className="mb-1 text-xs text-moss">
-        Pick at least 2 of your listings ({selected.size} selected):
+        {t('events.combos.pickHint', { count: selected.size })}
       </p>
       <div className="mb-2 max-h-48 space-y-1 overflow-y-auto">
         {myListings.map((l) => {
@@ -1237,13 +1250,13 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
           disabled={saving || selected.size < 2 || name.trim() === ''}
           className="rounded-full border-2 border-ink bg-butter px-3 py-1 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
         >
-          {saving ? 'Saving…' : editing ? 'Save' : 'Create combo'}
+          {saving ? t('events.saving') : editing ? t('common.save') : t('events.combos.create')}
         </button>
         <button
           onClick={onClose}
           className="rounded-full border-2 border-ink/20 px-3 py-1 text-xs text-moss"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       </div>
     </div>
@@ -1253,6 +1266,7 @@ function ComboForm({ slug, moneyEnabled, myListings, usedListingIds, editing, on
 // ---- Import from a previous event ----
 
 function ImportTradesSection({ event }: { event: TradeEvent; username: string }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: eventsData } = useEvents({})
   const [fromSlug, setFromSlug] = useState('')
@@ -1272,11 +1286,16 @@ function ImportTradesSection({ event }: { event: TradeEvent; username: string })
     setBusy(true); setMsg(null); setErr(null)
     try {
       const s = await importTrades(event.slug, fromSlug)
-      setMsg(`Imported ${s.prices} price${s.prices !== 1 ? 's' : ''} and ${s.want_groups} want group${s.want_groups !== 1 ? 's' : ''}.`)
+      setMsg(
+        t('events.import.success', {
+          pricesPhrase: t('events.import.pricesCount', { count: s.prices }),
+          wantGroupsPhrase: t('events.import.wantGroupsCount', { count: s.want_groups }),
+        })
+      )
       qc.invalidateQueries({ queryKey: ['trades', 'want-groups', event.slug] })
       qc.invalidateQueries({ queryKey: ['trades', 'game-prices', event.slug] })
     } catch (e: unknown) {
-      setErr(extractErrorMsg(e) ?? 'Import failed.')
+      setErr(extractErrorMsg(e) ?? t('events.import.failed'))
     } finally {
       setBusy(false)
     }
@@ -1284,10 +1303,9 @@ function ImportTradesSection({ event }: { event: TradeEvent; username: string })
 
   return (
     <section className="rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
-      <h3 className="font-display text-base font-bold text-ink mb-2">Import from a previous event</h3>
+      <h3 className="font-display text-base font-bold text-ink mb-2">{t('events.import.title')}</h3>
       <p className="mb-3 text-xs text-moss/80">
-        Copy your per-game prices and your wants (matched by game) from another
-        event you joined. Best-effort — copies that are gone are skipped.
+        {t('events.import.description')}
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -1295,7 +1313,7 @@ function ImportTradesSection({ event }: { event: TradeEvent; username: string })
           onChange={(e) => setFromSlug(e.target.value)}
           className="rounded-xl border-2 border-ink/15 bg-parchment px-3 py-1.5 text-sm"
         >
-          <option value="">Choose an event…</option>
+          <option value="">{t('events.import.choosePlaceholder')}</option>
           {others.map((e) => (
             <option key={e.slug} value={e.slug}>{e.name}</option>
           ))}
@@ -1305,7 +1323,7 @@ function ImportTradesSection({ event }: { event: TradeEvent; username: string })
           disabled={!fromSlug || busy}
           className="rounded-full border-2 border-ink bg-butter px-3 py-1.5 text-xs font-semibold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-50"
         >
-          {busy ? 'Importing…' : 'Import'}
+          {busy ? t('events.import.importing') : t('events.import.button')}
         </button>
       </div>
       {msg && <p className="mt-2 text-xs text-green-700">{msg}</p>}
@@ -1355,6 +1373,7 @@ function extractErrorMsg(err: unknown): string | null {
 // ---- Main page ----
 
 export default function EventDetailPage() {
+  const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
   const { user, token } = useAuthStore()
   const [editOpen, setEditOpen] = useState(false)
@@ -1376,8 +1395,8 @@ export default function EventDetailPage() {
     return (
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         <div className="rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-red-700">Event not found or failed to load.</p>
-          <BackButton to="/events" className="mt-3">Back to events</BackButton>
+          <p className="text-sm font-semibold text-red-700">{t('events.notFoundError')}</p>
+          <BackButton to="/events" className="mt-3">{t('events.backToEvents')}</BackButton>
         </div>
       </div>
     )
@@ -1396,7 +1415,7 @@ export default function EventDetailPage() {
       {editOpen && <EditEventModal event={event} onClose={() => setEditOpen(false)} />}
 
       {/* Back link */}
-      <BackButton to="/events">All events</BackButton>
+      <BackButton to="/events">{t('events.allEvents')}</BackButton>
 
       {/* Header card */}
       <div className="rounded-3xl border-2 border-ink bg-cream p-5 sm:p-6 shadow-card">
@@ -1407,26 +1426,26 @@ export default function EventDetailPage() {
               <StatusBadge status={event.status} />
             </div>
             <p className="text-xs text-moss">
-              Organized by{' '}
+              {t('events.organizedBy')}{' '}
               <Link to={`/u/${event.organizer_username}`} className="font-semibold text-ink hover:underline">
                 {event.organizer_username}
               </Link>
               {' · '}
               <span>
-                {event.participants_count} participant{event.participants_count !== 1 ? 's' : ''}
+                {t('events.participantsCount', { count: event.participants_count })}
               </span>
             </p>
             {/* Key trade settings — surfaced so every member is aware */}
             <div className="mt-2 flex flex-wrap gap-1.5">
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
                 {event.money_enabled
-                  ? `💵 Money trades${event.max_money_per_user ? ` · cap $${event.max_money_per_user}` : ''}`
-                  : '🔄 Items-only (no money)'}
+                  ? t('events.moneyTradesBadge') + (event.max_money_per_user ? t('events.moneyTradesCap', { cap: event.max_money_per_user }) : '')
+                  : t('events.itemsOnlyBadge')}
               </span>
               {event.require_location && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 ring-1 ring-inset ring-sky-200">
-                  📍 Location required
-                  {event.max_distance_km ? ` · within ${event.max_distance_km} km` : ''}
+                  {t('events.locationRequiredBadge')}
+                  {event.max_distance_km ? t('events.locationWithinKm', { km: event.max_distance_km }) : ''}
                 </span>
               )}
             </div>
@@ -1438,7 +1457,7 @@ export default function EventDetailPage() {
                 to={`/events/${event.slug}/manage`}
                 className="rounded-2xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
               >
-                Manage
+                {t('events.manage')}
               </Link>
             )}
             {event.is_organizer && (
@@ -1446,7 +1465,7 @@ export default function EventDetailPage() {
                 onClick={() => setEditOpen(true)}
                 className="rounded-2xl border-2 border-ink/15 bg-cream px-3 py-1.5 text-xs font-semibold text-moss hover:bg-sage/30 transition-colors"
               >
-                Edit
+                {t('events.edit')}
               </button>
             )}
             <JoinLeaveButton event={event} isAuthenticated={!!token} />
@@ -1477,11 +1496,11 @@ export default function EventDetailPage() {
         {hasAnyDeadlines && (
           <div className="rounded-3xl border-2 border-ink/15 bg-cream p-4">
             <h3 className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
-              Schedule
+              {t('events.schedule')}
             </h3>
-            <DeadlineRow label="Submissions open" isoDate={event.submissions_open_at} />
-            <DeadlineRow label="Submissions close" isoDate={event.submissions_close_at} />
-            <DeadlineRow label="Want list closes" isoDate={event.wantlist_close_at} />
+            <DeadlineRow label={t('events.form.submissionsOpen')} isoDate={event.submissions_open_at} />
+            <DeadlineRow label={t('events.form.submissionsClose')} isoDate={event.submissions_close_at} />
+            <DeadlineRow label={t('events.form.wantlistCloses')} isoDate={event.wantlist_close_at} />
           </div>
         )}
 
@@ -1489,23 +1508,23 @@ export default function EventDetailPage() {
         {hasPolicies && (
           <div className="rounded-3xl border-2 border-ink/15 bg-cream p-4">
             <h3 className="text-xs font-bold text-moss uppercase tracking-wide mb-3">
-              Policies
+              {t('events.form.policies')}
             </h3>
             {event.shipping_rules && (
               <div className="mb-3">
-                <p className="text-xs font-semibold text-ink mb-0.5">Shipping rules</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">{t('events.form.shippingRules')}</p>
                 <p className="text-xs text-moss whitespace-pre-wrap">{event.shipping_rules}</p>
               </div>
             )}
             {event.regional_restrictions && (
               <div className="mb-3">
-                <p className="text-xs font-semibold text-ink mb-0.5">Regional restrictions</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">{t('events.form.regionalRestrictions')}</p>
                 <p className="text-xs text-moss whitespace-pre-wrap">{event.regional_restrictions}</p>
               </div>
             )}
             {event.trade_policies && (
               <div>
-                <p className="text-xs font-semibold text-ink mb-0.5">Trade policies</p>
+                <p className="text-xs font-semibold text-ink mb-0.5">{t('events.form.tradePolicies')}</p>
                 <p className="text-xs text-moss whitespace-pre-wrap">{event.trade_policies}</p>
               </div>
             )}
@@ -1517,9 +1536,9 @@ export default function EventDetailPage() {
       {token && (event.is_participant || event.is_organizer) && (
         <div className="rounded-3xl border-2 border-ink/15 bg-sage/30 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-ink">My Wants</p>
+            <p className="text-sm font-bold text-ink">{t('events.myWants.title')}</p>
             <p className="text-xs text-moss mt-0.5">
-              For each item you offer, pick the games you'd accept in return.{/*
+              {t('events.myWants.description')}{/*
               <Link to={`/events/${event.slug}/builder`} className="font-semibold underline decoration-coral decoration-2 underline-offset-2 hover:text-ink">
                 Advanced X-to-Y builder
               </Link>
@@ -1530,7 +1549,7 @@ export default function EventDetailPage() {
             to={`/events/${event.slug}/wants`}
             className="shrink-0 rounded-2xl border-2 border-ink bg-butter px-4 py-2 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
-            Open My Wants
+            {t('events.myWants.open')}
           </Link>
         </div>
       )}
@@ -1540,18 +1559,18 @@ export default function EventDetailPage() {
       {(['MATCHING', 'MATCH_REVIEW', 'FINALIZATION', 'SHIPPING', 'ARCHIVED'] as EventStatus[]).includes(event.status) && (
         <div className="rounded-3xl border-2 border-ink/15 bg-violet-100/60 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-violet-900">Match Runs</p>
+            <p className="text-sm font-bold text-violet-900">{t('events.matchRuns.title')}</p>
             <p className="text-xs text-violet-600 mt-0.5">
               {event.is_organizer
-                ? 'Trigger and review match runs for this event.'
-                : 'View your trade assignments and cycle diagrams.'}
+                ? t('events.matchRuns.organizerDescription')
+                : t('events.matchRuns.participantDescription')}
             </p>
           </div>
           <Link
             to={`/events/${event.slug}/matches`}
             className="shrink-0 rounded-2xl border-2 border-ink bg-violet-300 px-4 py-2 text-sm font-bold text-violet-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
-            {event.is_organizer ? 'Manage Matching' : 'View Results'}
+            {event.is_organizer ? t('events.matchRuns.manage') : t('events.matchRuns.viewResults')}
           </Link>
         </div>
       )}
