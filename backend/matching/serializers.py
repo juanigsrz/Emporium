@@ -91,6 +91,9 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
     receiver_username = serializers.CharField(source="receiver.username", read_only=True)
 
     # Display companions for event_listing FK
+    copy_id         = serializers.IntegerField(
+        source="event_listing.copy.id", read_only=True
+    )
     listing_code    = serializers.CharField(
         source="event_listing.copy.listing_code", read_only=True
     )
@@ -106,6 +109,7 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
             "match_run",
             "cycle_id",
             "event_listing",
+            "copy_id",
             "listing_code",
             "board_game_name",
             "board_game_thumbnail",

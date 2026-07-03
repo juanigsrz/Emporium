@@ -80,6 +80,7 @@ export interface TradeAssignment {
   match_run: number
   cycle_id: number
   event_listing: number
+  copy_id: number
   listing_code: string
   board_game_name: string
   board_game_thumbnail: string

@@ -22,6 +22,7 @@ import { useMyPayments, useUpdatePayment } from '../../api/payments'
 import type { SettlementPayment } from '../../api/payments'
 import { PaymentsOverviewTab } from './PaymentsOverviewTab'
 import { GameThumb } from '../../components/GameThumb'
+import { CopyDetailModal } from '../../components/CopyDetailModal'
 
 // ---- helpers ----
 
@@ -398,6 +399,19 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 
 // ---- My Trades section ----
 
+// Clickable listing code — opens the full copy detail popup, same as the catalog.
+function ListingCode({ code, copyId, onOpen }: { code: string; copyId: number; onOpen: (id: number) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(copyId)}
+      className="block font-mono text-xs text-moss/70 hover:text-indigo-500 hover:underline"
+    >
+      {code}
+    </button>
+  )
+}
+
 function MyTradesSection({
   assignments,
   currentUsername,
@@ -406,6 +420,7 @@ function MyTradesSection({
   currentUsername: string
 }) {
   const { t } = useTranslation()
+  const [detailCopyId, setDetailCopyId] = useState<number | null>(null)
   const giveList = assignments.filter((a) => a.giver_username === currentUsername)
   const receiveList = assignments.filter((a) => a.receiver_username === currentUsername)
 
@@ -429,11 +444,11 @@ function MyTradesSection({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
                 </svg>
               </div>
-              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
+              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-16 w-16" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youGive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+                <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
                 <p className="text-xs text-moss mt-0.5">
                   {t('matching.trades.to')}{' '}
                   <Link
@@ -467,11 +482,11 @@ function MyTradesSection({
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
                 </svg>
               </div>
-              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-10 w-10" />
+              <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-16 w-16" />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youReceive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+                <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
                 <p className="text-xs text-moss mt-0.5">
                   {t('matching.trades.from')}{' '}
                   <Link
@@ -511,28 +526,46 @@ function MyTradesSection({
             </p>
 
             {bought.map((a) => (
-              <div key={`buy-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
-                <p className="text-sm text-ink">
-                  {t('matching.trades.youBought')} <span className="font-semibold">{a.board_game_name}</span> {t('matching.trades.forPrice')}{' '}
-                  <span className="font-semibold">${a.cash_amount}</span> {t('matching.trades.from')}{' '}
-                  <Link to={`/u/${a.giver_username}`} className="font-semibold text-indigo-500 hover:underline">
-                    {a.giver_username}
-                  </Link>
-                </p>
-                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+              <div key={`buy-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4 flex items-start gap-3">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
+                  </svg>
+                </div>
+                <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-16 w-16" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-rose-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youBought')}</p>
+                  <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
+                  <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                  <p className="text-xs text-moss mt-0.5">
+                    {t('matching.trades.forPrice')} <span className="font-semibold text-ink">${a.cash_amount}</span> {t('matching.trades.from')}{' '}
+                    <Link to={`/u/${a.giver_username}`} className="text-indigo-500 hover:underline font-medium">
+                      {a.giver_username}
+                    </Link>
+                  </p>
+                </div>
               </div>
             ))}
 
             {sold.map((a) => (
-              <div key={`sell-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4">
-                <p className="text-sm text-ink">
-                  {t('matching.trades.youSold')} <span className="font-semibold">{a.board_game_name}</span> {t('matching.trades.forPrice')}{' '}
-                  <span className="font-semibold">${a.cash_amount}</span> {t('matching.trades.to')}{' '}
-                  <Link to={`/u/${a.receiver_username}`} className="font-semibold text-indigo-500 hover:underline">
-                    {a.receiver_username}
-                  </Link>
-                </p>
-                <p className="text-xs text-moss/70 font-mono">{a.listing_code}</p>
+              <div key={`sell-${a.id}`} className="rounded-2xl border border-ink/15 bg-white p-4 flex items-start gap-3">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                  </svg>
+                </div>
+                <GameThumb src={a.board_game_thumbnail} alt={a.board_game_name} className="h-16 w-16" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youSold')}</p>
+                  <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
+                  <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                  <p className="text-xs text-moss mt-0.5">
+                    {t('matching.trades.forPrice')} <span className="font-semibold text-ink">${a.cash_amount}</span> {t('matching.trades.to')}{' '}
+                    <Link to={`/u/${a.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
+                      {a.receiver_username}
+                    </Link>
+                  </p>
+                </div>
               </div>
             ))}
 
@@ -550,6 +583,10 @@ function MyTradesSection({
           </div>
         )
       })()}
+
+      {detailCopyId != null && (
+        <CopyDetailModal copyId={detailCopyId} onClose={() => setDetailCopyId(null)} />
+      )}
     </div>
   )
 }
@@ -742,7 +779,7 @@ function ShipmentSenderCard({
     <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
+          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-16 w-16 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
             <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
@@ -811,7 +848,7 @@ function ShipmentReceiverCard({
     <div className="rounded-2xl border border-ink/15 bg-white p-4 space-y-2">
       <div className="flex items-start justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-10 w-10 shrink-0" />
+          <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-16 w-16 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
             <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
