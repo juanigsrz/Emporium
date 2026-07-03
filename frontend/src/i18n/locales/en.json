@@ -918,5 +918,89 @@
       "next": "Next →",
       "pageOf": "Page {{page}} of {{total}}"
     }
+  },
+  "profile": {
+    "pageTitle": "My Account",
+    "tabs": {
+      "profile": "Profile",
+      "blocked": "Blocked Users",
+      "wishlist": "Wishlist",
+      "ratings": "Ratings"
+    },
+    "fields": {
+      "displayName": "Display name",
+      "bggUsername": "BoardGameGeek username",
+      "bio": "Bio",
+      "avatarUrl": "Avatar URL",
+      "location": "Location",
+      "region": "Region",
+      "maxTradeDistance": "Forbid trades farther than (km)"
+    },
+    "errors": {
+      "maxChars": "Max {{max}} characters",
+      "invalidUrl": "Enter a valid URL",
+      "loadFailed": "Failed to load profile.",
+      "saveFailed": "Failed to save profile. Please try again."
+    },
+    "edit": {
+      "title": "Edit Profile",
+      "loading": "Loading profile…",
+      "saved": "Profile saved.",
+      "geocoded": "Geocoded: {{lat}}, {{lon}}",
+      "notGeocoded": "Location not geocoded yet, save a location to resolve coordinates.",
+      "noLimitPlaceholder": "Leave blank for no limit",
+      "saveChanges": "Save changes",
+      "saving": "Saving…"
+    },
+    "import": {
+      "working": "Working…",
+      "doneMessage": "Done — {{matched}}, {{skipped}}.",
+      "matchedCount_one": "{{count}} matched",
+      "matchedCount_other": "{{count}} matched",
+      "skippedCount_one": "{{count}} skipped",
+      "skippedCount_other": "{{count}} skipped",
+      "failed": "Failed. Check your BGG username and try again.",
+      "startFailed": "Could not start the import. Try again.",
+      "enableHint": "Set your BoardGameGeek username in the Profile tab to enable."
+    },
+    "blocks": {
+      "title": "Blocked Users",
+      "usernamePlaceholder": "Username to block",
+      "block": "Block",
+      "blockFailed": "Could not block user. Check the username and try again.",
+      "empty": "No blocked users.",
+      "unblock": "Unblock"
+    },
+    "wishlist": {
+      "title": "Wishlist",
+      "syncButton": "Sync BGG wishlist",
+      "bggIdPlaceholder": "BGG ID",
+      "notePlaceholder": "Note (optional)",
+      "add": "Add",
+      "addFailed": "Could not add to wishlist. Check the BGG ID and try again.",
+      "invalidBggId": "Enter a valid BGG ID (positive integer).",
+      "empty": "Your wishlist is empty.",
+      "bggIdLabel": "BGG #{{id}}",
+      "remove": "Remove"
+    },
+    "ratings": {
+      "title": "Game Ratings",
+      "importButton": "Import ratings from BGG",
+      "filterPlaceholder": "Filter your rated games…",
+      "emptyNoRatings": "No ratings yet. Import from BGG or rate games in the want builder.",
+      "emptyNoMatches": "No matches."
+    },
+    "public": {
+      "loading": "Loading profile…",
+      "notFound": "User not found or an error occurred.",
+      "unavailable": "Profile unavailable.",
+      "backHome": "Back to home",
+      "back": "Back",
+      "avatarAlt": "{{username}} avatar",
+      "bggUsername": "BGG Username",
+      "tradeRatings": "Trade Ratings",
+      "totalRatings": "Total ratings",
+      "average": "Average"
+    }
   }
 }

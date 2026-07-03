@@ -918,5 +918,89 @@
       "next": "Siguiente →",
       "pageOf": "Página {{page}} de {{total}}"
     }
+  },
+  "profile": {
+    "pageTitle": "Mi cuenta",
+    "tabs": {
+      "profile": "Perfil",
+      "blocked": "Usuarios bloqueados",
+      "wishlist": "Lista de deseos",
+      "ratings": "Valoraciones"
+    },
+    "fields": {
+      "displayName": "Nombre visible",
+      "bggUsername": "Nombre de usuario de BoardGameGeek",
+      "bio": "Biografía",
+      "avatarUrl": "URL del avatar",
+      "location": "Ubicación",
+      "region": "Región",
+      "maxTradeDistance": "Prohibir intercambios a más de (km)"
+    },
+    "errors": {
+      "maxChars": "Máximo {{max}} caracteres",
+      "invalidUrl": "Introduce una URL válida",
+      "loadFailed": "No se pudo cargar el perfil.",
+      "saveFailed": "No se pudo guardar el perfil. Inténtalo de nuevo."
+    },
+    "edit": {
+      "title": "Editar perfil",
+      "loading": "Cargando perfil…",
+      "saved": "Perfil guardado.",
+      "geocoded": "Geocodificado: {{lat}}, {{lon}}",
+      "notGeocoded": "Ubicación aún no geocodificada; guarda una ubicación para obtener las coordenadas.",
+      "noLimitPlaceholder": "Déjalo en blanco para no poner límite",
+      "saveChanges": "Guardar cambios",
+      "saving": "Guardando…"
+    },
+    "import": {
+      "working": "Procesando…",
+      "doneMessage": "Listo — {{matched}}, {{skipped}}.",
+      "matchedCount_one": "{{count}} coincidencia",
+      "matchedCount_other": "{{count}} coincidencias",
+      "skippedCount_one": "{{count}} omitido",
+      "skippedCount_other": "{{count}} omitidos",
+      "failed": "Error. Revisa tu nombre de usuario de BGG e inténtalo de nuevo.",
+      "startFailed": "No se pudo iniciar la importación. Inténtalo de nuevo.",
+      "enableHint": "Configura tu nombre de usuario de BoardGameGeek en la pestaña Perfil para habilitarlo."
+    },
+    "blocks": {
+      "title": "Usuarios bloqueados",
+      "usernamePlaceholder": "Nombre de usuario a bloquear",
+      "block": "Bloquear",
+      "blockFailed": "No se pudo bloquear al usuario. Revisa el nombre de usuario e inténtalo de nuevo.",
+      "empty": "No hay usuarios bloqueados.",
+      "unblock": "Desbloquear"
+    },
+    "wishlist": {
+      "title": "Lista de deseos",
+      "syncButton": "Sincronizar lista de deseos de BGG",
+      "bggIdPlaceholder": "ID de BGG",
+      "notePlaceholder": "Nota (opcional)",
+      "add": "Añadir",
+      "addFailed": "No se pudo añadir a la lista de deseos. Revisa el ID de BGG e inténtalo de nuevo.",
+      "invalidBggId": "Introduce un ID de BGG válido (número entero positivo).",
+      "empty": "Tu lista de deseos está vacía.",
+      "bggIdLabel": "BGG #{{id}}",
+      "remove": "Eliminar"
+    },
+    "ratings": {
+      "title": "Valoraciones de juegos",
+      "importButton": "Importar valoraciones desde BGG",
+      "filterPlaceholder": "Filtra tus juegos valorados…",
+      "emptyNoRatings": "Aún no hay valoraciones. Impórtalas desde BGG o valora juegos en el constructor de lista de deseos.",
+      "emptyNoMatches": "Sin coincidencias."
+    },
+    "public": {
+      "loading": "Cargando perfil…",
+      "notFound": "Usuario no encontrado o se produjo un error.",
+      "unavailable": "Perfil no disponible.",
+      "backHome": "Volver al inicio",
+      "back": "Volver",
+      "avatarAlt": "Avatar de {{username}}",
+      "bggUsername": "Usuario de BGG",
+      "tradeRatings": "Valoraciones de intercambio",
+      "totalRatings": "Valoraciones totales",
+      "average": "Promedio"
+    }
   }
 }

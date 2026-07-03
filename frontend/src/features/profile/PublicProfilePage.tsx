@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { fetchPublicProfile } from '../../api/profiles'
 import BackButton from '../../components/BackButton'
 
 export default function PublicProfilePage() {
+  const { t } = useTranslation()
   const { username } = useParams<{ username: string }>()
   const navigate = useNavigate()
 
@@ -16,7 +18,7 @@ export default function PublicProfilePage() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-xl px-4 py-12">
-        <p className="text-moss text-sm">Loading profile…</p>
+        <p className="text-moss text-sm">{t('profile.public.loading')}</p>
       </div>
     )
   }
@@ -25,9 +27,9 @@ export default function PublicProfilePage() {
     return (
       <div className="mx-auto max-w-xl px-4 py-12">
         <p className="text-red-600 text-sm">
-          {error ? 'User not found or an error occurred.' : 'Profile unavailable.'}
+          {error ? t('profile.public.notFound') : t('profile.public.unavailable')}
         </p>
-        <BackButton to="/" className="mt-4">Back to home</BackButton>
+        <BackButton to="/" className="mt-4">{t('profile.public.backHome')}</BackButton>
       </div>
     )
   }
@@ -39,7 +41,7 @@ export default function PublicProfilePage() {
         {profile.avatar_url ? (
           <img
             src={profile.avatar_url}
-            alt={`${profile.username} avatar`}
+            alt={t('profile.public.avatarAlt', { username: profile.username })}
             className="w-16 h-16 rounded-2xl object-cover border-2 border-ink"
           />
         ) : (
@@ -59,25 +61,25 @@ export default function PublicProfilePage() {
       <dl className="space-y-3">
         {profile.bgg_username && (
           <div>
-            <dt className="text-xs font-bold text-moss uppercase tracking-wide">BGG Username</dt>
+            <dt className="text-xs font-bold text-moss uppercase tracking-wide">{t('profile.public.bggUsername')}</dt>
             <dd className="mt-0.5 text-sm text-ink">{profile.bgg_username}</dd>
           </div>
         )}
         {profile.bio && (
           <div>
-            <dt className="text-xs font-bold text-moss uppercase tracking-wide">Bio</dt>
+            <dt className="text-xs font-bold text-moss uppercase tracking-wide">{t('profile.fields.bio')}</dt>
             <dd className="mt-0.5 text-sm text-ink whitespace-pre-line">{profile.bio}</dd>
           </div>
         )}
         {profile.location && (
           <div>
-            <dt className="text-xs font-bold text-moss uppercase tracking-wide">Location</dt>
+            <dt className="text-xs font-bold text-moss uppercase tracking-wide">{t('profile.fields.location')}</dt>
             <dd className="mt-0.5 text-sm text-ink">{profile.location}</dd>
           </div>
         )}
         {profile.region && (
           <div>
-            <dt className="text-xs font-bold text-moss uppercase tracking-wide">Region</dt>
+            <dt className="text-xs font-bold text-moss uppercase tracking-wide">{t('profile.fields.region')}</dt>
             <dd className="mt-0.5 text-sm text-ink">{profile.region}</dd>
           </div>
         )}
@@ -86,25 +88,25 @@ export default function PublicProfilePage() {
       {/* Ratings summary */}
       {(profile.ratings_count !== undefined && profile.ratings_count !== null) && (
         <div className="mt-6 p-5 rounded-3xl bg-butter/30 border-2 border-ink/15">
-          <h2 className="font-display text-sm font-bold text-ink mb-2">Trade Ratings</h2>
+          <h2 className="font-display text-sm font-bold text-ink mb-2">{t('profile.public.tradeRatings')}</h2>
           <div className="flex gap-6">
             <div>
               <p className="text-2xl font-bold text-ink">{profile.ratings_count}</p>
-              <p className="text-xs text-moss">Total ratings</p>
+              <p className="text-xs text-moss">{t('profile.public.totalRatings')}</p>
             </div>
             {profile.average_score !== null && profile.average_score !== undefined && (
               <div>
                 <p className="text-2xl font-bold text-ink">
                   {profile.average_score.toFixed(1)}
                 </p>
-                <p className="text-xs text-moss">Average</p>
+                <p className="text-xs text-moss">{t('profile.public.average')}</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      <BackButton onClick={() => navigate(-1)} className="mt-6">Back</BackButton>
+      <BackButton onClick={() => navigate(-1)} className="mt-6">{t('profile.public.back')}</BackButton>
     </div>
   )
 }

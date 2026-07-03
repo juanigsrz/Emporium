@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 type ConfirmDialogProps = {
   title: string
@@ -19,6 +20,7 @@ export default function ConfirmDialog({
   destructive = false,
   pending = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation()
   const confirmCls = destructive
     ? 'flex-1 rounded-2xl border-2 border-ink bg-red-300 px-4 py-2.5 text-sm font-bold text-red-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60'
     : 'flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60'
@@ -33,7 +35,7 @@ export default function ConfirmDialog({
             onClick={onCancel}
             className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30 transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button onClick={onConfirm} disabled={pending} className={confirmCls}>
             {confirmLabel}

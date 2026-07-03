@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   fetchMyProfile,
   patchMyProfile,
@@ -30,6 +31,7 @@ function BggImportButton({
   label: string
   onDone: () => void
 }) {
+  const { t } = useTranslation()
   const { data: profile } = useMyProfile()
   const start = useStartImport()
   const [jobId, setJobId] = useState<number | null>(null)
@@ -41,11 +43,16 @@ function BggImportButton({
     if (job.data?.status === 'DONE') {
       const matched = job.data.summary?.matched ?? 0
       const skipped = job.data.summary?.skipped ?? 0
-      setMsg(`Done — ${matched} matched, ${skipped} skipped.`)
+      setMsg(
+        t('profile.import.doneMessage', {
+          matched: t('profile.import.matchedCount', { count: matched }),
+          skipped: t('profile.import.skippedCount', { count: skipped }),
+        })
+      )
       setJobId(null)
       onDone()
     } else if (job.data?.status === 'FAILED') {
-      setMsg('Failed. Check your BGG username and try again.')
+      setMsg(t('profile.import.failed'))
       setJobId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -54,7 +61,7 @@ function BggImportButton({
   if (!profile?.bgg_username) {
     return (
       <span className="text-xs text-moss/70">
-        Set your BoardGameGeek username in the Profile tab to enable.
+        {t('profile.import.enableHint')}
       </span>
     )
   }
@@ -68,32 +75,21 @@ function BggImportButton({
           start
             .mutateAsync({ kind })
             .then((j) => setJobId(j.id))
-            .catch(() => setMsg('Could not start the import. Try again.'))
+            .catch(() => setMsg(t('profile.import.startFailed')))
         }}
         disabled={running || start.isPending}
         className="rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 disabled:opacity-50"
       >
-        {running ? 'Working…' : label}
+        {running ? t('profile.import.working') : label}
       </button>
       {msg && <span className="text-xs text-green-600">{msg}</span>}
     </div>
   )
 }
 
-const profileSchema = z.object({
-  display_name: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
-  bgg_username: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
-  bio: z.string().max(500, 'Max 500 characters').optional().or(z.literal('')),
-  avatar_url: z.string().url('Enter a valid URL').optional().or(z.literal('')),
-  location: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
-  region: z.string().max(100, 'Max 100 characters').optional().or(z.literal('')),
-  max_trade_distance_km: z.string().optional(),
-})
-
-type ProfileFormValues = z.infer<typeof profileSchema>
-
 // ---- Profile Edit Section ----
 function ProfileEdit() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
 
@@ -106,10 +102,26 @@ function ProfileEdit() {
     mutationFn: (payload: PatchProfilePayload) => patchMyProfile(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['profile', 'me'] })
-      setSaveMsg('Profile saved.')
+      setSaveMsg(t('profile.edit.saved'))
       setTimeout(() => setSaveMsg(null), 3000)
     },
   })
+
+  const profileSchema = useMemo(
+    () =>
+      z.object({
+        display_name: z.string().max(100, t('profile.errors.maxChars', { max: 100 })).optional().or(z.literal('')),
+        bgg_username: z.string().max(100, t('profile.errors.maxChars', { max: 100 })).optional().or(z.literal('')),
+        bio: z.string().max(500, t('profile.errors.maxChars', { max: 500 })).optional().or(z.literal('')),
+        avatar_url: z.string().url(t('profile.errors.invalidUrl')).optional().or(z.literal('')),
+        location: z.string().max(100, t('profile.errors.maxChars', { max: 100 })).optional().or(z.literal('')),
+        region: z.string().max(100, t('profile.errors.maxChars', { max: 100 })).optional().or(z.literal('')),
+        max_trade_distance_km: z.string().optional(),
+      }),
+    [t]
+  )
+
+  type ProfileFormValues = z.infer<typeof profileSchema>
 
   const {
     register,
@@ -175,8 +187,8 @@ function ProfileEdit() {
     }
   }, [profile, reset])
 
-  if (isLoading) return <p className="text-sm text-moss">Loading profile…</p>
-  if (error) return <p className="text-sm text-red-600">Failed to load profile.</p>
+  if (isLoading) return <p className="text-sm text-moss">{t('profile.edit.loading')}</p>
+  if (error) return <p className="text-sm text-red-600">{t('profile.errors.loadFailed')}</p>
 
   const onSubmit = (values: ProfileFormValues) => {
     const distRaw = values.max_trade_distance_km
@@ -194,23 +206,23 @@ function ProfileEdit() {
   }
 
   const textFields: { name: keyof ProfileFormValues; label: string; multiline?: boolean }[] = [
-    { name: 'display_name', label: 'Display name' },
-    { name: 'bgg_username', label: 'BoardGameGeek username' },
-    { name: 'bio', label: 'Bio', multiline: true },
-    { name: 'avatar_url', label: 'Avatar URL' },
-    { name: 'location', label: 'Location' },
-    { name: 'region', label: 'Region' },
+    { name: 'display_name', label: t('profile.fields.displayName') },
+    { name: 'bgg_username', label: t('profile.fields.bggUsername') },
+    { name: 'bio', label: t('profile.fields.bio'), multiline: true },
+    { name: 'avatar_url', label: t('profile.fields.avatarUrl') },
+    { name: 'location', label: t('profile.fields.location') },
+    { name: 'region', label: t('profile.fields.region') },
   ]
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const locationErr = (mutation.error as any)?.response?.data?.location
   const saveErrorMsg = mutation.isError
-    ? (locationErr ? (Array.isArray(locationErr) ? locationErr[0] : locationErr) : 'Failed to save profile. Please try again.')
+    ? (locationErr ? (Array.isArray(locationErr) ? locationErr[0] : locationErr) : t('profile.errors.saveFailed'))
     : null
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-ink mb-4">Edit Profile</h2>
+      <h2 className="text-lg font-semibold text-ink mb-4">{t('profile.edit.title')}</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
         {saveErrorMsg && (
           <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
@@ -311,24 +323,24 @@ function ProfileEdit() {
         <div className="rounded-xl bg-gray-50 border border-ink/15 px-3 py-2 text-xs text-moss">
           {profile?.latitude != null && profile?.longitude != null ? (
             <span>
-              Geocoded: {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
+              {t('profile.edit.geocoded', { lat: profile.latitude.toFixed(4), lon: profile.longitude.toFixed(4) })}
             </span>
           ) : (
-            <span>Location not geocoded yet, save a location to resolve coordinates.</span>
+            <span>{t('profile.edit.notGeocoded')}</span>
           )}
         </div>
 
         {/* Trade distance limit */}
         <div>
           <label htmlFor="max_trade_distance_km" className="block text-sm font-medium text-ink mb-1">
-            Forbid trades farther than (km)
+            {t('profile.fields.maxTradeDistance')}
           </label>
           <input
             id="max_trade_distance_km"
             type="number"
             min={1}
             step={1}
-            placeholder="Leave blank for no limit"
+            placeholder={t('profile.edit.noLimitPlaceholder')}
             {...register('max_trade_distance_km')}
             className="w-full sm:max-w-[12rem] rounded-xl border border-ink/20 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
@@ -339,7 +351,7 @@ function ProfileEdit() {
           disabled={mutation.isPending || !isDirty}
           className="rounded-2xl border-2 border-ink bg-butter px-5 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60"
         >
-          {mutation.isPending ? 'Saving…' : 'Save changes'}
+          {mutation.isPending ? t('profile.edit.saving') : t('profile.edit.saveChanges')}
         </button>
       </form>
     </section>
@@ -348,6 +360,7 @@ function ProfileEdit() {
 
 // ---- Blocks Section ----
 function BlocksSection() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [blockInput, setBlockInput] = useState('')
   const [blockError, setBlockError] = useState<string | null>(null)
@@ -365,7 +378,7 @@ function BlocksSection() {
       setBlockError(null)
     },
     onError: () => {
-      setBlockError('Could not block user. Check the username and try again.')
+      setBlockError(t('profile.blocks.blockFailed'))
     },
   })
 
@@ -376,12 +389,12 @@ function BlocksSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-ink mb-3">Blocked Users</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">{t('profile.blocks.title')}</h2>
 
       <div className="flex gap-2 mb-4 max-w-sm">
         <input
           type="text"
-          placeholder="Username to block"
+          placeholder={t('profile.blocks.usernamePlaceholder')}
           value={blockInput}
           onChange={(e) => setBlockInput(e.target.value)}
           className="flex-1 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -395,7 +408,7 @@ function BlocksSection() {
           disabled={addMutation.isPending || !blockInput.trim()}
           className="rounded-2xl border-2 border-ink bg-red-400 px-4 py-1.5 text-sm font-bold text-white shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          Block
+          {t('profile.blocks.block')}
         </button>
       </div>
 
@@ -404,9 +417,9 @@ function BlocksSection() {
       )}
 
       {isLoading ? (
-        <p className="text-sm text-moss">Loading…</p>
+        <p className="text-sm text-moss">{t('common.loading')}</p>
       ) : !blocks || blocks.length === 0 ? (
-        <p className="text-sm text-moss/70">No blocked users.</p>
+        <p className="text-sm text-moss/70">{t('profile.blocks.empty')}</p>
       ) : (
         <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-sm">
           {blocks.map((b) => (
@@ -417,7 +430,7 @@ function BlocksSection() {
                 disabled={removeMutation.isPending}
                 className="text-xs text-red-500 hover:text-red-700 disabled:opacity-60"
               >
-                Unblock
+                {t('profile.blocks.unblock')}
               </button>
             </li>
           ))}
@@ -429,6 +442,7 @@ function BlocksSection() {
 
 // ---- Wishlist Section ----
 function WishlistSection() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [bggId, setBggId] = useState('')
   const [note, setNote] = useState('')
@@ -449,7 +463,7 @@ function WishlistSection() {
       setAddError(null)
     },
     onError: () => {
-      setAddError('Could not add to wishlist. Check the BGG ID and try again.')
+      setAddError(t('profile.wishlist.addFailed'))
     },
   })
 
@@ -461,7 +475,7 @@ function WishlistSection() {
   const handleAdd = () => {
     const parsed = parseInt(bggId, 10)
     if (!bggId.trim() || isNaN(parsed) || parsed <= 0) {
-      setAddError('Enter a valid BGG ID (positive integer).')
+      setAddError(t('profile.wishlist.invalidBggId'))
       return
     }
     setAddError(null)
@@ -470,12 +484,12 @@ function WishlistSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-ink mb-3">Wishlist</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">{t('profile.wishlist.title')}</h2>
 
       <div className="mb-4">
         <BggImportButton
           kind="WISHLIST"
-          label="Sync BGG wishlist"
+          label={t('profile.wishlist.syncButton')}
           onDone={() => qc.invalidateQueries({ queryKey: ['wishlists'] })}
         />
       </div>
@@ -483,7 +497,7 @@ function WishlistSection() {
       <div className="flex flex-wrap gap-2 mb-4 max-w-lg">
         <input
           type="number"
-          placeholder="BGG ID"
+          placeholder={t('profile.wishlist.bggIdPlaceholder')}
           value={bggId}
           min={1}
           onChange={(e) => setBggId(e.target.value)}
@@ -491,7 +505,7 @@ function WishlistSection() {
         />
         <input
           type="text"
-          placeholder="Note (optional)"
+          placeholder={t('profile.wishlist.notePlaceholder')}
           value={note}
           onChange={(e) => setNote(e.target.value)}
           className="flex-1 min-w-0 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -501,22 +515,22 @@ function WishlistSection() {
           disabled={addMutation.isPending || !bggId.trim()}
           className="rounded-2xl border-2 border-ink bg-butter px-4 py-1.5 text-sm font-bold text-ink shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
-          Add
+          {t('profile.wishlist.add')}
         </button>
       </div>
 
       {addError && <p className="mb-3 text-sm text-red-600">{addError}</p>}
 
       {isLoading ? (
-        <p className="text-sm text-moss">Loading…</p>
+        <p className="text-sm text-moss">{t('common.loading')}</p>
       ) : !entries || entries.length === 0 ? (
-        <p className="text-sm text-moss/70">Your wishlist is empty.</p>
+        <p className="text-sm text-moss/70">{t('profile.wishlist.empty')}</p>
       ) : (
         <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-lg">
           {entries.map((e) => (
             <li key={e.id} className="flex items-center justify-between px-3 py-2 gap-2">
               <div className="min-w-0">
-                <span className="text-sm font-medium text-ink">BGG #{e.board_game_bgg_id}</span>
+                <span className="text-sm font-medium text-ink">{t('profile.wishlist.bggIdLabel', { id: e.board_game_bgg_id })}</span>
                 {e.note && <span className="ml-2 text-xs text-moss truncate">{e.note}</span>}
               </div>
               <button
@@ -524,7 +538,7 @@ function WishlistSection() {
                 disabled={removeMutation.isPending}
                 className="text-xs text-red-500 hover:text-red-700 disabled:opacity-60 shrink-0"
               >
-                Remove
+                {t('profile.wishlist.remove')}
               </button>
             </li>
           ))}
@@ -536,6 +550,7 @@ function WishlistSection() {
 
 // ---- Ratings Section (review-only) ----
 function RatingsSection() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const { data: ratings = [], isLoading } = useMyRatings()
   const [filter, setFilter] = useState('')
@@ -546,31 +561,31 @@ function RatingsSection() {
 
   return (
     <section>
-      <h2 className="text-lg font-semibold text-ink mb-3">Game Ratings</h2>
+      <h2 className="text-lg font-semibold text-ink mb-3">{t('profile.ratings.title')}</h2>
 
       <div className="mb-4">
         <BggImportButton
           kind="RATINGS"
-          label="Import ratings from BGG"
+          label={t('profile.ratings.importButton')}
           onDone={() => qc.invalidateQueries({ queryKey: ['ratings', 'mine'] })}
         />
       </div>
 
       <input
         type="text"
-        placeholder="Filter your rated games…"
+        placeholder={t('profile.ratings.filterPlaceholder')}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         className="w-full max-w-sm mb-3 rounded-xl border border-ink/20 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
 
       {isLoading ? (
-        <p className="text-sm text-moss">Loading…</p>
+        <p className="text-sm text-moss">{t('common.loading')}</p>
       ) : shown.length === 0 ? (
         <p className="text-sm text-moss/70">
           {ratings.length === 0
-            ? 'No ratings yet. Import from BGG or rate games in the want builder.'
-            : 'No matches.'}
+            ? t('profile.ratings.emptyNoRatings')
+            : t('profile.ratings.emptyNoMatches')}
         </p>
       ) : (
         <ul className="divide-y divide-ink/10 border border-ink/15 rounded-xl max-w-sm">
@@ -588,18 +603,19 @@ function RatingsSection() {
 
 // ---- Page ----
 export default function ProfilePage() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist' | 'ratings'>('profile')
 
   const tabs: { key: typeof tab; label: string }[] = [
-    { key: 'profile', label: 'Profile' },
-    { key: 'blocks', label: 'Blocked Users' },
-    { key: 'wishlist', label: 'Wishlist' },
-    { key: 'ratings', label: 'Ratings' },
+    { key: 'profile', label: t('profile.tabs.profile') },
+    { key: 'blocks', label: t('profile.tabs.blocked') },
+    { key: 'wishlist', label: t('profile.tabs.wishlist') },
+    { key: 'ratings', label: t('profile.tabs.ratings') },
   ]
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="text-3xl font-bold text-ink mb-6">My Account</h1>
+      <h1 className="text-3xl font-bold text-ink mb-6">{t('profile.pageTitle')}</h1>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-ink/15 mb-6 overflow-x-auto">
