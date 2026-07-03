@@ -757,5 +757,166 @@
       "emptyBody": "Añade los juegos de mesa que tienes para poder publicarlos en eventos de intercambio.",
       "noStatusMatch": "No hay copias con estado \"{{status}}\"."
     }
+  },
+  "matching": {
+    "title": "Emparejamiento",
+    "breadcrumbEvents": "Eventos",
+    "eventNotFound": "Evento no encontrado.",
+    "backToEvents": "Volver a eventos",
+    "backToEvent": "Volver al evento",
+    "notAvailable": "El emparejamiento aún no está disponible para este evento.",
+    "notAvailableHint": "El evento debe estar en estado de emparejamiento o posterior.",
+    "advanceHint": "Avanza el evento al estado de emparejamiento para ejecutar el solver.",
+    "runsHeading": "Ejecuciones",
+    "noRunsYet": "Aún no hay ejecuciones.",
+    "noRunsHint": "Usa la acción de arriba para crear la primera ejecución.",
+    "selectRunPrompt": "Selecciona una ejecución para ver los detalles.",
+    "saving": "Guardando…",
+    "filterByStatusAriaLabel": "Filtrar por estado",
+    "allStatuses": "Todos los estados",
+    "behind": "atrasado",
+    "behindTitle": "Atrasado",
+    "nothingToSend": "Nada para enviar.",
+    "nothingToReceive": "Nada para recibir.",
+    "nothingToPay": "Nada para pagar.",
+    "progressSending": "enviando {{done}}/{{total}}",
+    "progressPaying": "pagando {{done}}/{{total}}",
+    "progressReceiving": "recibiendo {{done}}/{{total}}",
+    "runStatus": {
+      "PENDING": "Pendiente",
+      "RUNNING": "En ejecución",
+      "DONE": "Completado",
+      "FAILED": "Falló"
+    },
+    "shipmentStatus": {
+      "PENDING": "Pendiente",
+      "SENT": "Enviado",
+      "RECEIVED": "Recibido"
+    },
+    "paymentStatus": {
+      "PENDING": "Pendiente",
+      "PAID": "Pagado",
+      "CONFIRMED": "Confirmado"
+    },
+    "errors": {
+      "unexpected": "Ocurrió un error inesperado."
+    },
+    "run": {
+      "cyclesCount_one": "{{count}} ciclo",
+      "cyclesCount_other": "{{count}} ciclos",
+      "matched_one": "{{count}} emparejado",
+      "matched_other": "{{count}} emparejados",
+      "unmatched": "{{count}} sin emparejar",
+      "triggering": "Iniciando…",
+      "trigger": "Ejecutar emparejamiento",
+      "objectivesHeading": "Objetivos (orden de prioridad)",
+      "objectives": {
+        "trades": "Intercambios",
+        "users": "Usuarios",
+        "distance": "Distancia"
+      },
+      "moveUp": "Mover {{label}} arriba",
+      "moveDown": "Mover {{label}} abajo",
+      "preparing": "Preparando…",
+      "downloadWants": "Descargar wants.txt",
+      "selectAtLeastOneObjective": "Selecciona al menos un objetivo.",
+      "objectivesLabel": "Objetivos:",
+      "objectivesHint": "Pasa esta bandera al ejecutar el solver localmente (Gurobi) y luego sube su resultado.",
+      "pasteOutputFirst": "Pega o carga primero el resultado del solver.",
+      "pasteOutputPlaceholder": "Pega el resultado del solver…",
+      "uploading": "Subiendo…",
+      "uploadSolution": "Subir solución",
+      "uploadSolutionPrompt": "Subir solución…",
+      "runNumber": "Ejecución #{{id}}",
+      "pollingEvery2s": "Consultando cada 2s…",
+      "algorithm": "Algoritmo",
+      "started": "Iniciado",
+      "finished": "Finalizado",
+      "summary": "Resumen",
+      "log": "Registro",
+      "failedMessage": "Esta ejecución falló. Revisa el registro de arriba para más detalles.",
+      "resultLoadError": "No se pudieron cargar los resultados. La ejecución podría seguir procesándose.",
+      "statsLoadError": "No se pudieron cargar las estadísticas."
+    },
+    "money": {
+      "youOwe": "debes ${{amount}}",
+      "youAreOwed": "te deben ${{amount}}",
+      "even": "en cero"
+    },
+    "trades": {
+      "giving": "Dando ({{count}})",
+      "noGiving": "No estás dando nada en esta ejecución.",
+      "youGive": "Das",
+      "receiving": "Recibiendo ({{count}})",
+      "noReceiving": "No estás recibiendo nada en esta ejecución.",
+      "youReceive": "Recibes",
+      "to": "a",
+      "from": "de",
+      "paymentsHeading": "Pagos",
+      "youBought": "Compraste",
+      "youSold": "Vendiste",
+      "forPrice": "por",
+      "netBalancePrefix": "Saldo neto:"
+    },
+    "cycle": {
+      "ariaLabel_one": "Ciclo de intercambio con {{count}} paso",
+      "ariaLabel_other": "Ciclo de intercambio con {{count}} pasos",
+      "gives": "entrega",
+      "empty": "No hay ciclos en esta ejecución.",
+      "number": "Ciclo #{{id}}",
+      "stepsCount_one": "{{count}} paso",
+      "stepsCount_other": "{{count}} pasos"
+    },
+    "stats": {
+      "users": "Usuarios",
+      "listings": "Publicaciones",
+      "matched": "Emparejados",
+      "cycles": "Ciclos",
+      "unmatchedHeading_one": "Deseo sin emparejar ({{count}})",
+      "unmatchedHeading_other": "Deseos sin emparejar ({{count}})",
+      "wishNumber": "Deseo #{{id}}"
+    },
+    "shipping": {
+      "empty": "No se encontraron envíos para este evento.",
+      "sendingHeading": "Enviando ({{count}})",
+      "receivingHeading": "Recibiendo ({{count}})",
+      "trackingPlaceholder": "Número de seguimiento o notas de envío…",
+      "markSent": "Marcar como enviado",
+      "markReceived": "Marcar como recibido",
+      "infoLabel": "Info de envío:",
+      "heading": "Envíos",
+      "perTraderHeading": "Progreso por participante",
+      "allHeading": "Todos los envíos",
+      "noneFiltered": "No hay envíos."
+    },
+    "payments": {
+      "settlementHeading": "Pagos de liquidación",
+      "pay": "Paga a",
+      "receive": "Recibe",
+      "referenceLabel": "Referencia:",
+      "notePlaceholder": "Referencia de pago o notas…",
+      "markPaid": "Marcar como pagado",
+      "confirmReceived": "Confirmar recibido",
+      "toSendHeading_one": "Pago a enviar ({{count}})",
+      "toSendHeading_other": "Pagos a enviar ({{count}})",
+      "toReceiveHeading_one": "Pago a recibir ({{count}})",
+      "toReceiveHeading_other": "Pagos a recibir ({{count}})",
+      "overviewEmpty": "No hay pagos de liquidación.",
+      "perUserHeading": "Liquidación por usuario",
+      "allHeading": "Todos los pagos",
+      "noneFiltered": "No hay pagos."
+    },
+    "tabs": {
+      "myTrades": "Mis intercambios",
+      "allCycles": "Todos los ciclos",
+      "statsUnmatched": "Estadísticas y sin emparejar",
+      "shippingPayments": "Envíos y pagos",
+      "overview": "Resumen"
+    },
+    "pagination": {
+      "prev": "← Anterior",
+      "next": "Siguiente →",
+      "pageOf": "Página {{page}} de {{total}}"
+    }
   }
 }

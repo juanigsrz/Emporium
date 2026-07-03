@@ -757,5 +757,166 @@
       "emptyBody": "Add the board games you own so you can list them in trade events.",
       "noStatusMatch": "No copies with status \"{{status}}\"."
     }
+  },
+  "matching": {
+    "title": "Matching",
+    "breadcrumbEvents": "Events",
+    "eventNotFound": "Event not found.",
+    "backToEvents": "Back to events",
+    "backToEvent": "Back to event",
+    "notAvailable": "Matching is not yet available for this event.",
+    "notAvailableHint": "The event must be in MATCHING state or later.",
+    "advanceHint": "Advance event to MATCHING state to run the matcher.",
+    "runsHeading": "Runs",
+    "noRunsYet": "No runs yet.",
+    "noRunsHint": "Use the action above to create the first run.",
+    "selectRunPrompt": "Select a run to view details.",
+    "saving": "Saving…",
+    "filterByStatusAriaLabel": "Filter by status",
+    "allStatuses": "All statuses",
+    "behind": "behind",
+    "behindTitle": "Behind",
+    "nothingToSend": "Nothing to send.",
+    "nothingToReceive": "Nothing to receive.",
+    "nothingToPay": "Nothing to pay.",
+    "progressSending": "sending {{done}}/{{total}}",
+    "progressPaying": "paying {{done}}/{{total}}",
+    "progressReceiving": "receiving {{done}}/{{total}}",
+    "runStatus": {
+      "PENDING": "Pending",
+      "RUNNING": "Running",
+      "DONE": "Done",
+      "FAILED": "Failed"
+    },
+    "shipmentStatus": {
+      "PENDING": "Pending",
+      "SENT": "Sent",
+      "RECEIVED": "Received"
+    },
+    "paymentStatus": {
+      "PENDING": "Pending",
+      "PAID": "Paid",
+      "CONFIRMED": "Confirmed"
+    },
+    "errors": {
+      "unexpected": "An unexpected error occurred."
+    },
+    "run": {
+      "cyclesCount_one": "{{count}} cycle",
+      "cyclesCount_other": "{{count}} cycles",
+      "matched_one": "{{count}} matched",
+      "matched_other": "{{count}} matched",
+      "unmatched": "{{count}} unmatched",
+      "triggering": "Triggering…",
+      "trigger": "Run matching",
+      "objectivesHeading": "Objectives (priority order)",
+      "objectives": {
+        "trades": "Trades",
+        "users": "Users",
+        "distance": "Distance"
+      },
+      "moveUp": "Move {{label}} up",
+      "moveDown": "Move {{label}} down",
+      "preparing": "Preparing…",
+      "downloadWants": "Download wants.txt",
+      "selectAtLeastOneObjective": "Select at least one objective.",
+      "objectivesLabel": "Objectives:",
+      "objectivesHint": "Pass this flag when running the solver locally (Gurobi), then upload its output.",
+      "pasteOutputFirst": "Paste or load the solver output first.",
+      "pasteOutputPlaceholder": "Paste solver output…",
+      "uploading": "Uploading…",
+      "uploadSolution": "Upload solution",
+      "uploadSolutionPrompt": "Upload solution…",
+      "runNumber": "Run #{{id}}",
+      "pollingEvery2s": "Polling every 2s…",
+      "algorithm": "Algorithm",
+      "started": "Started",
+      "finished": "Finished",
+      "summary": "Summary",
+      "log": "Log",
+      "failedMessage": "This run failed. Check the log above for details.",
+      "resultLoadError": "Failed to load result data. The run may still be processing.",
+      "statsLoadError": "Failed to load stats."
+    },
+    "money": {
+      "youOwe": "you owe ${{amount}}",
+      "youAreOwed": "you're owed ${{amount}}",
+      "even": "even"
+    },
+    "trades": {
+      "giving": "Giving ({{count}})",
+      "noGiving": "You are not giving anything in this run.",
+      "youGive": "You give",
+      "receiving": "Receiving ({{count}})",
+      "noReceiving": "You are not receiving anything in this run.",
+      "youReceive": "You receive",
+      "to": "to",
+      "from": "from",
+      "paymentsHeading": "Payments",
+      "youBought": "You bought",
+      "youSold": "You sold",
+      "forPrice": "for",
+      "netBalancePrefix": "Net balance:"
+    },
+    "cycle": {
+      "ariaLabel_one": "Trade cycle with {{count}} step",
+      "ariaLabel_other": "Trade cycle with {{count}} steps",
+      "gives": "gives",
+      "empty": "No cycles in this run.",
+      "number": "Cycle #{{id}}",
+      "stepsCount_one": "{{count}} step",
+      "stepsCount_other": "{{count}} steps"
+    },
+    "stats": {
+      "users": "Users",
+      "listings": "Listings",
+      "matched": "Matched",
+      "cycles": "Cycles",
+      "unmatchedHeading_one": "Unmatched wish ({{count}})",
+      "unmatchedHeading_other": "Unmatched wishes ({{count}})",
+      "wishNumber": "Wish #{{id}}"
+    },
+    "shipping": {
+      "empty": "No shipments found for this event.",
+      "sendingHeading": "Sending ({{count}})",
+      "receivingHeading": "Receiving ({{count}})",
+      "trackingPlaceholder": "Tracking number or shipping notes…",
+      "markSent": "Mark sent",
+      "markReceived": "Mark received",
+      "infoLabel": "Shipping info:",
+      "heading": "Shipping",
+      "perTraderHeading": "Per-trader progress",
+      "allHeading": "All shipments",
+      "noneFiltered": "No shipments."
+    },
+    "payments": {
+      "settlementHeading": "Settlement payments",
+      "pay": "Pay",
+      "receive": "Receive",
+      "referenceLabel": "Reference:",
+      "notePlaceholder": "Payment reference or notes…",
+      "markPaid": "Mark paid",
+      "confirmReceived": "Confirm received",
+      "toSendHeading_one": "Payment to send ({{count}})",
+      "toSendHeading_other": "Payments to send ({{count}})",
+      "toReceiveHeading_one": "Payment to receive ({{count}})",
+      "toReceiveHeading_other": "Payments to receive ({{count}})",
+      "overviewEmpty": "No settlement payments.",
+      "perUserHeading": "Per-user settlement",
+      "allHeading": "All payments",
+      "noneFiltered": "No payments."
+    },
+    "tabs": {
+      "myTrades": "My Trades",
+      "allCycles": "All Cycles",
+      "statsUnmatched": "Stats & Unmatched",
+      "shippingPayments": "Shipping & Payments",
+      "overview": "Overview"
+    },
+    "pagination": {
+      "prev": "← Prev",
+      "next": "Next →",
+      "pageOf": "Page {{page}} of {{total}}"
+    }
   }
 }
