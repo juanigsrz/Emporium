@@ -8,7 +8,8 @@
     "myCopies": "My Copies",
     "logout": "Logout",
     "login": "Login",
-    "register": "Register"
+    "register": "Register",
+    "tagline": "a board-game math-trade catalog"
   },
   "nav": {
     "home": "Home",

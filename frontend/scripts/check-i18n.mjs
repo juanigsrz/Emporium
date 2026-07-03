@@ -33,8 +33,24 @@ for (const f of files) {
   }
 }
 
+// Registry-wiring guard: a locale file with perfect key parity is still invisible
+// to users if it was never wired into locales/index.ts. Key parity alone can't
+// catch that, so verify every locale JSON is both imported and listed in `languages`.
+const indexSrc = readFileSync(join(dir, 'index.ts'), 'utf8')
+for (const f of files) {
+  const code = f.replace(/\.json$/, '')
+  const imported = indexSrc.includes(`./${f}`)
+  const selectable = new RegExp(`code:\\s*['"]${code}['"]`).test(indexSrc)
+  if (!imported || !selectable) {
+    failed = true
+    console.error(`\n${f}: not fully wired into src/i18n/locales/index.ts`)
+    if (!imported) console.error(`  add:  import ${code} from './${f}'  and  ${code}: { translation: ${code} }  in resources`)
+    if (!selectable) console.error(`  add:  { code: '${code}', label: '<language name>' }  to languages`)
+  }
+}
+
 if (failed) {
-  console.error('\ni18n locale key parity check failed.')
+  console.error('\ni18n locale check failed.')
   process.exit(1)
 }
 console.log(`i18n locales OK (${files.length} files, ${baseKeys.size} keys).`)

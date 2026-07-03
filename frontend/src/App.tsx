@@ -1,7 +1,9 @@
 import { Outlet } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import NavBar from './components/NavBar'
 
 export default function App() {
+  const { t } = useTranslation()
   return (
     <div className="min-h-screen flex flex-col">
       <NavBar />
@@ -11,7 +13,7 @@ export default function App() {
       <footer className="mt-10 border-t-2 border-ink/10 py-6 text-center text-xs text-moss">
         <span className="font-display text-sm font-bold tracking-tight text-ink">Emporium</span>
         <span className="mx-2 text-moss/40">·</span>
-        a board-game math-trade catalog
+        {t('common.tagline')}
         <span className="mx-2 text-moss/40">·</span>
         &copy; {new Date().getFullYear()}
       </footer>
