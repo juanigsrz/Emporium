@@ -118,21 +118,27 @@ def _location_entries(listings, wishes):
 
 
 def _distance_blocked(user_id, coords):
-    """Owner ids too far from this wisher (per the wisher's max_trade_distance_km)."""
+    """Owner ids unmatchable with this wisher by distance.
+
+    A pair is excluded if EITHER side's max_trade_distance_km is exceeded: the
+    wisher won't accept a copy from too far, and an owner won't ship theirs
+    beyond their own limit. A user with a null limit blocks nobody on their own
+    account, but is still blocked BY the other side's limit."""
     from accounts.geo import haversine_km
     me = coords.get(user_id)
-    if not me or me[2] is None:  # (lat, lng, max_km); no self-limit -> block nobody
+    if not me:
         return set()
-    lat, lng, max_km = me
+    lat, lng, my_max = me
     if lat is None or lng is None:
         return set()
     blocked = set()
-    for other_id, (olat, olng, _omax) in coords.items():
+    for other_id, (olat, olng, omax) in coords.items():
         if other_id == user_id:
             continue
         if olat is None or olng is None:
             continue
-        if haversine_km(lat, lng, olat, olng) > max_km:
+        dist = haversine_km(lat, lng, olat, olng)
+        if (my_max is not None and dist > my_max) or (omax is not None and dist > omax):
             blocked.add(other_id)
     return blocked
 
@@ -232,7 +238,7 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
     """Money directives for main.py when money is enabled on an XTOY event.
 
     Returns (budgets, items, bids), all amounts in integer cents:
-      budgets: [{"user", "budget"}]        — per participant with budget > 0
+      budgets: [{"user", "budget"}]        — per wisher, cap-clamped (0 allowed)
       items:   [{"name", "owner", "ask"?}] — every active listing + combo
       bids:    [{"user", "item", "max_price"}] — per buy-side want with a resolved bid
     """
@@ -249,23 +255,32 @@ def _build_xtoy_money_directives(event, listings, combos, wishes, by_id, combo_b
     game_prices = load_game_prices(event)
 
     # --- user budgets ---
+    # Every wisher gets an explicit budget so the per-user cap actually binds:
+    #   participant     -> their chosen max_spend (0 = opted out of spending)
+    #   non-participant  -> the event default cap
+    # clamped to the event cap in all cases (the organizer may lower the cap after
+    # joins, leaving a stale max_spend above it). A budget is omitted only when the
+    # user has no participation AND the event sets no cap — genuinely unconstrained.
     budgets = []
     default_cap = event.max_money_per_user
     participations = list(
         EventParticipation.objects.filter(event=event).select_related("user")
     )
-    # Build a map username -> max_spend so we can fall back to event default
     part_by_user = {p.user.username: p for p in participations}
 
     # Collect all usernames that appear in wishes
     wish_usernames = {w.user.username for w in wishes}
     for username in sorted(wish_usernames):
         p = part_by_user.get(username)
-        if p and p.max_spend and p.max_spend > 0:
-            # Participation with null/zero max_spend is treated as unconstrained (no budget).
-            budgets.append({"user": username, "budget": _to_cents(p.max_spend)})
-        elif not p and default_cap and default_cap > 0:
-            budgets.append({"user": username, "budget": _to_cents(default_cap)})
+        if p is not None:
+            budget = p.max_spend
+        elif default_cap is not None:
+            budget = default_cap
+        else:
+            continue
+        if default_cap is not None and budget > default_cap:
+            budget = default_cap
+        budgets.append({"user": username, "budget": _to_cents(budget)})
 
     # --- items (listings + combos) ---
     items = []

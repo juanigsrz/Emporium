@@ -64,6 +64,11 @@ class EventScopedMixin:
         if event.inputs_locked:
             raise PermissionDenied("Want lists are locked, this event has moved to matching.")
 
+    def _assert_participant(self, event, request):
+        from events.models import EventParticipation
+        if not EventParticipation.objects.filter(event=event, user=request.user).exists():
+            raise PermissionDenied("Join this event before creating a wish.")
+
     def _serializer_context(self, request, event):
         return {"request": request, "event": event}
 
@@ -318,6 +323,7 @@ class TradeWishListCreateView(EventScopedMixin, APIView):
     def post(self, request, slug):
         event = self._get_event(slug)
         self._assert_editable(event)
+        self._assert_participant(event, request)
         ctx = self._serializer_context(request, event)
         ser = TradeWishSerializer(data=request.data, context=ctx)
         ser.is_valid(raise_exception=True)

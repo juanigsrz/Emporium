@@ -33,7 +33,11 @@ export interface MatchRunDetail extends MatchRunListItem {
 // ---- Result JSON schema (from DATA_MODEL.md §Result JSON schema) ----
 
 export interface CycleStep {
-  listing_code: string
+  // A step moves either a single listing OR a combo bundle; the unused side is null.
+  listing_code: string | null
+  combo_code?: string | null
+  combo_name?: string | null
+  members?: string[]
   board_game: string
   from_user: string
   to_user: string
@@ -79,10 +83,15 @@ export interface TradeAssignment {
   id: number
   match_run: number
   cycle_id: number
-  event_listing: number
-  copy_id: number
-  listing_code: string
-  board_game_name: string
+  // A row moves either a single listing OR a combo bundle; the unused side is null.
+  event_listing: number | null
+  combo: number | null
+  copy_id: number | null
+  listing_code: string | null
+  combo_code: string | null
+  combo_name: string | null
+  members: string[] | null
+  board_game_name: string | null
   board_game_thumbnail: string
   giver: number
   giver_username: string

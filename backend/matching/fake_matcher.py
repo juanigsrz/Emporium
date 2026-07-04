@@ -120,13 +120,24 @@ class FakeMatcher:
         nodes = {w.wish_id: w for w in wishes}
         wish_list = list(wishes)
 
+        # Listings already committed to a cycle — never give the same physical
+        # copy to two receivers.
+        allocated_listings: set[int] = set()
+
         self._log("Starting 2-cycle pass")
         for i, wa in enumerate(wish_list):
             if wa.wish_id in used_wish_ids:
                 continue
+            # A single greedy cycle satisfies exactly one received item per wish,
+            # so a wish requiring Y>1 can never be satisfied here — skip it (it is
+            # reported unmatched) rather than take its give while under-receiving.
+            if wa.min_receive > 1:
+                continue
             for j in range(i + 1, len(wish_list)):
                 wb = wish_list[j]
                 if wb.wish_id in used_wish_ids:
+                    continue
+                if wb.min_receive > 1:
                     continue
                 if self._blocked(wa.user_id, wb.user_id, block_set):
                     continue
@@ -135,13 +146,15 @@ class FakeMatcher:
                     continue
 
                 # Find a listing wa can give that wb wants
-                a_gives = self._find_satisfying_listing(wa, wb, satisfy_map)
+                a_gives = self._find_satisfying_listing(wa, wb, satisfy_map, allocated_listings)
                 if a_gives is None:
                     continue
                 # Find a listing wb can give that wa wants
-                b_gives = self._find_satisfying_listing(wb, wa, satisfy_map)
-                if b_gives is None:
+                b_gives = self._find_satisfying_listing(wb, wa, satisfy_map, allocated_listings)
+                if b_gives is None or b_gives.id == a_gives.id:
                     continue
+                allocated_listings.add(a_gives.id)
+                allocated_listings.add(b_gives.id)
 
                 # Form 2-cycle: wa gives a_gives to wb; wb gives b_gives to wa
                 cycle = self._make_cycle(
@@ -176,7 +189,7 @@ class FakeMatcher:
 
         # 5. Greedy 3-cycle pass on remaining
         self._log("Starting 3-cycle pass")
-        remaining = [w for w in wish_list if w.wish_id not in used_wish_ids]
+        remaining = [w for w in wish_list if w.wish_id not in used_wish_ids and w.min_receive <= 1]
         for i, wa in enumerate(remaining):
             if wa.wish_id in used_wish_ids:
                 continue
@@ -189,7 +202,7 @@ class FakeMatcher:
                 if wa.user_id == wb.user_id:
                     continue
 
-                a_gives_b = self._find_satisfying_listing(wa, wb, satisfy_map)
+                a_gives_b = self._find_satisfying_listing(wa, wb, satisfy_map, allocated_listings)
                 if a_gives_b is None:
                     continue
 
@@ -206,12 +219,15 @@ class FakeMatcher:
                     if self._blocked(wb.user_id, wc.user_id, block_set):
                         continue
 
-                    b_gives_c = self._find_satisfying_listing(wb, wc, satisfy_map)
-                    if b_gives_c is None:
+                    b_gives_c = self._find_satisfying_listing(wb, wc, satisfy_map, allocated_listings)
+                    if b_gives_c is None or b_gives_c.id == a_gives_b.id:
                         continue
-                    c_gives_a = self._find_satisfying_listing(wc, wa, satisfy_map)
-                    if c_gives_a is None:
+                    c_gives_a = self._find_satisfying_listing(wc, wa, satisfy_map, allocated_listings)
+                    if c_gives_a is None or c_gives_a.id in (a_gives_b.id, b_gives_c.id):
                         continue
+                    allocated_listings.update(
+                        {a_gives_b.id, b_gives_c.id, c_gives_a.id}
+                    )
 
                     # Form 3-cycle: wa→wb, wb→wc, wc→wa
                     cycle = self._make_cycle(
@@ -387,10 +403,12 @@ class FakeMatcher:
         giver_wish: _WishNode,
         receiver_wish: _WishNode,
         satisfy_map: dict,
+        allocated_listings: set,
     ):
         """
         Find an EventListing that giver_wish can give (has it in offer group,
-        hasn't exceeded max_give) AND that satisfies receiver_wish's wants.
+        hasn't exceeded max_give, not already committed elsewhere) AND that
+        satisfies receiver_wish's wants.
 
         Returns the EventListing object or None.
         """
@@ -399,11 +417,9 @@ class FakeMatcher:
 
         receiver_wants = satisfy_map.get(receiver_wish.wish_id, set())
 
-        # Track already-allocated listing ids to avoid double-allocating from this offer group
-        # (We just check offered listings against receiver's want set)
         for item in giver_wish.offered_listings:
             el = item.event_listing
-            if el.id in receiver_wants:
+            if el.id in receiver_wants and el.id not in allocated_listings:
                 return el
 
         return None
