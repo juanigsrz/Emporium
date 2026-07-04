@@ -376,6 +376,10 @@ class EventListingTests(EventTestBase):
         super().setUp()
         resp = self.client.post(EVENTS_URL, {"name": "Listing Test Event"})
         self.slug = resp.data["slug"]
+        # Both users join — a prerequisite for adding copies as listings.
+        event = TradeEvent.objects.get(slug=self.slug)
+        EventParticipation.objects.get_or_create(event=event, user=self.user1)
+        EventParticipation.objects.get_or_create(event=event, user=self.user2)
 
     def test_add_own_copy_as_listing_201(self):
         resp = self.client.post(listings_url(self.slug), {"copy": self.copy1.pk})

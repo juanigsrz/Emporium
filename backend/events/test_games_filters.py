@@ -173,3 +173,12 @@ class GamesFiltersTests(APITestCase):
         r = self.client.get(f"/api/events/{self.slug}/games/?max_weight=3")
         ids = {g["bgg_id"] for g in r.data["results"]}
         self.assertEqual(ids, {13})
+
+    def test_non_numeric_filters_return_400_not_500(self):
+        for param in ("min_rating", "year_from", "year_to", "rank_max",
+                      "min_weight", "max_weight"):
+            r = self.client.get(f"/api/events/{self.slug}/games/?{param}=abc")
+            self.assertEqual(
+                r.status_code, 400,
+                f"{param}=abc should be a 400, got {r.status_code}",
+            )

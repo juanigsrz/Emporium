@@ -1,10 +1,20 @@
 # Solver Integration Plan
 
 Status: **IMPLEMENTED** (backend `matching/external_solver.py`, export + upload
-endpoints, mode routing, 209 tests green, live round-trip vs the hosted ftm
-solver; frontend mode picker + download/upload UI, build/lint/tsc clean, live
-HTTP smoke green). The sections below are the design of record; deviations from
-the original plan are noted inline.
+endpoints; frontend download/upload UI). The sections below are the design of
+record; deviations from the original plan are noted inline.
+
+> **Later deviations (superseded the two-mode design below):**
+> - The `TradeEvent.matching_mode` field and the `ONETOONE`/`XTOY` split were
+>   **removed** — every event now unifies on the N-to-M JSON export + uploaded
+>   solution flow. There is no per-event mode picker.
+> - The `ONETOONE` "server calls modal ftm" path (§3a) was **not built**. There
+>   is no outbound solver HTTP call and no `SOLVER_URL` setting; `POST /matches/`
+>   runs the in-process `FakeMatcher` placeholder, and real solutions arrive via
+>   `POST /matches/upload/`.
+> - Export is a single **JSON** document (`build_wants`, `application/json`),
+>   not the OLWLG/gurobi text formats in §2. Combos (`K-` tokens), user
+>   trade-caps, and a distance objective were added after this plan.
 
 Goal: let an organizer pick how an event is matched, export a `wants.txt` the
 external [Pareto](https://github.com/juanigsrz/Pareto) solver understands, run

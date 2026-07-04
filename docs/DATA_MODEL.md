@@ -132,7 +132,6 @@ average, usersrated→users_rated, is_expansion`, and the `*_rank` columns into
 | description | text blank | |
 | organizer | FK(User, related=events_organized) | |
 | status | choice | DRAFT, SUBMISSIONS_OPEN, WANTLIST_OPEN, MATCHING, MATCH_REVIEW, FINALIZATION, SHIPPING, ARCHIVED |
-| matching_mode | choice default ONETOONE | ONETOONE (online ftm solver) / XTOY (local solver, upload). Selects solver + export/run flow; frozen once MATCHING. |
 | submissions_open_at | datetime null | |
 | submissions_close_at | datetime null | |
 | wantlist_close_at | datetime null | |
@@ -186,9 +185,15 @@ unique_together = (event, copy). Matching operates on `EventListing`s.
 | field | type | notes |
 |---|---|---|
 | offer_group | FK(OfferGroup, related=items) | |
-| event_listing | FK(EventListing, related=offer_memberships) | user's own listing |
-| money_amount | decimal(10,2) null | sell-side **Q**: min money the owner accepts to give this listing for money (null = not for sale). Money trade feasible only when a buyer's `WantGroupItem.money_amount` (P) ≥ this Q. Placeholder for MIP. |
-unique_together = (offer_group, event_listing). Validate listing.copy.owner == group.user.
+| event_listing | FK(EventListing, related=offer_memberships) null | user's own listing |
+| combo | FK(Combo, related=offer_memberships) null | user's own bundle |
+Exactly one of event_listing / combo set (check constraint); unique per group per
+target. Validate the target belongs to the group's user.
+
+Money moved off the item: sell-side **Q** now lives in the pricing model
+(`EventListing.sell_price` per copy, `Combo.sell_price` per bundle, else the
+owner's `UserGamePrice` default) — see the `trades` pricing models below. There
+is no `OfferGroupItem.money_amount`.
 
 ### WantGroup (reusable; targets the user wants)
 | field | type | notes |
@@ -204,13 +209,18 @@ unique_together = (offer_group, event_listing). Validate listing.copy.owner == g
 | field | type | notes |
 |---|---|---|
 | want_group | FK(WantGroup, related=items) | |
-| target_type | choice | BOARD_GAME, LISTING |
-| board_game | FK(BoardGame) null | when target_type=BOARD_GAME (any copy) |
-| event_listing | FK(EventListing) null | when target_type=LISTING (specific) |
-| money_amount | decimal(10,2) null | buy-side **P**: max money the user pays to receive this game (not a priority sweetener — needs a seller accepting money, see OfferGroupItem.money_amount). Placeholder for MIP. |
-Exactly one of board_game / event_listing set (validate). Wants are **binary** —
-you want a target or you don't; no priority/tier/rank (neither solver consumes
+| event_listing | FK(EventListing) null | a specific listing target |
+| combo | FK(Combo) null | a specific bundle target |
+Exactly one of event_listing / combo set (check constraint). A "want any copy of
+game X" is expanded to the concrete listing targets at build time by the want
+builder / export, not stored as a BOARD_GAME target. Wants are **binary** — you
+want a target or you don't; no priority/tier/rank (neither solver consumes
 priority). Items keep insertion order.
+
+Money moved off the item: buy-side **P** now lives in the pricing model
+(`WantBid` per target override, else the user's `UserGamePrice` default) — see the
+`trades` pricing models. There is no `WantGroupItem.money_amount` or
+`target_type`/`board_game` column.
 
 ### TradeWish (ties one OfferGroup → one WantGroup)
 | field | type | notes |

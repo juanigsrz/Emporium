@@ -3,7 +3,7 @@ from rest_framework.test import APITestCase
 
 from catalog.models import BoardGame
 from copies.models import Copy
-from events.models import TradeEvent
+from events.models import EventParticipation, TradeEvent
 
 User = get_user_model()
 
@@ -13,6 +13,7 @@ class PendingListingGuardTest(APITestCase):
         self.u = User.objects.create_user("alice", password="x")
         self.bg = BoardGame.objects.create(bgg_id=224517, name="Brass")
         self.event = TradeEvent.objects.create(name="E", organizer=self.u)
+        EventParticipation.objects.create(event=self.event, user=self.u)
         self.client.force_authenticate(self.u)
 
     def test_pending_copy_rejected(self):

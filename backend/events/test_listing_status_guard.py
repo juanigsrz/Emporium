@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 
 from catalog.models import BoardGame
 from copies.models import Copy
-from events.models import EventListing, TradeEvent
+from events.models import EventListing, EventParticipation, TradeEvent
 
 User = get_user_model()
 
@@ -18,6 +18,7 @@ class ListingStatusGuardTests(APITestCase):
         cls.event = TradeEvent.objects.create(
             name="Guard Ev", organizer=cls.u, status="SUBMISSIONS_OPEN"
         )
+        EventParticipation.objects.create(event=cls.event, user=cls.u)
 
     def test_traded_copy_cannot_be_listed(self):
         copy = Copy.objects.create(owner=self.u, board_game=self.bg,

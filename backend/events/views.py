@@ -147,6 +147,28 @@ class TradeEventViewSet(
             raise ValidationError({field: "Must be at least 1."})
         return n
 
+    @staticmethod
+    def _opt_int(params, field):
+        """Optional integer query param → int or None; 400 on non-numeric input."""
+        raw = params.get(field)
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            raise ValidationError({field: "Must be an integer."})
+
+    @staticmethod
+    def _opt_float(params, field):
+        """Optional float query param → float or None; 400 on non-numeric input."""
+        raw = params.get(field)
+        if raw is None or raw == "":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            raise ValidationError({field: "Must be a number."})
+
     def update(self, request, *args, **kwargs):
         kwargs["partial"] = True  # PATCH only; PUT not supported
         event = self.get_object()
@@ -370,6 +392,9 @@ class TradeEventViewSet(
         if event.submissions_locked:
             raise PermissionDenied("Listings are locked once want-lists open.")
 
+        if not EventParticipation.objects.filter(event=event, user=request.user).exists():
+            raise PermissionDenied("Join this event before adding your copies to it.")
+
         copy_id = request.data.get("copy")
         if not copy_id:
             raise ValidationError({"copy": "This field is required."})
@@ -468,38 +493,39 @@ class TradeEventViewSet(
             ids = Wishlist.objects.filter(user=request.user).values_list("board_game_bgg_id", flat=True)
             qs = qs.filter(bgg_id__in=list(ids))
 
-        min_rating = request.query_params.get("min_rating")
-        if min_rating:
+        params = request.query_params
+        min_rating = self._opt_float(params, "min_rating")
+        if min_rating is not None:
             from accounts.models import GameRating
             rated_ids = GameRating.objects.filter(
-                user=request.user, value__gte=float(min_rating)
+                user=request.user, value__gte=min_rating
             ).values_list("board_game_id", flat=True)
             qs = qs.filter(bgg_id__in=list(rated_ids))
 
-        is_expansion = request.query_params.get("is_expansion")
+        is_expansion = params.get("is_expansion")
         if is_expansion in ("true", "false"):
             qs = qs.filter(is_expansion=(is_expansion == "true"))
 
         # Numeric catalog filters (all optional). Year/rank are real columns;
         # complexity lives in metadata.average_weight (BGG weight, ~1–5).
-        year_from = request.query_params.get("year_from")
-        if year_from:
-            qs = qs.filter(year_published__gte=int(year_from))
-        year_to = request.query_params.get("year_to")
-        if year_to:
-            qs = qs.filter(year_published__lte=int(year_to))
+        year_from = self._opt_int(params, "year_from")
+        if year_from is not None:
+            qs = qs.filter(year_published__gte=year_from)
+        year_to = self._opt_int(params, "year_to")
+        if year_to is not None:
+            qs = qs.filter(year_published__lte=year_to)
 
-        rank_max = request.query_params.get("rank_max")
-        if rank_max:
+        rank_max = self._opt_int(params, "rank_max")
+        if rank_max is not None:
             # rank > 0 also drops the unranked (null / 0) games.
-            qs = qs.filter(rank__gt=0, rank__lte=int(rank_max))
+            qs = qs.filter(rank__gt=0, rank__lte=rank_max)
 
-        min_weight = request.query_params.get("min_weight")
-        if min_weight:
-            qs = qs.filter(metadata__average_weight__gte=float(min_weight))
-        max_weight = request.query_params.get("max_weight")
-        if max_weight:
-            qs = qs.filter(metadata__average_weight__lte=float(max_weight))
+        min_weight = self._opt_float(params, "min_weight")
+        if min_weight is not None:
+            qs = qs.filter(metadata__average_weight__gte=min_weight)
+        max_weight = self._opt_float(params, "max_weight")
+        if max_weight is not None:
+            qs = qs.filter(metadata__average_weight__lte=max_weight)
 
         ordering = request.query_params.get("ordering", "-copies_count")
         order_map = {

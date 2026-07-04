@@ -37,6 +37,14 @@ function formatDate(iso: string | null): string {
   })
 }
 
+// Display code for a moved item: combo code (+ members) or the single listing code.
+function itemCodeLabel(s: { listing_code: string | null; combo_code?: string | null; members?: string[] | null }): string {
+  if (s.combo_code) {
+    return s.members && s.members.length ? `${s.combo_code} (${s.members.join(', ')})` : s.combo_code
+  }
+  return s.listing_code ?? ''
+}
+
 function extractErrorMsg(err: unknown): string | null {
   if (err && typeof err === 'object' && 'response' in err) {
     const resp = (err as { response?: { data?: unknown } }).response
@@ -400,16 +408,31 @@ function LiveRunView({ slug, runId }: { slug: string; runId: number }) {
 // ---- My Trades section ----
 
 // Clickable listing code — opens the full copy detail popup, same as the catalog.
-function ListingCode({ code, copyId, onOpen }: { code: string; copyId: number; onOpen: (id: number) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(copyId)}
-      className="block font-mono text-xs text-moss/70 hover:text-indigo-500 hover:underline"
-    >
-      {code}
-    </button>
-  )
+function ItemRef({ a, onOpen }: { a: TradeAssignment; onOpen: (id: number) => void }) {
+  // Combo rows carry no single copy — show the combo code + member listing codes.
+  if (a.combo_code) {
+    return (
+      <div className="font-mono text-xs text-moss/70">
+        {a.combo_code}
+        {a.members && a.members.length > 0 && (
+          <span className="text-moss/60"> ({a.members.join(', ')})</span>
+        )}
+      </div>
+    )
+  }
+  if (a.listing_code && a.copy_id != null) {
+    const copyId = a.copy_id
+    return (
+      <button
+        type="button"
+        onClick={() => onOpen(copyId)}
+        className="block font-mono text-xs text-moss/70 hover:text-indigo-500 hover:underline"
+      >
+        {a.listing_code}
+      </button>
+    )
+  }
+  return null
 }
 
 function MyTradesSection({
@@ -448,7 +471,7 @@ function MyTradesSection({
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youGive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                <ItemRef a={a} onOpen={setDetailCopyId} />
                 <p className="text-xs text-moss mt-0.5">
                   {t('matching.trades.to')}{' '}
                   <Link
@@ -486,7 +509,7 @@ function MyTradesSection({
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youReceive')}</p>
                 <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                <ItemRef a={a} onOpen={setDetailCopyId} />
                 <p className="text-xs text-moss mt-0.5">
                   {t('matching.trades.from')}{' '}
                   <Link
@@ -536,7 +559,7 @@ function MyTradesSection({
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-rose-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youBought')}</p>
                   <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                  <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                  <ItemRef a={a} onOpen={setDetailCopyId} />
                   <p className="text-xs text-moss mt-0.5">
                     {t('matching.trades.forPrice')} <span className="font-semibold text-ink">${a.cash_amount}</span> {t('matching.trades.from')}{' '}
                     <Link to={`/u/${a.giver_username}`} className="text-indigo-500 hover:underline font-medium">
@@ -558,7 +581,7 @@ function MyTradesSection({
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-0.5">{t('matching.trades.youSold')}</p>
                   <p className="text-sm font-medium text-ink truncate">{a.board_game_name}</p>
-                  <ListingCode code={a.listing_code} copyId={a.copy_id} onOpen={setDetailCopyId} />
+                  <ItemRef a={a} onOpen={setDetailCopyId} />
                   <p className="text-xs text-moss mt-0.5">
                     {t('matching.trades.forPrice')} <span className="font-semibold text-ink">${a.cash_amount}</span> {t('matching.trades.to')}{' '}
                     <Link to={`/u/${a.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
@@ -782,7 +805,7 @@ function ShipmentSenderCard({
           <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-16 w-16 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
-            <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-moss/70 font-mono">{itemCodeLabel(s)}</p>
             <p className="text-xs text-moss mt-0.5">
               {t('matching.trades.to')}{' '}
               <Link to={`/u/${s.receiver_username}`} className="text-indigo-500 hover:underline font-medium">
@@ -851,7 +874,7 @@ function ShipmentReceiverCard({
           <GameThumb src={s.board_game_thumbnail} alt={s.board_game_name} className="h-16 w-16 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-ink truncate">{s.board_game_name}</p>
-            <p className="text-xs text-moss/70 font-mono">{s.listing_code}</p>
+            <p className="text-xs text-moss/70 font-mono">{itemCodeLabel(s)}</p>
             <p className="text-xs text-moss mt-0.5">
               {t('matching.trades.from')}{' '}
               <Link to={`/u/${s.giver_username}`} className="text-indigo-500 hover:underline font-medium">

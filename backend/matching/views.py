@@ -192,6 +192,7 @@ class MatchRunMineView(APIView):
                 "giver",
                 "receiver",
             )
+            .prefetch_related("combo__items__event_listing__copy__board_game")
             .order_by("cycle_id", "id")
         )
 
@@ -300,6 +301,7 @@ class ShippingView(APIView):
                 "assignment__event_listing__copy__board_game",
                 "assignment__giver", "assignment__receiver",
             )
+            .prefetch_related("assignment__combo__items__event_listing__copy__board_game")
             .order_by("id")
         )
         return Response(
@@ -331,6 +333,7 @@ class ShippingOverviewView(APIView):
                 "assignment__event_listing__copy__board_game",
                 "assignment__giver", "assignment__receiver",
             )
+            .prefetch_related("assignment__combo__items__event_listing__copy__board_game")
             .order_by("id")
         )
         status_f = request.query_params.get("status")
@@ -408,7 +411,11 @@ class ShipmentDetailView(APIView):
         try:
             shipment = (
                 Shipment.objects
-                .select_related("assignment__giver", "assignment__receiver", "assignment__match_run")
+                .select_related(
+                    "assignment__giver", "assignment__receiver", "assignment__match_run",
+                    "assignment__event_listing__copy__board_game",
+                )
+                .prefetch_related("assignment__combo__items__event_listing__copy__board_game")
                 .get(pk=pk, assignment__match_run__event=event)
             )
         except Shipment.DoesNotExist:

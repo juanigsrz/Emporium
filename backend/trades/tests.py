@@ -39,7 +39,7 @@ from rest_framework.test import APITestCase
 from catalog.models import BoardGame
 from catalog.tasks import import_boardgames_csv
 from copies.models import Copy
-from events.models import EventListing, TradeEvent, WANTLIST_LOCKED_STATUSES
+from events.models import EventListing, EventParticipation, TradeEvent, WANTLIST_LOCKED_STATUSES
 
 User = get_user_model()
 
@@ -159,6 +159,10 @@ class TradeTestBase(APITestCase):
             status="WANTLIST_OPEN",
         )
         cls.slug = cls.event.slug
+
+        # Both users join the event — a prerequisite for building offers/wants/wishes.
+        EventParticipation.objects.create(event=cls.event, user=cls.user1)
+        EventParticipation.objects.create(event=cls.event, user=cls.user2)
 
         cls.el1a = EventListing.objects.create(event=cls.event, copy=cls.copy1a)
         cls.el1b = EventListing.objects.create(event=cls.event, copy=cls.copy1b)

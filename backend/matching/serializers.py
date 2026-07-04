@@ -33,6 +33,35 @@ from .models import MatchRun, TradeAssignment, Shipment, SettlementPayment
 
 
 # ---------------------------------------------------------------------------
+# Shared item-display helpers (a moved item is a single listing OR a combo)
+# ---------------------------------------------------------------------------
+
+def _target_game_name(assignment):
+    """Display name of the moved item: the listing's game, or the combo's
+    member game names joined. None only if neither target is set."""
+    if assignment.event_listing_id:
+        return assignment.event_listing.copy.board_game.name
+    if assignment.combo_id:
+        return ", ".join(
+            ci.event_listing.copy.board_game.name
+            for ci in assignment.combo.items.all()
+        )
+    return None
+
+
+def _target_thumbnail(assignment):
+    """Thumbnail for the moved item: the listing's game thumbnail, or the first
+    combo member's. Empty string when unavailable."""
+    if assignment.event_listing_id:
+        return (assignment.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+    if assignment.combo_id:
+        members = list(assignment.combo.items.all())
+        if members:
+            return (members[0].event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # MatchRun
 # ---------------------------------------------------------------------------
 
@@ -84,22 +113,24 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
     Serializer for a single TradeAssignment, with display companions so the
     UI can render "you give <listing_code> to <receiver_username> / you receive
     <listing_code> from <giver_username>".
+
+    A row targets EITHER a single event_listing OR a combo (a bundle of the
+    owner's listings); combo rows carry a null event_listing, so the
+    listing-derived companions fall back to combo fields (combo_code, members,
+    joined member game names).
     """
 
     # Display companions for giver/receiver FKs
     giver_username    = serializers.CharField(source="giver.username",    read_only=True)
     receiver_username = serializers.CharField(source="receiver.username", read_only=True)
 
-    # Display companions for event_listing FK
-    copy_id         = serializers.IntegerField(
-        source="event_listing.copy.id", read_only=True
-    )
-    listing_code    = serializers.CharField(
-        source="event_listing.copy.listing_code", read_only=True
-    )
-    board_game_name = serializers.CharField(
-        source="event_listing.copy.board_game.name", read_only=True
-    )
+    # Display companions for the moved item (event_listing OR combo)
+    copy_id              = serializers.SerializerMethodField()
+    listing_code         = serializers.SerializerMethodField()
+    combo_code           = serializers.SerializerMethodField()
+    combo_name           = serializers.SerializerMethodField()
+    members              = serializers.SerializerMethodField()
+    board_game_name      = serializers.SerializerMethodField()
     board_game_thumbnail = serializers.SerializerMethodField()
 
     class Meta:
@@ -109,8 +140,12 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
             "match_run",
             "cycle_id",
             "event_listing",
+            "combo",
             "copy_id",
             "listing_code",
+            "combo_code",
+            "combo_name",
+            "members",
             "board_game_name",
             "board_game_thumbnail",
             "giver",
@@ -124,8 +159,28 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_copy_id(self, obj):
+        return obj.event_listing.copy.id if obj.event_listing_id else None
+
+    def get_listing_code(self, obj):
+        return obj.event_listing.copy.listing_code if obj.event_listing_id else None
+
+    def get_combo_code(self, obj):
+        return obj.combo.combo_code if obj.combo_id else None
+
+    def get_combo_name(self, obj):
+        return obj.combo.name if obj.combo_id else None
+
+    def get_members(self, obj):
+        if not obj.combo_id:
+            return None
+        return [ci.event_listing.copy.listing_code for ci in obj.combo.items.all()]
+
+    def get_board_game_name(self, obj):
+        return _target_game_name(obj)
+
     def get_board_game_thumbnail(self, obj):
-        return (obj.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        return _target_thumbnail(obj)
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +188,11 @@ class TradeAssignmentSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 class ShipmentSerializer(serializers.ModelSerializer):
-    listing_code         = serializers.CharField(source="assignment.event_listing.copy.listing_code", read_only=True)
-    board_game_name      = serializers.CharField(source="assignment.event_listing.copy.board_game.name", read_only=True)
+    listing_code         = serializers.SerializerMethodField()
+    combo_code           = serializers.SerializerMethodField()
+    combo_name           = serializers.SerializerMethodField()
+    members              = serializers.SerializerMethodField()
+    board_game_name      = serializers.SerializerMethodField()
     board_game_thumbnail = serializers.SerializerMethodField()
     giver_username       = serializers.CharField(source="assignment.giver.username", read_only=True)
     receiver_username    = serializers.CharField(source="assignment.receiver.username", read_only=True)
@@ -142,14 +200,37 @@ class ShipmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Shipment
-        fields = ["id", "status", "shipping_info", "listing_code", "board_game_name",
+        fields = ["id", "status", "shipping_info", "listing_code", "combo_code",
+                  "combo_name", "members", "board_game_name",
                   "board_game_thumbnail", "giver_username", "receiver_username", "my_role",
                   "sent_at", "received_at"]
-        read_only_fields = ["id", "listing_code", "board_game_name", "board_game_thumbnail",
+        read_only_fields = ["id", "listing_code", "combo_code", "combo_name", "members",
+                            "board_game_name", "board_game_thumbnail",
                             "giver_username", "receiver_username", "my_role", "sent_at", "received_at"]
 
+    def get_listing_code(self, obj):
+        a = obj.assignment
+        return a.event_listing.copy.listing_code if a.event_listing_id else None
+
+    def get_combo_code(self, obj):
+        a = obj.assignment
+        return a.combo.combo_code if a.combo_id else None
+
+    def get_combo_name(self, obj):
+        a = obj.assignment
+        return a.combo.name if a.combo_id else None
+
+    def get_members(self, obj):
+        a = obj.assignment
+        if not a.combo_id:
+            return None
+        return [ci.event_listing.copy.listing_code for ci in a.combo.items.all()]
+
+    def get_board_game_name(self, obj):
+        return _target_game_name(obj.assignment)
+
     def get_board_game_thumbnail(self, obj):
-        return (obj.assignment.event_listing.copy.board_game.metadata or {}).get("thumbnail", "")
+        return _target_thumbnail(obj.assignment)
 
     def get_my_role(self, obj):
         uid = self.context["request"].user.id

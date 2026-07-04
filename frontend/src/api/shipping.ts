@@ -6,7 +6,12 @@ export interface Shipment {
   id: number
   status: 'PENDING' | 'SENT' | 'RECEIVED'
   shipping_info: string
-  listing_code: string
+  // A shipment moves either a single listing OR a combo bundle; the unused
+  // side is null. board_game_name always holds a display string.
+  listing_code: string | null
+  combo_code: string | null
+  combo_name: string | null
+  members: string[] | null
   board_game_name: string
   board_game_thumbnail: string
   giver_username: string
