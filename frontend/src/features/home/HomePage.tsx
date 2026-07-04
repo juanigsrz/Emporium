@@ -10,12 +10,6 @@ export default function HomePage() {
     <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
       {/* Hero */}
       <header className="relative">
-        {/*
-        <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-sage/60 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-moss">
-          <span className="h-2 w-2 rounded-full bg-coral" />
-          Emporium
-        </p>
-        */}
         <h1 className="max-w-3xl text-4xl font-bold text-ink sm:text-6xl">
           {t('home.heroTitle')}
         </h1>
@@ -30,39 +24,6 @@ export default function HomePage() {
           >
             {t('home.browseEvents')}
           </Link>
-
-          {/* Status — slim inline strip (live backend health) */}
-          {/*
-          <span className="inline-flex items-center gap-2 rounded-2xl border-2 border-ink/15 bg-cream px-3.5 py-2.5 text-xs font-semibold shadow-sm">
-            {isLoading && (
-              <>
-                <span className="h-2 w-2 animate-pulse rounded-full bg-gray-300" />
-                <span className="text-moss">Checking backend…</span>
-              </>
-            )}
-            {isError && (
-              <>
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                <span className="text-red-600">
-                  Backend unreachable — {error instanceof Error ? error.message : 'unknown error'}
-                </span>
-              </>
-            )}
-            
-            {data && (
-              <>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    data.status === 'ok' ? 'bg-green-500' : 'bg-yellow-500'
-                  }`}
-                />
-                <span className={data.status === 'ok' ? 'text-green-700' : 'text-yellow-700'}>
-                  Backend: {data.status}
-                </span>
-              </>
-            )}
-          </span>
-          */}
         </div>
       </header>
 
