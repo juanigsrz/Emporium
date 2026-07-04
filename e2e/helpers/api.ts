@@ -114,6 +114,16 @@ export async function leaveEvent(
   expect(res.ok(), `DELETE /events/${slug}/leave/ → ${res.status()}: ${await res.text()}`).toBe(true)
 }
 
+/** Archive an event so its participants are freed for the next test
+ *  (the backend allows one active event participation per user). */
+export async function archiveEvent(
+  request: APIRequestContext,
+  token: string,
+  slug: string,
+): Promise<void> {
+  await advanceEvent(request, token, slug, 'ARCHIVED')
+}
+
 export async function createCopy(
   request: APIRequestContext,
   token: string,
