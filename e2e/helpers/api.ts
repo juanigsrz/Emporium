@@ -99,6 +99,21 @@ export async function joinEvent(
   await postOk(request, `/events/${slug}/join/`, body, token)
 }
 
+// A user can only participate in one non-archived event at a time (server
+// enforces this — see events/views.py _enforce_single_event), so specs that
+// join a shared fixture role (alice/bob/...) to a throwaway event should leave
+// it afterwards or the *next* run's joinEvent() 400s on "already participating".
+export async function leaveEvent(
+  request: APIRequestContext,
+  token: string,
+  slug: string,
+): Promise<void> {
+  const res = await request.delete(`${API}/events/${slug}/leave/`, {
+    headers: authHeaders(token),
+  })
+  expect(res.ok(), `DELETE /events/${slug}/leave/ → ${res.status()}: ${await res.text()}`).toBe(true)
+}
+
 export async function createCopy(
   request: APIRequestContext,
   token: string,
