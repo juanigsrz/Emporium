@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import {
   fetchMyProfile,
   patchMyProfile,
@@ -653,6 +654,7 @@ function RatingsSection() {
 // ---- Page ----
 export default function ProfilePage() {
   const { t } = useTranslation()
+  usePageTitle(t('profile.pageTitle'))
   const [tab, setTab] = useState<'profile' | 'blocks' | 'wishlist' | 'ratings'>('profile')
 
   const tabs: { key: typeof tab; label: string }[] = [

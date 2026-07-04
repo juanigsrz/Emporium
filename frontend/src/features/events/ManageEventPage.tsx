@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import BackButton from '../../components/BackButton'
 import { useEvent, useEventParticipants } from '../../api/events'
 import {
@@ -13,6 +14,7 @@ export default function ManageEventPage() {
   const { t } = useTranslation()
   const { slug = '' } = useParams<{ slug: string }>()
   const { data: event, isLoading } = useEvent(slug)
+  usePageTitle(event?.name ? `${t('events.manageEvent.title')} · ${event.name}` : t('events.manageEvent.title'))
   const { data: participants } = useEventParticipants(slug)
   const [selected, setSelected] = useState<string | null>(null)
   const [kickResult, setKickResult] = useState<KickSummary | null>(null)

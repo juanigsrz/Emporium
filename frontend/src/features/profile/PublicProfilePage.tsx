@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import { fetchPublicProfile } from '../../api/profiles'
 import BackButton from '../../components/BackButton'
 
@@ -14,6 +15,8 @@ export default function PublicProfilePage() {
     queryFn: () => fetchPublicProfile(username!),
     enabled: Boolean(username),
   })
+
+  usePageTitle(profile?.username ?? username)
 
   if (isLoading) {
     return (

@@ -17,4 +17,11 @@ i18n
     },
   })
 
+// Keep <html lang> in sync so assistive tech pronounces the active language.
+function syncHtmlLang(lng: string) {
+  document.documentElement.lang = lng.split('-')[0]
+}
+syncHtmlLang(i18n.resolvedLanguage ?? 'en')
+i18n.on('languageChanged', syncHtmlLang)
+
 export default i18n

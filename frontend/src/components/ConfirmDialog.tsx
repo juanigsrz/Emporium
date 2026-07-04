@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useModalDismiss } from '../hooks/useModalDismiss'
 
 type ConfirmDialogProps = {
   title: string
@@ -21,13 +22,15 @@ export default function ConfirmDialog({
   pending = false,
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onCancel)
   const confirmCls = destructive
     ? 'flex-1 rounded-2xl border-2 border-ink bg-red-300 px-4 py-2.5 text-sm font-bold text-red-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60'
     : 'flex-1 rounded-2xl border-2 border-ink bg-butter px-4 py-2.5 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60'
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
-      <div className="relative w-full max-w-sm rounded-3xl border-2 border-ink bg-cream p-6 shadow-card">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full max-w-sm rounded-3xl border-2 border-ink bg-cream p-6 shadow-card focus:outline-none">
         <h2 className="mb-2 font-display text-lg font-bold text-ink">{title}</h2>
         <div className="mb-5 text-sm text-moss">{body}</div>
         <div className="flex gap-3">

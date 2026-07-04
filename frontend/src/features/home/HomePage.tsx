@@ -1,7 +1,10 @@
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 export default function HomePage() {
   const { t } = useTranslation()
+  usePageTitle(null)
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
@@ -21,12 +24,12 @@ export default function HomePage() {
         </p>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
-          <a
-            href="/events"
+          <Link
+            to="/events"
             className="rounded-2xl border-2 border-ink bg-butter px-6 py-3 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {t('home.browseEvents')}
-          </a>
+          </Link>
 
           {/* Status — slim inline strip (live backend health) */}
           {/*
@@ -104,8 +107,8 @@ function FeatureCard({
   const { t } = useTranslation()
 
   return (
-    <a
-      href={href}
+    <Link
+      to={href}
       className="group relative block overflow-hidden rounded-3xl border-2 border-ink bg-cream p-2 shadow-card transition-transform hover:-translate-y-1.5"
     >
       <div className={`relative flex h-24 items-center rounded-[1.1rem] border-2 border-ink/15 ${tint} px-5`}>
@@ -126,6 +129,6 @@ function FeatureCard({
           </svg>
         </span>
       </div>
-    </a>
+    </Link>
   )
 }

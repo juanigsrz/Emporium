@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useMemo, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import { registerApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
 import GoogleSignInButton from '../../components/GoogleSignInButton'
@@ -12,6 +13,7 @@ type FieldKey = 'username' | 'email' | 'password1' | 'password2'
 
 export default function RegisterPage() {
   const { t } = useTranslation()
+  usePageTitle(t('auth.title'))
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
   const [serverError, setServerError] = useState<string | null>(null)

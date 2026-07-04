@@ -9,7 +9,12 @@
     "logout": "Logout",
     "login": "Login",
     "register": "Register",
-    "tagline": "a board-game math-trade catalog"
+    "tagline": "a board-game math-trade catalog",
+    "toast": {
+      "saved": "Changes saved",
+      "added": "Added",
+      "removed": "Removed"
+    }
   },
   "nav": {
     "home": "Home",
@@ -1003,6 +1008,19 @@
       "tradeRatings": "Trade Ratings",
       "totalRatings": "Total ratings",
       "average": "Average"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "This page slipped off the table",
+      "body": "We couldn't find what you were looking for. It may have been moved, traded away, or never existed.",
+      "backHome": "Back to home"
+    },
+    "generic": {
+      "title": "Something knocked the board over",
+      "body": "An unexpected error interrupted the page. Try reloading — if it keeps happening, head back home.",
+      "reload": "Reload page",
+      "backHome": "Back to home"
     }
   }
 }

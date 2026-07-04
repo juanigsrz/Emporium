@@ -1,6 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { toast } from '../../store/toast'
 import type { TFunction } from 'i18next'
 import { useMyCopies, usePatchCopy, useWithdrawCopy, useCreateCopy, COPIES_KEYS } from '../../api/copies'
 import type { Copy } from '../../api/copies'
@@ -56,11 +60,14 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
   const { t } = useTranslation()
   const patchCopy = usePatchCopy()
   const [serverError, setServerError] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onClose)
 
   async function handleSubmit(payload: CopySubmitPayload) {
     setServerError(null)
     try {
       await patchCopy.mutateAsync({ id: copy.id, payload })
+      toast.success(t('common.toast.saved'))
       onClose()
     } catch (err: unknown) {
       setServerError(extractCopyError(err, t))
@@ -75,7 +82,7 @@ function EditCopyModal({ copy, onClose }: EditCopyModalProps) {
       aria-label={t('copies.editModal.ariaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
           <div>
@@ -147,10 +154,12 @@ interface WithdrawDialogProps {
 
 function WithdrawDialog({ copy, onConfirm, onCancel, isPending }: WithdrawDialogProps) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onCancel)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
-      <div className="relative bg-cream border-2 border-ink rounded-3xl shadow-card w-full max-w-sm p-6">
+      <div ref={panelRef} tabIndex={-1} className="relative bg-cream border-2 border-ink rounded-3xl shadow-card w-full max-w-sm p-6 focus:outline-none">
         <h2 className="font-display text-lg font-bold text-ink mb-2">{t('copies.withdraw.title')}</h2>
         <p className="text-sm text-moss mb-1">
           {t('copies.withdraw.body', { code: copy.listing_code })}
@@ -232,6 +241,7 @@ function MyCopyCard({ copy, rmap }: { copy: Copy; rmap: Map<number, number> }) {
 
   async function handleWithdraw() {
     await withdrawCopy.mutateAsync(copy.id)
+    toast.success(t('common.toast.removed'))
     setWithdrawOpen(false)
   }
 
@@ -465,9 +475,9 @@ function BggImportPanel() {
           {!hasBggUsername && (
             <p className="text-xs text-amber-600">
               {t('copies.import.usernamePrefix')}{' '}
-              <a href="/profile" className="font-semibold underline hover:text-amber-800">
+              <Link to="/profile" className="font-semibold underline hover:text-amber-800">
                 {t('copies.import.usernameLinkText')}
-              </a>{' '}
+              </Link>{' '}
               {t('copies.import.usernameSuffix')}
             </p>
           )}
@@ -537,6 +547,8 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState<{ bgg_id: number; name: string; thumbnail: string } | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onClose)
 
   // Global catalog typeahead: you can own ANY game (offering), so this is the
   // one place the full catalog is still searched — want-lists stay event-scoped.
@@ -549,6 +561,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
     setServerError(null)
     try {
       await create.mutateAsync({ board_game: picked.bgg_id, ...payload })
+      toast.success(t('common.toast.added'))
       onClose()
     } catch (err: unknown) {
       setServerError(extractCopyError(err, t))
@@ -563,7 +576,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
       aria-label={t('copies.addCopy')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full sm:max-w-lg bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
           <h2 className="font-display text-lg font-bold text-ink">{t('copies.addCopy')}</h2>
@@ -652,6 +665,7 @@ function AddCopyModal({ onClose }: { onClose: () => void }) {
 
 export default function MyCopiesPage() {
   const { t } = useTranslation()
+  usePageTitle(t('common.myCopies'))
   const [statusFilter, setStatusFilter] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const { data, isLoading, isError } = useMyCopies()

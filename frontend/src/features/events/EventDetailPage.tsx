@@ -1,10 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
+import { toast } from '../../store/toast'
 import type { TFunction } from 'i18next'
 import {
   useEvent,
@@ -289,10 +292,12 @@ function TransitionConfirmDialog({
   onCancel: () => void
 }) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onCancel)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-ink/40" onClick={onCancel} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-sm bg-cream border-2 border-ink rounded-3xl shadow-card p-5">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full sm:max-w-sm bg-cream border-2 border-ink rounded-3xl shadow-card p-5 focus:outline-none">
         <h3 className="font-display text-lg font-bold text-ink mb-2">{t('events.transitionConfirm.title')}</h3>
         <p className="text-sm text-moss mb-1">
           {t('events.transitionConfirm.moveFromPrefix')}{' '}
@@ -343,6 +348,8 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
   const { t } = useTranslation()
   const patchEvent = usePatchEvent()
   const [serverError, setServerError] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onClose)
 
   const editEventSchema = useMemo(
     () =>
@@ -428,6 +435,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
           max_distance_km: values.max_distance_km ? parseFloat(values.max_distance_km) : null,
         },
       })
+      toast.success(t('common.toast.saved'))
       onClose()
     } catch (err: unknown) {
       const msg = extractErrorMsg(err) ?? t('events.saveFailed')
@@ -448,7 +456,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
       aria-label={t('events.editModal.ariaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col focus:outline-none">
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
           <h2 className="font-display text-lg font-bold text-ink">{t('events.editModal.title')}</h2>
           <button onClick={onClose} className="text-moss hover:text-ink hover:bg-sage/40 p-1.5 rounded-xl transition-colors" aria-label={t('events.close')}>
@@ -1379,6 +1387,7 @@ export default function EventDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
 
   const { data: event, isLoading, isError } = useEvent(slug)
+  usePageTitle(event?.name)
 
   if (isLoading) {
     return (

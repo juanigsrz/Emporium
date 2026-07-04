@@ -4,6 +4,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
+import { useModalDismiss } from '../../hooks/useModalDismiss'
 import { useEvents, useCreateEvent, EVENT_STATUSES, eventStatusLabel } from '../../api/events'
 import type { TradeEventListItem } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
@@ -234,6 +236,8 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
   const navigate = useNavigate()
   const createEvent = useCreateEvent()
   const [serverError, setServerError] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onClose)
 
   const createEventSchema = useMemo(
     () =>
@@ -373,7 +377,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
       aria-label={t('events.createModal.ariaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col">
+      <div ref={panelRef} tabIndex={-1} className="relative w-full sm:max-w-xl bg-cream border-2 border-ink rounded-t-3xl sm:rounded-3xl shadow-card max-h-[92vh] flex flex-col focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b-2 border-ink/10">
           <h2 className="font-display text-lg font-bold text-ink">{t('events.createModal.title')}</h2>
@@ -658,6 +662,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
 
 export default function EventsPage() {
   const { t } = useTranslation()
+  usePageTitle(t('events.title'))
   const [searchParams, setSearchParams] = useSearchParams()
   const { token } = useAuthStore()
   const [createOpen, setCreateOpen] = useState(false)

@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import type { TFunction } from 'i18next'
 
 import { useEvent, useEventListings, useEventGames, fetchEventListings } from '../../api/events'
@@ -1742,6 +1743,7 @@ export default function MyWantsPage() {
   const qc = useQueryClient()
 
   const { data: event, isLoading: eventLoading, isError: eventError } = useEvent(slug)
+  usePageTitle(event?.name ? `${t('trades.myWants.pageTitle')} · ${event.name}` : t('trades.myWants.pageTitle'))
   const { data: listingsData } = useEventListings(slug, { user: user?.username })
   const { data: offerGroups = [] } = useOfferGroups(slug)
   const { data: wantGroups = [] } = useWantGroups(slug)
