@@ -31,9 +31,12 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()] or [
 # ---------------------------------------------------------------------------
 # Database (DATABASE_URL → Postgres in prod; SQLite fallback for tests/local)
 # ---------------------------------------------------------------------------
+# E2E_TESTS=1 points the dev server at a throwaway DB the Playwright suite
+# wipes on every run (see e2e/playwright.config.ts webServer command).
+_db_file = "e2e.sqlite3" if os.environ.get("E2E_TESTS") == "1" else "db.sqlite3"
 DATABASES = {
     "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        default=f"sqlite:///{BASE_DIR / _db_file}",
         conn_max_age=600,
         conn_health_checks=True,
     )
