@@ -1,6 +1,6 @@
 interface GameThumbProps {
   src?: string | null
-  alt?: string
+  alt?: string | null
   className?: string
 }
 
@@ -10,7 +10,7 @@ export function GameThumb({ src, alt = '', className = 'h-10 w-10' }: GameThumbP
     return (
       <img
         src={src}
-        alt={alt}
+        alt={alt ?? ''}
         loading="lazy"
         className={`${className} shrink-0 rounded-xl object-cover border-2 border-ink/15 bg-parchment`}
       />

@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useCopy } from '../api/copies'
+import { useModalDismiss } from '../hooks/useModalDismiss'
 import { GameThumb } from './GameThumb'
 
 // Full copy detail popup — lazily fetches GET /copies/{id}/ (readable by any
@@ -21,6 +23,8 @@ function CopyDetailRow({ label, value }: { label: string; value?: string | null 
 export function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: () => void }) {
   const { t } = useTranslation()
   const { data: copy, isLoading } = useCopy(copyId)
+  const panelRef = useRef<HTMLDivElement>(null)
+  useModalDismiss(panelRef, onClose)
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
@@ -29,7 +33,7 @@ export function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: 
       aria-label={t('trades.copyDetail.dialogAriaLabel')}
     >
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} aria-hidden="true" />
-      <div className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl sm:max-w-lg sm:rounded-xl">
+      <div ref={panelRef} tabIndex={-1} className="relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-2xl focus:outline-none sm:max-w-lg sm:rounded-xl">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex items-start gap-3 min-w-0">
             <GameThumb src={copy?.board_game_thumbnail} alt={copy?.board_game_name ?? ''} className="h-32 w-32" />

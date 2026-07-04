@@ -64,7 +64,7 @@ function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-2xl border-2 border-ink bg-cream py-1 shadow-card">
+        <div className="menu-enter absolute right-0 z-50 mt-2 max-h-96 w-[min(20rem,calc(100vw-1.5rem))] origin-top-right overflow-y-auto rounded-2xl border-2 border-ink bg-cream py-1 shadow-card">
           <div className="border-b border-ink/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-moss">
             {t('nav.notifications')}
           </div>
@@ -200,7 +200,7 @@ export default function NavBar() {
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-44 rounded-2xl border-2 border-ink bg-cream py-1 shadow-card z-50">
+                  <div className="menu-enter absolute right-0 mt-2 w-44 origin-top-right rounded-2xl border-2 border-ink bg-cream py-1 shadow-card z-50">
                     <Link
                       to="/profile"
                       onClick={() => setUserMenuOpen(false)}
@@ -272,7 +272,7 @@ export default function NavBar() {
 
         {/* Mobile menu */}
         {open && (
-          <nav className="sm:hidden border-t-2 border-ink/10 px-1 py-2 flex flex-col gap-1">
+          <nav className="menu-enter origin-top sm:hidden border-t-2 border-ink/10 px-1 py-2 flex flex-col gap-1">
             <LanguageSwitcher />
             {navLinks.map(({ to, label }) => (
               <NavLink

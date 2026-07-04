@@ -1,23 +1,30 @@
+import { lazy } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import App from '../App'
-import HomePage from '../features/home/HomePage'
-import EventsPage from '../features/events/EventsPage'
-import EventDetailPage from '../features/events/EventDetailPage'
-import LoginPage from '../features/login/LoginPage'
-import RegisterPage from '../features/auth/RegisterPage'
-import ProfilePage from '../features/profile/ProfilePage'
-import PublicProfilePage from '../features/profile/PublicProfilePage'
-import MyCopiesPage from '../features/copies/MyCopiesPage'
 import RequireAuth from '../components/RequireAuth'
-import WantListBuilderPage from '../features/trades/WantListBuilderPage'
-import MyWantsPage from '../features/trades/MyWantsPage'
-import MatchRunPage from '../features/matching/MatchRunPage'
-import ManageEventPage from '../features/events/ManageEventPage'
+import { NotFoundPage, RouteErrorBoundary } from '../features/errors/ErrorPage'
+
+// Route-level code splitting: each page ships in its own chunk so a first-time
+// visitor to the homepage doesn't download the heavy builder/wants/matching
+// screens. Suspense fallback lives in App around <Outlet />.
+const HomePage = lazy(() => import('../features/home/HomePage'))
+const EventsPage = lazy(() => import('../features/events/EventsPage'))
+const EventDetailPage = lazy(() => import('../features/events/EventDetailPage'))
+const LoginPage = lazy(() => import('../features/login/LoginPage'))
+const RegisterPage = lazy(() => import('../features/auth/RegisterPage'))
+const ProfilePage = lazy(() => import('../features/profile/ProfilePage'))
+const PublicProfilePage = lazy(() => import('../features/profile/PublicProfilePage'))
+const MyCopiesPage = lazy(() => import('../features/copies/MyCopiesPage'))
+const WantListBuilderPage = lazy(() => import('../features/trades/WantListBuilderPage'))
+const MyWantsPage = lazy(() => import('../features/trades/MyWantsPage'))
+const MatchRunPage = lazy(() => import('../features/matching/MatchRunPage'))
+const ManageEventPage = lazy(() => import('../features/events/ManageEventPage'))
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <App />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'events', element: <EventsPage /> },
@@ -66,6 +73,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'u/:username', element: <PublicProfilePage /> },
+      { path: '*', element: <NotFoundPage /> },
     ],
   },
 ])

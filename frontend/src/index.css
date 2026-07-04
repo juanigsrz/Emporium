@@ -101,8 +101,27 @@
     animation: page-enter 0.4s ease both;
   }
 
+  /* Toast entrance — rise + fade so it reads as a placed sticker. */
+  @keyframes toast-enter {
+    from { opacity: 0; transform: translateY(0.5rem) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .toast-enter {
+    animation: toast-enter 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* Dropdown / popover entrance — quick drop-in from the trigger edge. */
+  @keyframes menu-enter {
+    from { opacity: 0; transform: translateY(-0.35rem) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .menu-enter {
+    animation: menu-enter 0.14s ease-out both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     main > * { animation: none; }
+    .toast-enter, .menu-enter { animation: none; }
   }
 }

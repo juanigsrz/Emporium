@@ -4,12 +4,14 @@ import { z } from 'zod'
 import { useMemo, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import { loginApi, fetchCurrentUser } from '../../api/auth'
 import { useAuthStore } from '../../store/auth'
 import GoogleSignInButton from '../../components/GoogleSignInButton'
 
 export default function LoginPage() {
   const { t } = useTranslation()
+  usePageTitle(t('login.title'))
   const navigate = useNavigate()
   const location = useLocation()
   const setSession = useAuthStore((s) => s.setSession)

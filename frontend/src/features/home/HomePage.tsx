@@ -1,18 +1,15 @@
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 export default function HomePage() {
   const { t } = useTranslation()
+  usePageTitle(null)
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-14 sm:py-20">
       {/* Hero */}
       <header className="relative">
-        {/*
-        <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink/15 bg-sage/60 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-moss">
-          <span className="h-2 w-2 rounded-full bg-coral" />
-          Emporium
-        </p>
-        */}
         <h1 className="max-w-3xl text-4xl font-bold text-ink sm:text-6xl">
           {t('home.heroTitle')}
         </h1>
@@ -21,45 +18,12 @@ export default function HomePage() {
         </p>
 
         <div className="mt-7 flex flex-wrap items-center gap-3">
-          <a
-            href="/events"
+          <Link
+            to="/events"
             className="rounded-2xl border-2 border-ink bg-butter px-6 py-3 text-sm font-bold text-ink shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {t('home.browseEvents')}
-          </a>
-
-          {/* Status — slim inline strip (live backend health) */}
-          {/*
-          <span className="inline-flex items-center gap-2 rounded-2xl border-2 border-ink/15 bg-cream px-3.5 py-2.5 text-xs font-semibold shadow-sm">
-            {isLoading && (
-              <>
-                <span className="h-2 w-2 animate-pulse rounded-full bg-gray-300" />
-                <span className="text-moss">Checking backend…</span>
-              </>
-            )}
-            {isError && (
-              <>
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                <span className="text-red-600">
-                  Backend unreachable — {error instanceof Error ? error.message : 'unknown error'}
-                </span>
-              </>
-            )}
-            
-            {data && (
-              <>
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    data.status === 'ok' ? 'bg-green-500' : 'bg-yellow-500'
-                  }`}
-                />
-                <span className={data.status === 'ok' ? 'text-green-700' : 'text-yellow-700'}>
-                  Backend: {data.status}
-                </span>
-              </>
-            )}
-          </span>
-          */}
+          </Link>
         </div>
       </header>
 
@@ -104,8 +68,8 @@ function FeatureCard({
   const { t } = useTranslation()
 
   return (
-    <a
-      href={href}
+    <Link
+      to={href}
       className="group relative block overflow-hidden rounded-3xl border-2 border-ink bg-cream p-2 shadow-card transition-transform hover:-translate-y-1.5"
     >
       <div className={`relative flex h-24 items-center rounded-[1.1rem] border-2 border-ink/15 ${tint} px-5`}>
@@ -126,6 +90,6 @@ function FeatureCard({
           </svg>
         </span>
       </div>
-    </a>
+    </Link>
   )
 }

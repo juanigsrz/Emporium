@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import type { TFunction } from 'i18next'
 
 import { useEvent, useEventListings, useEventGames } from '../../api/events'
@@ -1813,6 +1814,7 @@ export default function WantListBuilderPage() {
   const { user } = useAuthStore()
 
   const { data: event, isLoading: eventLoading, isError: eventError } = useEvent(slug)
+  usePageTitle(event?.name ? `${t('trades.builder.title')} · ${event.name}` : t('trades.builder.title'))
   const { data: listingsData } = useEventListings(slug, { user: user?.username })
   const { data: offerGroupsData = [] } = useOfferGroups(slug)
   const { data: wantGroupsData = [] } = useWantGroups(slug)

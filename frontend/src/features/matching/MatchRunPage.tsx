@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import { useParams, Link } from 'react-router-dom'
 import BackButton from '../../components/BackButton'
 import { useEvent } from '../../api/events'
@@ -1174,6 +1175,7 @@ export default function MatchRunPage() {
 
   const { data: event, isLoading: eventLoading } = useEvent(slug)
   const { data: runsData, isLoading: runsLoading } = useMatchRuns(slug)
+  usePageTitle(event?.name ? `${t('matching.title')} · ${event.name}` : t('matching.title'))
 
   const runs = runsData?.results ?? []
 

@@ -9,7 +9,12 @@
     "logout": "Cerrar sesión",
     "login": "Iniciar sesión",
     "register": "Registrarse",
-    "tagline": "un catálogo de intercambios matemáticos de juegos de mesa"
+    "tagline": "un catálogo de intercambios matemáticos de juegos de mesa",
+    "toast": {
+      "saved": "Cambios guardados",
+      "added": "Agregado",
+      "removed": "Eliminado"
+    }
   },
   "nav": {
     "home": "Inicio",
@@ -1003,6 +1008,19 @@
       "tradeRatings": "Valoraciones de intercambio",
       "totalRatings": "Valoraciones totales",
       "average": "Promedio"
+    }
+  },
+  "errors": {
+    "notFound": {
+      "title": "Esta página se cayó de la mesa",
+      "body": "No encontramos lo que buscabas. Puede que se haya movido, intercambiado o que nunca existiera.",
+      "backHome": "Volver al inicio"
+    },
+    "generic": {
+      "title": "Algo volcó el tablero",
+      "body": "Un error inesperado interrumpió la página. Probá recargar; si sigue pasando, volvé al inicio.",
+      "reload": "Recargar página",
+      "backHome": "Volver al inicio"
     }
   }
 }
