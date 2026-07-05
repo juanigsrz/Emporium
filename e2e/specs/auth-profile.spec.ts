@@ -2,7 +2,7 @@
 import { test, expect, ROLES } from '../helpers/fixtures'
 import { PASSWORD } from '../helpers/api'
 
-test('register a brand-new user through the UI', async ({ page }) => {
+test('register a brand-new user through the UI, then log out', async ({ page }) => {
   const username = `e2e_reg_${Date.now()}`
   await page.goto('/register')
   await page.getByLabel('Username').fill(username)
@@ -13,11 +13,21 @@ test('register a brand-new user through the UI', async ({ page }) => {
   await pw.last().fill(PASSWORD)
   await page.getByRole('button', { name: /register|sign up|create/i }).click()
   await expect(page).not.toHaveURL(/\/register/)
+
+  // Registration auto-logs-in (RegisterPage.tsx stores the token and
+  // navigates home), so log out here with this throwaway user. Deliberately
+  // NOT done with a fixture role: POST /auth/logout/ deletes the DRF token
+  // server-side, which would invalidate that role's storageState for every
+  // later spec. Logout lives in the user dropdown, whose trigger's accessible
+  // name contains the username.
+  await page.getByRole('button', { name: new RegExp(username) }).click()
+  await page.getByRole('button', { name: 'Logout' }).click()
+  await expect(page.getByRole('link', { name: 'Login' })).toBeVisible()
 })
 
 test('bad credentials show an error and stay on /login', async ({ page }) => {
   await page.goto('/login')
-  await page.getByLabel('Username').fill('e2e_alice')
+  await page.getByLabel('Username').fill(ROLES.alice)
   await page.getByLabel('Password').fill('wrong-password')
   // exact: true — the page also renders a "Sign in with Google" button, whose
   // accessible name contains "Sign in" as a substring.

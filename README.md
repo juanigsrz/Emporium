@@ -48,9 +48,12 @@ python manage.py test
 ### End-to-end tests
 
 Browser E2E suite (Playwright) covering full user journeys. It boots both
-servers itself against a throwaway `backend/e2e.sqlite3`:
+servers itself against a throwaway `backend/e2e.sqlite3`, and expects the
+backend virtualenv at `backend/.venv` (the Playwright config invokes
+`backend/.venv/bin/python3` directly):
 
 ```bash
+python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt
 cd e2e
 npm install && npx playwright install chromium   # first time
 npx playwright test                              # full suite

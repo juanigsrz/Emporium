@@ -1,7 +1,7 @@
 // e2e/specs/browse-catalog.spec.ts
 import { test, expect } from '../helpers/fixtures'
 import {
-  createEvent, advanceEvent, joinEvent, leaveEvent, createCopy, addListing, API, authHeaders,
+  createEvent, advanceEvent, joinEvent, archiveEvent, createCopy, addListing, API, authHeaders,
 } from '../helpers/api'
 
 test.describe('event browse + event-scoped catalog', () => {
@@ -21,12 +21,14 @@ test.describe('event browse + event-scoped catalog', () => {
     }
   })
 
-  // The server allows only one non-archived event participation per user, and
-  // this event never advances past SUBMISSIONS_OPEN — without this, alice
-  // stays "stuck" here and the next run's beforeAll 400s trying to join her to
-  // a fresh event.
+  // The server allows only one non-archived event participation per user —
+  // without this, alice stays "stuck" here and the next run's beforeAll 400s
+  // trying to join her to a fresh event. Archiving (rather than alice leaving)
+  // frees every participant even if beforeAll died between createEvent and
+  // joinEvent; the slug guard keeps a pre-createEvent failure from cascading.
   test.afterAll(async ({ request, tokens }) => {
-    await leaveEvent(request, tokens.alice, slug)
+    if (!slug) return
+    await archiveEvent(request, tokens.organizer, slug)
   })
 
   test('events list shows the event; search finds it', async ({ pageAs }) => {
