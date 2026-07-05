@@ -57,11 +57,20 @@ test.describe('organizer edge cases', () => {
 
     // bob (a shared role account) has no profile location set — the backend's
     // _enforce_location_gate rejects the join with a "location" field error,
-    // which JoinLeaveButton surfaces inline next to the Join button.
+    // which JoinLeaveButton surfaces inline next to the Join button. Assert
+    // the EXACT backend error string (events/views.py _enforce_location_gate):
+    // a loose /location/i would always match the static "Location required"
+    // badge the header renders for any require_location event, and would pass
+    // even if the gate were broken and the join succeeded.
     const page = await pageAs('bob')
     await page.goto(`/events/${slug}`)
     await page.getByRole('button', { name: 'Join event' }).click()
-    await expect(page.getByText(/location/i).first()).toBeVisible()
+    await expect(
+      page.getByText('Set your location on your profile to join this event.'),
+    ).toBeVisible()
+    // And the join really failed: still a Join button, no participating state.
+    await expect(page.getByRole('button', { name: 'Join event' })).toBeVisible()
+    await expect(page.getByText("You're participating")).toHaveCount(0)
   })
 
   test('pending copy cannot be listed (400 surfaced at the API)', async ({ request, tokens }) => {
@@ -139,6 +148,11 @@ test.describe('organizer edge cases', () => {
   test('builder advanced panel exposes caps and combos', async ({ pageAs, request, tokens }) => {
     const event = await createEvent(request, tokens.organizer, `Caps ${Date.now()}`)
     slug = event.slug
+    // Deliberately stays at SUBMISSIONS_OPEN (the brief advanced to
+    // WANTLIST_OPEN): combos lock once want-lists open (combo_views.py
+    // _assert_editable → submissions_locked), so the combo seed below must
+    // happen before that anyway, and the builder's edit affordances render in
+    // both statuses (its `locked` = inputs_locked, which only flips at MATCHING).
     await advanceEvent(request, tokens.organizer, slug, 'SUBMISSIONS_OPEN')
     await joinEvent(request, tokens.alice, slug)
     const copy1 = await createCopy(request, tokens.alice, 900001)
