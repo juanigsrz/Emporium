@@ -1,8 +1,9 @@
 // e2e/helpers/seed.ts
 import { APIRequestContext, expect } from '@playwright/test'
 import {
-  API, authHeaders, createEvent, advanceEvent, joinEvent, createCopy,
-  addListing, createOfferGroup, createWantGroup, createWish, runMatch,
+  API, authHeaders, archiveEvent, createEvent, advanceEvent, joinEvent,
+  createCopy, addListing, createOfferGroup, createWantGroup, createWish,
+  runMatch,
 } from './api'
 import { Role, ROLES } from './fixtures'
 
@@ -49,6 +50,25 @@ export async function seedMatchedEvent(
     opts.money ? { money_enabled: true } : {},
   )
   const slug = event.slug
+
+  // Self-cleaning: if anything below throws, callers never learn the slug, so
+  // their afterEach safety nets can't archive it and alice/bob/carol would
+  // stay joined to the dead event — every later joinEvent() in the suite then
+  // 400s ("one active event per user"). Archive best-effort and rethrow.
+  try {
+    return await seedInto(request, tokens, slug, opts)
+  } catch (err) {
+    await archiveEvent(request, tokens.organizer, slug).catch(() => {})
+    throw err
+  }
+}
+
+async function seedInto(
+  request: APIRequestContext,
+  tokens: Record<Role, string>,
+  slug: string,
+  opts: { money?: boolean },
+): Promise<{ slug: string; runId: number }> {
   await advanceEvent(request, tokens.organizer, slug, 'SUBMISSIONS_OPEN')
 
   const players: Role[] = ['alice', 'bob', 'carol']
