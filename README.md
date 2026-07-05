@@ -45,6 +45,18 @@ Run the tests:
 python manage.py test
 ```
 
+### End-to-end tests
+
+Browser E2E suite (Playwright) covering full user journeys. It boots both
+servers itself against a throwaway `backend/e2e.sqlite3`:
+
+```bash
+cd e2e
+npm install && npx playwright install chromium   # first time
+npx playwright test                              # full suite
+npx playwright test --headed                     # watch it run
+```
+
 ### Google Sign-In (optional)
 
 "Sign in with Google" uses the Google Identity Services ID-token flow. To enable it,
