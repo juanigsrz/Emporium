@@ -5,8 +5,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { usePageTitle } from '../../hooks/usePageTitle'
-import { loginApi, fetchCurrentUser } from '../../api/auth'
-import { useAuthStore } from '../../store/auth'
+import { loginApi, completeLogin } from '../../api/auth'
 import GoogleSignInButton from '../../components/GoogleSignInButton'
 
 export default function LoginPage() {
@@ -14,7 +13,6 @@ export default function LoginPage() {
   usePageTitle(t('login.title'))
   const navigate = useNavigate()
   const location = useLocation()
-  const setSession = useAuthStore((s) => s.setSession)
   const [serverError, setServerError] = useState<string | null>(null)
 
   const schema = useMemo(() => z.object({
@@ -37,10 +35,7 @@ export default function LoginPage() {
     setServerError(null)
     try {
       const { key } = await loginApi(values)
-      // Temporarily set token so fetchCurrentUser request is authenticated
-      useAuthStore.setState({ token: key })
-      const user = await fetchCurrentUser()
-      setSession(key, user)
+      await completeLogin(key)
       navigate(from, { replace: true })
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from './client'
+import { apiClient, fetchAllPages } from './client'
 import type { PaginatedResponse } from './games'
 
 // ---- Types ----
@@ -134,7 +134,7 @@ export function useCopy(id: number | string | undefined) {
 export function useMyCopies() {
   return useQuery({
     queryKey: COPIES_KEYS.mine(),
-    queryFn: () => fetchCopies({ mine: true }),
+    queryFn: () => fetchAllPages<Copy>('/copies/', { mine: 'true' }),
     staleTime: 30_000,
   })
 }
