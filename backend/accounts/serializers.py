@@ -102,6 +102,28 @@ class ProfileSerializer(serializers.ModelSerializer):
         return round(sum(qs) / len(qs), 2)
 
 
+class PublicProfileSerializer(ProfileSerializer):
+    """Profile as seen by other users — no email or exact coordinates."""
+
+    email = None
+
+    class Meta(ProfileSerializer.Meta):
+        fields = [
+            "username",
+            "display_name",
+            "bgg_username",
+            "bio",
+            "location",
+            "region",
+            "avatar_url",
+            "ratings_count",
+            "average_score",
+            "max_trade_distance_km",
+            "created",
+            "updated",
+        ]
+
+
 # ---------------------------------------------------------------------------
 # UserBlock
 # ---------------------------------------------------------------------------

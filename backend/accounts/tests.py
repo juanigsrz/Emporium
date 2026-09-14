@@ -131,6 +131,21 @@ class ProfileTests(APITestCase):
         resp = self.client.get(profile_url("nobody"))
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_public_profile_hides_email_and_coordinates(self):
+        # Anonymous read (IsAuthenticatedOrReadOnly) must not leak private fields.
+        resp = self.client.get(profile_url("bob"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        for key in ("email", "latitude", "longitude"):
+            self.assertNotIn(key, resp.data)
+        self.assertEqual(resp.data["username"], "bob")
+
+    def test_profile_me_includes_email_and_coordinates(self):
+        self.auth()
+        resp = self.client.get(PROFILE_ME_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        for key in ("email", "latitude", "longitude"):
+            self.assertIn(key, resp.data)
+
     def test_cannot_patch_other_profile(self):
         """PATCH /api/profiles/{username}/ does not exist — patching me as other user
         is the relevant 403 check: alice's token cannot edit bob's profile via me endpoint."""

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -21,6 +22,11 @@ SECRET_KEY = os.environ.get(
 )
 
 DEBUG = os.environ.get("DEBUG", "True").lower() not in ("false", "0", "no")
+
+if not DEBUG and SECRET_KEY.startswith("django-insecure"):
+    raise ImproperlyConfigured(
+        "SECRET_KEY must be set in the environment when DEBUG is off."
+    )
 
 _allowed_hosts = os.environ.get("ALLOWED_HOSTS", "")
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()] or [
@@ -218,7 +224,7 @@ CORS_ALLOW_CREDENTIALS = True
 # ---------------------------------------------------------------------------
 # Celery (no broker required in dev — ALWAYS_EAGER mode)
 # ---------------------------------------------------------------------------
-CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "True").lower() not in ("false", "0", "no")
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache")

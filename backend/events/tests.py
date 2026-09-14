@@ -29,6 +29,7 @@ Tests:
 import csv
 import os
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
@@ -219,6 +220,12 @@ class EventPermissionTests(EventTestBase):
         self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(TradeEvent.objects.filter(slug=self.slug).exists())
 
+    def test_organizer_delete_blocked_once_matching_started(self):
+        TradeEvent.objects.filter(slug=self.slug).update(status=TradeEvent.Status.MATCHING)
+        resp = self.client.delete(event_url(self.slug))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(TradeEvent.objects.filter(slug=self.slug).exists())
+
 
 # ---------------------------------------------------------------------------
 # 5–8: State machine / transitions
@@ -252,6 +259,15 @@ class EventTransitionTests(EventTestBase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["status"], "SUBMISSIONS_OPEN")
+
+    def test_archive_rolls_back_when_carryover_fails(self):
+        TradeEvent.objects.filter(slug=self.slug).update(status=TradeEvent.Status.SHIPPING)
+        self.client.raise_request_exception = False
+        with patch("matching.services.apply_carryover", side_effect=RuntimeError("boom")), \
+                self.assertLogs("django.request", "ERROR"):
+            resp = self.client.post(transition_url(self.slug), {"to": "ARCHIVED"})
+        self.assertEqual(resp.status_code, 500)
+        self.assertEqual(TradeEvent.objects.get(slug=self.slug).status, "SHIPPING")
 
     def test_allowed_transitions_updates_after_transition(self):
         # From DRAFT the only allowed transition is SUBMISSIONS_OPEN
@@ -629,3 +645,45 @@ class MoneyConfigTests(EventTestBase):
         resp = self.client.post(join_url(slug), {"max_spend": "30"}, format="json")
         self.assertIn(resp.status_code, (status.HTTP_200_OK, status.HTTP_201_CREATED))
         self.assertEqual(str(resp.data["max_spend"]), "0.00")
+
+    def test_participants_budget_visible_only_to_self_and_organizer(self):
+        self.client.force_authenticate(user=self.user2)
+        self.client.post(join_url(self.slug), {"max_spend": "30.00"}, format="json")
+        carol = User.objects.create_user(username="carol", password="pass1234")
+
+        def bobs_budget():
+            resp = self.client.get(participants_url(self.slug))
+            self.assertEqual(resp.status_code, status.HTTP_200_OK)
+            return next(p["max_spend"] for p in resp.data["results"] if p["username"] == "bob")
+
+        self.assertEqual(bobs_budget(), "30.00")            # bob himself
+        self.client.force_authenticate(user=self.user1)
+        self.assertEqual(bobs_budget(), "30.00")            # organizer
+        self.client.force_authenticate(user=carol)
+        self.assertIsNone(bobs_budget())                    # anyone else
+
+    def test_max_spend_locked_once_matching_started(self):
+        self.client.force_authenticate(user=self.user2)
+        self.client.post(join_url(self.slug), {"max_spend": "30.00"}, format="json")
+        TradeEvent.objects.filter(slug=self.slug).update(status=TradeEvent.Status.MATCHING)
+        resp = self.client.post(join_url(self.slug), {"max_spend": "40.00"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        p = EventParticipation.objects.get(event__slug=self.slug, user=self.user2)
+        self.assertEqual(str(p.max_spend), "30.00")
+        # Re-joining without a budget is still a harmless no-op.
+        resp = self.client.post(join_url(self.slug), {}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_money_settings_locked_once_matching_started(self):
+        TradeEvent.objects.filter(slug=self.slug).update(status=TradeEvent.Status.MATCHING)
+        resp = self.client.patch(event_url(self.slug), {"money_enabled": False}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("money_enabled", resp.data)
+        resp = self.client.patch(event_url(self.slug), {"max_money_per_user": "10.00"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("max_money_per_user", resp.data)
+        # Unchanged money values alongside other edits are still accepted.
+        resp = self.client.patch(event_url(self.slug), {
+            "description": "Updated", "money_enabled": True, "max_money_per_user": "50.00",
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

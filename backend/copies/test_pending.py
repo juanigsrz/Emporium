@@ -36,3 +36,15 @@ class PendingCopyTest(APITestCase):
         self.assertEqual(r.status_code, 200)
         self.copy.refresh_from_db()
         self.assertFalse(self.copy.is_pending)
+
+    def test_patch_clearing_condition_makes_pending(self):
+        # A complete copy that loses a required detail must fall back to pending.
+        copy = Copy.objects.create(
+            owner=self.u, board_game=self.bg, version=self.version,
+            language="English", condition="GOOD",
+        )
+        self.assertFalse(copy.is_pending)
+        r = self.client.patch(f"/api/copies/{copy.id}/", {"condition": ""}, format="json")
+        self.assertEqual(r.status_code, 200)
+        copy.refresh_from_db()
+        self.assertTrue(copy.is_pending)

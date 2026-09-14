@@ -9,11 +9,13 @@ from rest_framework.test import APITestCase
 
 from catalog.models import BoardGame
 from copies.models import Copy
-from events.models import EventListing, EventParticipation, TradeEvent
+from events.models import Combo, ComboItem, EventListing, EventParticipation, TradeEvent
 from events.admin_actions import kick_participant
 from events.tests import import_boardgames_csv, _make_csv, SAMPLE_ROWS
+from matching.external_solver import build_wants
 from trades.models import (
     OfferGroup, OfferGroupItem, WantGroup, WantGroupItem, TradeWish, WantBid,
+    TradeCap, TradeCapItem,
 )
 
 User = get_user_model()
@@ -81,6 +83,18 @@ class KickServiceTests(AdminDashboardBase):
         self.assertEqual(summary["removed_listings"], 1)
         self.assertEqual(summary["removed_wishes"], 1)
         self.assertEqual(summary["affected_other_users"], 1)
+
+    def test_kick_removes_victim_combos_and_caps(self):
+        combo = Combo.objects.create(event=self.event, owner=self.victim, name="vc")
+        ComboItem.objects.create(combo=combo, event_listing=self.victim_listing)
+        cap = TradeCap.objects.create(event=self.event, user=self.victim, kind="GIVE", n=1)
+        TradeCapItem.objects.create(cap=cap, event_listing=self.victim_listing)
+        self.assertIn(combo.combo_code, build_wants(self.event))
+
+        kick_participant(self.event, self.victim)
+        self.assertFalse(Combo.objects.filter(pk=combo.pk).exists())
+        self.assertFalse(TradeCap.objects.filter(pk=cap.pk).exists())
+        self.assertNotIn(combo.combo_code, build_wants(self.event))
 
     def test_kick_cascades_other_users_listing_refs_only(self):
         kick_participant(self.event, self.victim)

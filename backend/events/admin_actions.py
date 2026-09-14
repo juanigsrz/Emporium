@@ -14,8 +14,9 @@ from django.db import transaction
 
 from trades.models import (
     OfferGroup, WantGroup, WantGroupItem, TradeWish, WantBid, UserGamePrice,
+    TradeCap,
 )
-from .models import EventListing, EventParticipation
+from .models import Combo, EventListing, EventParticipation
 
 
 @transaction.atomic
@@ -64,6 +65,8 @@ def kick_participant(event, user):
     WantGroup.objects.filter(event=event, user=user).delete()
     WantBid.objects.filter(event=event, user=user).delete()
     UserGamePrice.objects.filter(event=event, user=user).delete()
+    Combo.objects.filter(event=event, owner=user).delete()
+    TradeCap.objects.filter(event=event, user=user).delete()
     listings.delete()
     EventParticipation.objects.filter(event=event, user=user).delete()
 

@@ -4,9 +4,9 @@ trades/models.py
 F5 X-to-Y Trades models.
 
 Models:
-    OfferGroup      — named set of a user's own event listings + max_give (X).
+    OfferGroup      — named set of a user's own event listings + max_give (X: give exactly X of them).
     OfferGroupItem  — a single listing inside an OfferGroup.
-    WantGroup       — named set of target games/listings + min_receive (Y).
+    WantGroup       — named set of target games/listings + min_receive (Y: receive exactly Y of them).
     WantGroupItem   — a tiered, ranked target inside a WantGroup.
     TradeWish       — links one OfferGroup to one WantGroup (the trade intention).
     UserGamePrice   — a user's canonical per-game price in an event (defaults ask + bid).
@@ -41,7 +41,7 @@ class OfferGroup(models.Model):
         related_name="offer_groups",
     )
     name     = models.CharField(max_length=120)
-    max_give = models.PositiveIntegerField(default=1)   # X
+    max_give = models.PositiveIntegerField(default=1)   # X — give exactly X of these
     rules    = models.JSONField(default=dict)
 
     created = models.DateTimeField(auto_now_add=True)
@@ -121,7 +121,7 @@ class OfferGroupItem(models.Model):
 # ---------------------------------------------------------------------------
 
 class WantGroup(models.Model):
-    """A named set of targets the user wants, with a minimum receive bound (Y)."""
+    """A named set of targets the user wants, with a receive count (Y): exactly Y of them."""
 
     event = models.ForeignKey(
         "events.TradeEvent",
@@ -134,7 +134,7 @@ class WantGroup(models.Model):
         related_name="want_groups",
     )
     name         = models.CharField(max_length=120)
-    min_receive  = models.PositiveIntegerField(default=1)  # Y
+    min_receive  = models.PositiveIntegerField(default=1)  # Y — receive exactly Y of these
     # Set by the normal game-browse want builder: the solver must not award the
     # user more than one copy of the same canonical game. The advanced X-to-Y
     # builder leaves this off.
@@ -203,7 +203,7 @@ class TradeWish(models.Model):
     """
     Links one OfferGroup to one WantGroup (one trade intention).
 
-    Effective bounds:
+    Effective counts (exact):
         X = offer_group.max_give
         Y = want_group.min_receive
     """

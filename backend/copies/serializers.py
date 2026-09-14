@@ -122,7 +122,6 @@ class CopySerializer(serializers.ModelSerializer):
             validated_data["version"] = version
             validated_data["language"] = language
         instance = super().update(instance, validated_data)
-        if instance.is_pending:
-            instance.recompute_pending()
-            instance.save(update_fields=["is_pending", "updated"])
+        instance.recompute_pending()
+        instance.save(update_fields=["is_pending", "updated"])
         return instance
