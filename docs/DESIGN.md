@@ -24,8 +24,8 @@ level** (BoardGameGeek game), with individual user copies grouped underneath.
 The platform supports two trade styles unified under one representation:
 
 - **Traditional 1-to-1** — give item A, want any of {B, C, D}.
-- **Advanced M-to-N** — give up to X items from an *offer group*, receive at
-  least Y items from a *want group*.
+- **Advanced M-to-N** — give exactly X items from an *offer group*, receive
+  exactly Y items from a *want group*.
 
 Both are expressed as `(OFFER GROUP) --X:Y--> (WANT GROUP)` (see §4).
 
@@ -84,10 +84,10 @@ one reusable **WantGroup**:
 ```
 
 - **OfferGroup** — a named set of the *wishing user's own copies* in the event,
-  plus `max_give` (X = max number of those copies the user will part with).
+  plus `max_give` (X = exactly how many of those copies the user gives).
 - **WantGroup** — a named set of targets the user wants. Each target is either a
   **canonical game** ("any copy of Azul") or a **specific listing**, with a
-  `tier` and `rank` for priority. `min_receive` (Y) = minimum the user must get.
+  `tier` and `rank` for priority. `min_receive` (Y) = exactly how many the user receives.
 
 ### Examples
 - **1-to-1 (classic):** OfferGroup `{Catan}` X=1 → WantGroup `{Azul, Pandemic,
@@ -134,8 +134,8 @@ backwards except organizer-forced re-open).
 
 - **Simple 2-cycle:** A gives Catan→B, B gives Azul→A.
 - **3-cycle:** A→B→C→A.
-- **M-to-N partial:** OfferGroup X=2 where only 1 of the 2 offered copies is
-  matched (respects "up to X").
+- **M-to-N:** OfferGroup X=2 → WantGroup Y=1: both offered copies are matched
+  and exactly one target is received (exact X/Y — no partial fills).
 - **Unmatched:** wishes with no viable cycle stay unmatched and are reported.
 - **Blocked users:** never matched to each other (respect `UserBlock`).
 

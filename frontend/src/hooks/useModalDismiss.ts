@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
@@ -14,6 +14,13 @@ const FOCUSABLE =
  * so it can receive focus when it has no focusable children yet).
  */
 export function useModalDismiss(panelRef: RefObject<HTMLElement>, onClose: () => void) {
+  // Callers pass inline closures; track the latest in a ref so the mount effect
+  // below never re-runs (and re-yanks focus) on parent re-renders.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -26,7 +33,7 @@ export function useModalDismiss(panelRef: RefObject<HTMLElement>, onClose: () =>
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab' || !node) return
@@ -51,5 +58,5 @@ export function useModalDismiss(panelRef: RefObject<HTMLElement>, onClose: () =>
       document.body.style.overflow = prevOverflow
       prevFocus?.focus?.()
     }
-  }, [panelRef, onClose])
+  }, [panelRef])
 }

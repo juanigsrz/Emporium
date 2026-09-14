@@ -24,11 +24,8 @@ Permissions:
     - Listings delete: copy.owner == request.user
 """
 
-import logging
-
 from django.contrib.auth import get_user_model
-
-logger = logging.getLogger(__name__)
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -178,6 +175,10 @@ class TradeEventViewSet(
     def destroy(self, request, *args, **kwargs):
         event = self.get_object()
         self._check_organizer(event)
+        if event.inputs_locked:
+            raise ValidationError(
+                {"detail": "Events can't be deleted once matching has started."}
+            )
         return super().destroy(request, *args, **kwargs)
 
     # ------------------------------------------------------------------
@@ -203,15 +204,14 @@ class TradeEventViewSet(
                 }
             )
 
-        event.status = target
-        event.save(update_fields=["status", "updated"])
-
-        if target == TradeEvent.Status.ARCHIVED:
-            from matching.services import apply_carryover
-            try:
+        # Archiving and its carryover succeed or fail together: a carryover
+        # error rolls the status back and surfaces instead of being swallowed.
+        with transaction.atomic():
+            event.status = target
+            event.save(update_fields=["status", "updated"])
+            if target == TradeEvent.Status.ARCHIVED:
+                from matching.services import apply_carryover
                 apply_carryover(event)
-            except Exception:  # never block archiving on a carryover hiccup (idempotent retry-safe)
-                logger.exception("carryover failed for event %s", event.slug)
 
         from notifications.models import Notification
         Notification.objects.bulk_create([
@@ -233,9 +233,9 @@ class TradeEventViewSet(
         participations = event.participations.select_related("user").all()
         page = self.paginate_queryset(participations)
         if page is not None:
-            ser = EventParticipationSerializer(page, many=True)
+            ser = EventParticipationSerializer(page, many=True, context={"request": request})
             return self.get_paginated_response(ser.data)
-        ser = EventParticipationSerializer(participations, many=True)
+        ser = EventParticipationSerializer(participations, many=True, context={"request": request})
         return Response(ser.data)
 
     # ------------------------------------------------------------------
@@ -262,6 +262,10 @@ class TradeEventViewSet(
                 "shipping_pref": request.data.get("shipping_pref", ""),
             },
         )
+        if event.inputs_locked and "max_spend" in request.data:
+            raise ValidationError(
+                {"detail": "Budgets are locked once matching has started."}
+            )
         # Money budget: settable here so participants can set/update it without a
         # separate endpoint. Ignored unless the organizer enabled money.
         if event.money_enabled and "max_spend" in request.data:
@@ -270,7 +274,7 @@ class TradeEventViewSet(
             )
             participation.save(update_fields=["max_spend"])
 
-        ser = EventParticipationSerializer(participation)
+        ser = EventParticipationSerializer(participation, context={"request": request})
         return Response(
             ser.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,

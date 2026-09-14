@@ -252,9 +252,15 @@ class MatchRunUploadView(APIView):
         )
         try:
             result, summary, log = load_solution(run, raw)
-        except ValueError as exc:
+        except (ValueError, KeyError, TypeError) as exc:
+            # ValueError: unresolvable token, checksum or money mismatch (message is
+            # user-facing). KeyError/TypeError: a document of the wrong shape --
+            # still the organizer's input, so a 400, not a 500 with a RUNNING run
+            # left behind.
             run.delete()  # nothing half-persisted (load_solution is atomic)
-            raise ValidationError({"detail": str(exc)})
+            detail = (str(exc) if isinstance(exc, ValueError)
+                      else f"Malformed solver document ({type(exc).__name__}: {exc}).")
+            raise ValidationError({"detail": detail})
 
         run.result = result
         run.summary = summary
@@ -263,6 +269,7 @@ class MatchRunUploadView(APIView):
         run.finished_at = datetime.now(timezone.utc)
         run.save(update_fields=[
             "result", "summary", "log", "status", "finished_at", "algorithm",
+            "solver_input_checksum", "solver_result_checksum",
         ])
         return Response(
             {"id": run.pk, "status": run.status, "summary": run.summary},
@@ -427,6 +434,10 @@ class ShipmentDetailView(APIView):
         if target == "SENT":
             if request.user != a.giver:
                 raise PermissionDenied("Only the sender can mark a shipment sent.")
+            if shipment.status == Shipment.Status.RECEIVED:
+                raise ValidationError(
+                    {"status": "Shipment is already received; it can't go back to sent."}
+                )
             shipment.status = Shipment.Status.SENT
             shipment.sent_at = timezone.now()
             if "shipping_info" in request.data:
@@ -492,6 +503,10 @@ class PaymentDetailView(APIView):
         if target == "PAID":
             if request.user != payment.from_user:
                 raise PermissionDenied("Only the payer can mark a payment paid.")
+            if payment.status == SettlementPayment.Status.CONFIRMED:
+                raise ValidationError(
+                    {"status": "Payment is already confirmed; it can't go back to paid."}
+                )
             payment.status = SettlementPayment.Status.PAID
             payment.paid_at = timezone.now()
             if "note" in request.data:

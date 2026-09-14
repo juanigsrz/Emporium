@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
-import { apiClient } from './client'
-import type { PaginatedResponse } from './games'
+import { apiClient, fetchAllPages } from './client'
 
 // ---- Types (exact shapes verified from running backend) ----
 
@@ -118,9 +117,8 @@ export const TRADES_KEYS = {
 
 // ---- Offer Groups ----
 
-async function fetchOfferGroups(slug: string): Promise<OfferGroup[]> {
-  const { data } = await apiClient.get<PaginatedResponse<OfferGroup>>(`/events/${slug}/offer-groups/`)
-  return data.results
+function fetchOfferGroups(slug: string): Promise<OfferGroup[]> {
+  return fetchAllPages<OfferGroup>(`/events/${slug}/offer-groups/`)
 }
 
 async function createOfferGroup(slug: string, payload: OfferGroupPayload): Promise<OfferGroup> {
@@ -143,9 +141,8 @@ async function deleteOfferGroup(slug: string, id: number): Promise<void> {
 
 // ---- Want Groups ----
 
-async function fetchWantGroups(slug: string): Promise<WantGroup[]> {
-  const { data } = await apiClient.get<PaginatedResponse<WantGroup>>(`/events/${slug}/want-groups/`)
-  return data.results
+function fetchWantGroups(slug: string): Promise<WantGroup[]> {
+  return fetchAllPages<WantGroup>(`/events/${slug}/want-groups/`)
 }
 
 async function createWantGroup(slug: string, payload: WantGroupPayload): Promise<WantGroup> {
@@ -168,9 +165,8 @@ async function deleteWantGroup(slug: string, id: number): Promise<void> {
 
 // ---- Wishes ----
 
-async function fetchWishes(slug: string): Promise<TradeWish[]> {
-  const { data } = await apiClient.get<PaginatedResponse<TradeWish>>(`/events/${slug}/wishes/`)
-  return data.results
+function fetchWishes(slug: string): Promise<TradeWish[]> {
+  return fetchAllPages<TradeWish>(`/events/${slug}/wishes/`)
 }
 
 async function createWish(slug: string, payload: WishPayload): Promise<TradeWish> {

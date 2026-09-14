@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { AuthUser } from '../store/auth'
+import { useAuthStore, type AuthUser } from '../store/auth'
 
 export interface LoginPayload {
   username: string
@@ -31,9 +31,17 @@ export async function logoutApi(): Promise<void> {
   await apiClient.post('/auth/logout/')
 }
 
-export async function fetchCurrentUser(): Promise<AuthUser> {
-  const { data } = await apiClient.get<AuthUser>('/auth/user/')
+export async function fetchCurrentUser(key: string): Promise<AuthUser> {
+  const { data } = await apiClient.get<AuthUser>('/auth/user/', {
+    headers: { Authorization: `Token ${key}` },
+  })
   return data
+}
+
+/** Resolve the user for a fresh token, then persist token + user together. */
+export async function completeLogin(key: string): Promise<void> {
+  const user = await fetchCurrentUser(key)
+  useAuthStore.getState().setSession(key, user)
 }
 
 export async function googleLoginApi(accessToken: string): Promise<TokenResponse> {

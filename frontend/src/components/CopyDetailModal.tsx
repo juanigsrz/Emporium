@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useCopy } from '../api/copies'
 import { useModalDismiss } from '../hooks/useModalDismiss'
 import { GameThumb } from './GameThumb'
+import { safeHttpUrl } from '../utils/url'
 
 // Full copy detail popup — lazily fetches GET /copies/{id}/ (readable by any
 // authenticated user) so the viewer can inspect language/condition/missing
@@ -82,7 +83,7 @@ export function CopyDetailModal({ copyId, onClose }: { copyId: number; onClose: 
                   {t('trades.copyDetail.photos')}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {copy.photo_urls.map((url, i) => (
+                  {copy.photo_urls.filter(safeHttpUrl).map((url, i) => (
                     <a
                       key={i}
                       href={url}

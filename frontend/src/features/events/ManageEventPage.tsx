@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import BackButton from '../../components/BackButton'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import { useEvent, useEventParticipants } from '../../api/events'
 import {
   useAdminSubmissions, useToggleWish, useEditOfferBound, useEditWantBound,
@@ -50,7 +51,7 @@ export default function ManageEventPage() {
     }
   }
 
-  const rows = participants?.results ?? []
+  const rows = participants ?? []
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4">
@@ -174,31 +175,25 @@ export default function ManageEventPage() {
       )}
 
       {confirmKick && selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setConfirmKick(false)} aria-hidden="true" />
-          <div className="relative w-full sm:max-w-sm rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
-            <h3 className="mb-2 font-display text-lg font-bold text-ink">{t('events.manageEvent.kickConfirmTitle', { username: selected })}</h3>
-            <p className="mb-4 text-sm text-moss">
+        <ConfirmDialog
+          title={t('events.manageEvent.kickConfirmTitle', { username: selected })}
+          body={
+            <>
               {t('events.manageEvent.kickConfirmBody', {
                 listings: subs.data?.listings.length ?? 0,
                 wishes: subs.data?.wishes.length ?? 0,
               })}
-            </p>
-            {kick.isError && (
-              <p className="mb-3 text-xs text-red-600">{t('events.manageEvent.kickFailed')}</p>
-            )}
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmKick(false)} disabled={kick.isPending}
-                className="flex-1 rounded-2xl border-2 border-ink/15 bg-cream px-4 py-2.5 text-sm font-semibold text-moss hover:bg-sage/30">
-                {t('common.cancel')}
-              </button>
-              <button onClick={doKick} disabled={kick.isPending}
-                className="flex-1 rounded-2xl border-2 border-ink bg-red-300 px-4 py-2.5 text-sm font-bold text-red-950 shadow-pop transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60">
-                {kick.isPending ? t('events.removing') : t('events.manageEvent.confirmKick')}
-              </button>
-            </div>
-          </div>
-        </div>
+              {kick.isError && (
+                <p className="mt-3 text-xs text-red-600">{t('events.manageEvent.kickFailed')}</p>
+              )}
+            </>
+          }
+          confirmLabel={kick.isPending ? t('events.removing') : t('events.manageEvent.confirmKick')}
+          onConfirm={doKick}
+          onCancel={() => setConfirmKick(false)}
+          destructive
+          pending={kick.isPending}
+        />
       )}
     </div>
   )

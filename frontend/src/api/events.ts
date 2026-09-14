@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
-import { apiClient } from './client'
+import { apiClient, fetchAllPages } from './client'
 import type { PaginatedResponse } from './games'
 
 // ---- Event lifecycle states ----
@@ -239,13 +239,8 @@ export async function transitionEvent(slug: string, to: EventStatus): Promise<Tr
   return data
 }
 
-export async function fetchParticipants(
-  slug: string
-): Promise<PaginatedResponse<EventParticipant>> {
-  const { data } = await apiClient.get<PaginatedResponse<EventParticipant>>(
-    `/events/${slug}/participants/`
-  )
-  return data
+export function fetchParticipants(slug: string): Promise<EventParticipant[]> {
+  return fetchAllPages<EventParticipant>(`/events/${slug}/participants/`)
 }
 
 export async function joinEvent(slug: string): Promise<EventParticipant> {
@@ -333,10 +328,11 @@ export async function setListingSellPrice(
 
 // ---- Hooks ----
 
-export function useEvents(params: EventsListParams = {}) {
+export function useEvents(params: EventsListParams = {}, enabled = true) {
   return useQuery({
     queryKey: EVENTS_KEYS.list(params),
     queryFn: () => fetchEvents(params),
+    enabled,
     staleTime: 30_000,
     placeholderData: (prev) => prev,
   })

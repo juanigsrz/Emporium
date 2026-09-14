@@ -107,7 +107,7 @@ export function useUpdateShipment(slug: string) {
       body: { status: 'SENT' | 'RECEIVED'; shipping_info?: string }
     }) => updateShipment(slug, id, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SHIPPING_KEYS.list(slug) })
+      qc.invalidateQueries({ queryKey: ['shipping'] })
     },
   })
 }

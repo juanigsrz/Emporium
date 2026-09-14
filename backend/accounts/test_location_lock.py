@@ -1,4 +1,6 @@
 """Profile lat/lng/max_trade_distance_km freeze while in a non-archived event."""
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -42,6 +44,22 @@ class LocationLockTests(APITestCase):
         self._join_active()
         resp = self.client.patch("/api/profiles/me/", {"latitude": 11.0}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_change_location_text_blocked_during_active_event(self):
+        # Changing the address re-geocodes lat/lng — same lock as editing them directly.
+        self._profile(location="Paris", latitude=10.0, longitude=20.0)
+        self._join_active()
+        with patch("accounts.serializers.geocode", return_value=(48.8, 2.3)) as g:
+            resp = self.client.patch("/api/profiles/me/", {"location": "Lyon"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        g.assert_not_called()
+
+    def test_change_location_text_allowed_without_active_event(self):
+        self._profile(location="Paris", latitude=10.0, longitude=20.0)
+        with patch("accounts.serializers.geocode", return_value=(48.8, 2.3)):
+            resp = self.client.patch("/api/profiles/me/", {"location": "Lyon"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertAlmostEqual(resp.data["latitude"], 48.8)
 
     def test_change_max_distance_blocked_during_active_event(self):
         self._profile(max_trade_distance_km=100)

@@ -24,6 +24,7 @@ from .models import GameRating, Profile, TradeRating, UserBlock, Wishlist
 from .serializers import (
     GameRatingSerializer,
     ProfileSerializer,
+    PublicProfileSerializer,
     TradeRatingSerializer,
     UserBlockSerializer,
     WishlistSerializer,
@@ -89,6 +90,9 @@ class ProfileMeView(generics.RetrieveUpdateAPIView):
             f in data and getattr(instance, f) is not None and data[f] != getattr(instance, f)
             for f in locked_fields
         )
+        # A new location text re-geocodes (or clears) existing coordinates.
+        if "location" in data and data["location"] != instance.location and instance.latitude is not None:
+            changing_existing = True
         if changing_existing:
             from events.models import EventParticipation, TradeEvent
             in_active = (
@@ -107,7 +111,7 @@ class ProfileMeView(generics.RetrieveUpdateAPIView):
 class ProfileDetailView(generics.RetrieveAPIView):
     """GET /api/profiles/{username}/ — public profile."""
 
-    serializer_class = ProfileSerializer
+    serializer_class = PublicProfileSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_object(self):

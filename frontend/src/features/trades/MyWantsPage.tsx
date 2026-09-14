@@ -1744,7 +1744,7 @@ export default function MyWantsPage() {
 
   const { data: event, isLoading: eventLoading, isError: eventError } = useEvent(slug)
   usePageTitle(event?.name ? `${t('trades.myWants.pageTitle')} · ${event.name}` : t('trades.myWants.pageTitle'))
-  const { data: listingsData } = useEventListings(slug, { user: user?.username })
+  const { data: listingsData } = useEventListings(slug, { user: user?.username, page_size: 100 })
   const { data: offerGroups = [] } = useOfferGroups(slug)
   const { data: wantGroups = [] } = useWantGroups(slug)
   const { data: wishes = [] } = useWishes(slug)

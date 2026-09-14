@@ -1,3 +1,5 @@
+import { safeHttpUrl } from '../utils/url'
+
 interface GameThumbProps {
   src?: string | null
   alt?: string | null
@@ -6,10 +8,11 @@ interface GameThumbProps {
 
 /** Game cover thumbnail with a neutral placeholder when no src is available. */
 export function GameThumb({ src, alt = '', className = 'h-10 w-10' }: GameThumbProps) {
-  if (src) {
+  const safeSrc = safeHttpUrl(src)
+  if (safeSrc) {
     return (
       <img
-        src={src}
+        src={safeSrc}
         alt={alt ?? ''}
         loading="lazy"
         className={`${className} shrink-0 rounded-xl object-cover border-2 border-ink/15 bg-parchment`}

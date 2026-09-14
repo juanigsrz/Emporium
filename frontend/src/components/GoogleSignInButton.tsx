@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { googleLoginApi, fetchCurrentUser } from '../api/auth'
-import { useAuthStore } from '../store/auth'
+import { googleLoginApi, completeLogin } from '../api/auth'
 
 type Props = {
   onSuccess: () => void
@@ -16,7 +15,6 @@ export default function GoogleSignInButton({ onSuccess, onError }: Props) {
   const { t } = useTranslation()
   const clientRef = useRef<TokenClient | null>(null)
   const [ready, setReady] = useState(false)
-  const setSession = useAuthStore((s) => s.setSession)
 
   useEffect(() => {
     if (!CLIENT_ID) return
@@ -29,9 +27,7 @@ export default function GoogleSignInButton({ onSuccess, onError }: Props) {
       }
       try {
         const { key } = await googleLoginApi(resp.access_token)
-        useAuthStore.setState({ token: key })
-        const user = await fetchCurrentUser()
-        setSession(key, user)
+        await completeLogin(key)
         onSuccess()
       } catch {
         onError(t('auth.googleFailed'))

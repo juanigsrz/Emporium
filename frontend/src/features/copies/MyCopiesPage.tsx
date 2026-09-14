@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -411,11 +411,13 @@ function BggImportPanel() {
   const { data: job } = useImportJob(jobId)
   const isRunning = job != null && (job.status === 'PENDING' || job.status === 'RUNNING')
 
-  if (job?.status === 'DONE' && importResult == null) {
-    setImportResult(job.summary)
-    setJobId(null)
-    qc.invalidateQueries({ queryKey: COPIES_KEYS.mine() })
-  }
+  useEffect(() => {
+    if (job?.status === 'DONE' && importResult == null) {
+      setImportResult(job.summary)
+      setJobId(null)
+      qc.invalidateQueries({ queryKey: COPIES_KEYS.mine() })
+    }
+  }, [job, importResult, qc])
 
   const hasBggUsername = !!(profile?.bgg_username)
 
@@ -680,7 +682,7 @@ export default function MyCopiesPage() {
     { value: 'WITHDRAWN', label: t('copies.status.WITHDRAWN') },
   ], [t])
 
-  const copies = (data?.results ?? []) as Copy[]
+  const copies = data ?? []
   const filtered = statusFilter
     ? copies.filter((c) => c.status === statusFilter)
     : copies

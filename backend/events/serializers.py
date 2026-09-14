@@ -86,6 +86,16 @@ class TradeEventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("max_money_per_user cannot be negative.")
         return value
 
+    def validate(self, attrs):
+        # Money settings feed the solver; freeze them once matching has started.
+        if self.instance is not None and self.instance.inputs_locked:
+            for f in ("money_enabled", "max_money_per_user"):
+                if f in attrs and attrs[f] != getattr(self.instance, f):
+                    raise serializers.ValidationError(
+                        {f: "Money settings are locked once matching has started."}
+                    )
+        return attrs
+
     def get_organizer_username(self, obj):
         return obj.organizer.username
 
@@ -155,6 +165,15 @@ class EventParticipationSerializer(serializers.ModelSerializer):
 
     def get_username(self, obj):
         return obj.user.username
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Budgets are private: only the participant and the organizer see them.
+        request = self.context.get("request")
+        viewer_id = getattr(getattr(request, "user", None), "pk", None)
+        if viewer_id not in (instance.user_id, instance.event.organizer_id):
+            data["max_spend"] = None
+        return data
 
 
 class EventListingSerializer(serializers.ModelSerializer):

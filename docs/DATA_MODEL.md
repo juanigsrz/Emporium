@@ -178,7 +178,7 @@ unique_together = (event, copy). Matching operates on `EventListing`s.
 | event | FK(TradeEvent, related=offer_groups) | |
 | user | FK(User, related=offer_groups) | |
 | name | char(120) | |
-| max_give | int default 1 | **X** — max copies user will give |
+| max_give | int default 1 | **X** — user gives exactly X of these copies |
 | rules | JSON default dict | optional internal rules |
 
 ### OfferGroupItem
@@ -202,7 +202,7 @@ is no `OfferGroupItem.money_amount`.
 | event | FK(TradeEvent, related=want_groups) | |
 | user | FK(User, related=want_groups) | |
 | name | char(120) | |
-| min_receive | int default 1 | **Y** — min copies user must receive |
+| min_receive | int default 1 | **Y** — user receives exactly Y of these targets |
 | duplicate_protection | bool default False | solver must not award >1 copy of the same canonical game; set True by the normal "My Wants" builder, left False by the advanced X-to-Y builder |
 
 ### WantGroupItem (a binary want target)
@@ -231,7 +231,7 @@ Money moved off the item: buy-side **P** now lives in the pricing model
 | offer_group | FK(OfferGroup, related=wishes) | |
 | want_group | FK(WantGroup, related=wishes) | |
 | active | bool default True | |
-Effective bounds: X = offer_group.max_give, Y = want_group.min_receive.
+Effective counts (exact): X = offer_group.max_give, Y = want_group.min_receive.
 
 ---
 

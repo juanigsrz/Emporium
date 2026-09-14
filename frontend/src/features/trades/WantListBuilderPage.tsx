@@ -1815,7 +1815,7 @@ export default function WantListBuilderPage() {
 
   const { data: event, isLoading: eventLoading, isError: eventError } = useEvent(slug)
   usePageTitle(event?.name ? `${t('trades.builder.title')} · ${event.name}` : t('trades.builder.title'))
-  const { data: listingsData } = useEventListings(slug, { user: user?.username })
+  const { data: listingsData } = useEventListings(slug, { user: user?.username, page_size: 100 })
   const { data: offerGroupsData = [] } = useOfferGroups(slug)
   const { data: wantGroupsData = [] } = useWantGroups(slug)
 

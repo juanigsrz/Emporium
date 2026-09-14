@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import { fetchPublicProfile } from '../../api/profiles'
 import BackButton from '../../components/BackButton'
+import { safeHttpUrl } from '../../utils/url'
 
 export default function PublicProfilePage() {
   const { t } = useTranslation()
@@ -37,13 +38,15 @@ export default function PublicProfilePage() {
     )
   }
 
+  const avatarUrl = safeHttpUrl(profile.avatar_url)
+
   return (
     <div className="mx-auto max-w-xl px-4 py-8">
       {/* Avatar + header */}
       <div className="flex items-center gap-4 mb-6 rounded-3xl border-2 border-ink bg-cream p-5 shadow-card">
-        {profile.avatar_url ? (
+        {avatarUrl ? (
           <img
-            src={profile.avatar_url}
+            src={avatarUrl}
             alt={t('profile.public.avatarAlt', { username: profile.username })}
             className="w-16 h-16 rounded-2xl object-cover border-2 border-ink"
           />

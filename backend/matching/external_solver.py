@@ -27,6 +27,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 
+from matching import pareto_io  # vendored from Pareto: checksum + instance normalization
+
 
 
 # ---------------------------------------------------------------------------
@@ -555,6 +557,35 @@ def load_solution(match_run, raw_output: str):
     if version:
         match_run.algorithm = f"pareto {version}"
 
+    # Verification metadata (pareto >= 1.0.0 emits both; hand-built documents and
+    # older outputs may omit them, and are accepted as before).
+    #   input_checksum  -- canonical hash of the instance the solver actually solved.
+    #     Recompute it from the event's CURRENT state and refuse a stale solution:
+    #     wants, budgets or listings changed between export and upload.
+    #   result_checksum -- hash of the result body: catches a truncated or edited file.
+    input_ck = doc.get("input_checksum")
+    if input_ck:
+        kpi = doc.get("kpi") or {}
+        current = json.loads(build_wants(event, include_locations=("distance" in kpi)))
+        expected = pareto_io.checksum(pareto_io.normalize_instance(current))
+        if input_ck != expected:
+            raise ValueError(
+                "input_checksum mismatch: this solution was computed from a different "
+                "instance than the event's current state (wants, budgets or listings "
+                "changed since the export). Re-export and solve again."
+            )
+    result_ck = doc.get("result_checksum")
+    if result_ck:
+        body = {k: v for k, v in doc.items()
+                if k not in ("version", "gurobi_version", "input_checksum", "result_checksum")}
+        if pareto_io.checksum(body) != result_ck:
+            raise ValueError(
+                "result_checksum mismatch: the uploaded solution file is corrupted or "
+                "was edited after the solver wrote it."
+            )
+    match_run.solver_input_checksum = input_ck or ""
+    match_run.solver_result_checksum = result_ck or ""
+
     parsed = parse_gurobi(doc)
 
     def _resolve_token(code):
@@ -672,7 +703,33 @@ def load_solution(match_run, raw_output: str):
                     f"Money reconstruction mismatch for {username!r}: "
                     f"reconstructed {recon.get(username, 0)}c != solver {net_cents}c"
                 )
-    for from_u, to_u, cents in parse_gurobi_settlement(doc):
+    settle_rows = parse_gurobi_settlement(doc)
+    if settle_rows:
+        # Every settlement party must be a real user (ensure_payments used to skip
+        # unknown names silently, dropping the transfer), and the plan must discharge
+        # exactly the cash nets: paid out minus collected == (spent - earned).
+        from django.contrib.auth import get_user_model
+
+        names = {f for f, _, _ in settle_rows} | {t for _, t, _ in settle_rows}
+        known = set(
+            get_user_model().objects.filter(username__in=names)
+            .values_list("username", flat=True)
+        )
+        unknown = sorted(names - known)
+        if unknown:
+            raise ValueError(f"Unknown user(s) in settlement plan: {', '.join(unknown)}")
+        if summary_net:
+            settled = defaultdict(int)  # username -> net cents paid out
+            for f, t, cents in settle_rows:
+                settled[f] += cents
+                settled[t] -= cents
+            for username, net_cents in summary_net.items():
+                if settled.get(username, 0) != net_cents:
+                    raise ValueError(
+                        f"Settlement plan does not discharge {username!r}'s net: "
+                        f"settlement {settled.get(username, 0)}c != summary {net_cents}c"
+                    )
+    for from_u, to_u, cents in settle_rows:
         settlement.append({
             "from_user": from_u,
             "to_user": to_u,

@@ -88,7 +88,7 @@ test.describe('organizer edge cases', () => {
     // the E2E database (E2E_TESTS=1 → e2e.sqlite3, same DB the server uses).
     const backend = path.resolve(__dirname, '../../backend')
     const out = execSync(
-      `${backend}/.venv/bin/python3 manage.py shell -c "` +
+      `"${backend}/.venv/bin/python3" manage.py shell -c "` +
       `from django.contrib.auth import get_user_model; from copies.models import Copy; ` +
       `u = get_user_model().objects.get(username='e2e_alice'); ` +
       `c = Copy(owner=u, board_game_id=900005, import_source='BGG_OWNED'); ` +
@@ -171,11 +171,12 @@ test.describe('organizer edge cases', () => {
     const page = await pageAs('alice')
     await page.goto(`/events/${slug}/builder`)
 
-    // Offer Groups tab (default): max_give (X) is the per-group cap on how
-    // much alice gives; since she owns a combo, the form also offers
+    // Offer Groups tab (default): X is how many of the group alice gives
+    // (exactly X, the solver's NforM semantics; the field is still called
+    // max_give in the API). Since she owns a combo, the form also offers
     // bundling it in as a single give-unit.
     await page.getByRole('button', { name: '+ New offer group' }).click()
-    await expect(page.getByText(/max give/i).first()).toBeVisible()
+    await expect(page.getByText(/give \(x\)/i).first()).toBeVisible()
     await expect(page.getByText(/combo/i).first()).toBeVisible()
 
     // Caps tab: TAKE/GIVE caps are a separate advanced-builder-only affordance.

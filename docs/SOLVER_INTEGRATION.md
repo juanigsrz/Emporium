@@ -371,3 +371,40 @@ only after `Trade Results`, so these `#!` lines are inert — covered by
   drag-to-rank — strip it to plain add/remove, or retire the page? (decision)
 - Should `ONETOONE` also support manual upload (offline ftm), or strictly the
   server call? Plan keeps `/upload/` mode-agnostic so it's cheap to allow both.
+
+---
+
+## Verification on upload (added 2026-09-13)
+
+Pareto stamps every result with `version`, `gurobi_version`, `input_checksum`
+(sha256 of the *canonical, normalized* instance) and `result_checksum` (sha256
+of the result body). `load_solution` now consumes them:
+
+- **`input_checksum`** is recomputed server-side from the event's *current*
+  state: `build_wants(event)` → `pareto_io.normalize_instance` →
+  `pareto_io.checksum`, using `backend/matching/pareto_io.py`, a verbatim vendored
+  copy of Pareto's pure-Python `pareto_io.py`. A mismatch is a 400 ("re-export
+  and solve again"): it means wants, budgets or listings changed between export
+  and upload, so the solution no longer describes this event.
+- **`result_checksum`** is verified over the document minus its four meta keys;
+  a mismatch means a truncated or hand-edited file.
+- Both values are stored on `MatchRun.solver_input_checksum` /
+  `solver_result_checksum` so participants can re-run the published solver
+  version on the published instance and compare.
+- Documents **without** checksums (hand-built seeds, older outputs) are still
+  accepted; only present-but-wrong values are rejected.
+- The settlement plan is validated too: every party must be an existing user and
+  the transfers must discharge exactly the `cash_summary` nets.
+
+Keep the vendored `pareto_io.py` in sync with Pareto; `test_solver_contract.py`
+pins a checksum produced by the real solver so drift fails loudly.
+
+**Hosted solver (Modal).** When the solve moves server-side (backend POSTs the
+`build_wants` document to a Modal endpoint and receives the JSON result), feed
+the response through the same `load_solution`: the checksum check then guards
+against the instance changing *during* the solve, and the stored checksums keep
+the "verify it yourself" story intact.
+
+**Not yet exported:** Pareto 1.1.0's `city` / `hub` / `box_min` directives for the
+`hubload` KPI. Adding a city to `Profile` and emitting `cities` + `hub` from
+`build_wants` is the follow-up that unlocks it for hub-centralized events.

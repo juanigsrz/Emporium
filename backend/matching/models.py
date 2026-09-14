@@ -40,6 +40,12 @@ class MatchRun(models.Model):
     # Set once apply_carryover has flipped traded copies + minted fresh ones for
     # this run's receivers (idempotency guard).
     carried_over = models.BooleanField(default=False)
+    # Pareto's verification metadata, copied from an uploaded solution: the
+    # canonical hash of the instance it solved (verified against the event's
+    # state at upload) and of the result body. Lets anyone re-run the same
+    # solver version on the published instance and compare.
+    solver_input_checksum  = models.CharField(max_length=80, blank=True, default="")
+    solver_result_checksum = models.CharField(max_length=80, blank=True, default="")
 
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

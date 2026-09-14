@@ -30,7 +30,7 @@ import type { TradeEvent, EventListing, EventStatus } from '../../api/events'
 import { importTrades } from '../../api/trades'
 import { useCombos, useCreateCombo, usePatchCombo, useDeleteCombo } from '../../api/combos'
 import type { Combo } from '../../api/combos'
-import { useCopies } from '../../api/copies'
+import { useMyCopies } from '../../api/copies'
 import type { Copy } from '../../api/copies'
 import { useMyRatings, ratingMap } from '../../api/ratings'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -38,6 +38,7 @@ import { useAuthStore } from '../../store/auth'
 import BackButton from '../../components/BackButton'
 import { StatusBadge } from './StatusBadge'
 import { STATUS_BADGE_CLASSES } from './eventUtils'
+import { safeHttpUrl } from '../../utils/url'
 
 // ---- Lifecycle progress bar ----
 
@@ -335,8 +336,10 @@ function TransitionConfirmDialog({
 
 function toLocalDatetimeValue(isoString: string | null | undefined): string {
   if (!isoString) return ''
-  // datetime-local input expects "YYYY-MM-DDTHH:mm"
-  return isoString.slice(0, 16)
+  // datetime-local input expects local-time "YYYY-MM-DDTHH:mm"; the API gives UTC ISO.
+  const d = new Date(isoString)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 interface EditEventModalProps {
@@ -359,7 +362,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
         shipping_rules: z.string().max(2000).optional(),
         regional_restrictions: z.string().max(2000).optional(),
         trade_policies: z.string().max(2000).optional(),
-        image_url: z.string().max(500).optional(),
+        image_url: z.string().max(500).refine((v) => !v || /^https?:\/\//.test(v), t('events.errors.imageUrlInvalid')).optional(),
         submissions_open_at: z.string().optional(),
         submissions_close_at: z.string().optional(),
         wantlist_close_at: z.string().optional(),
@@ -402,7 +405,7 @@ function EditEventModal({ event, onClose }: EditEventModalProps) {
   })
   const moneyEnabled = watch('money_enabled')
   const requireLocation = watch('require_location')
-  const imageUrl = watch('image_url')
+  const imageUrl = safeHttpUrl(watch('image_url'))
 
   async function onSubmit(values: EditEventFormValues) {
     setServerError(null)
@@ -651,8 +654,8 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
   const { t } = useTranslation()
   const { data: participantsData } = useEventParticipants(event.slug)
   const setBudget = useSetEventBudget()
-  const me = participantsData?.results.find((p) => p.username === username)
-  const current = me?.max_spend ?? '0'
+  const me = participantsData?.find((p) => p.username === username)
+  const current = me?.max_spend ?? ''
 
   const [value, setValue] = useState<string>('')
   const [saved, setSaved] = useState(false)
@@ -662,6 +665,7 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
   const effective = value !== '' ? value : current
 
   async function handleSave() {
+    if (!me) return
     setError(null)
     setSaved(false)
     try {
@@ -695,7 +699,7 @@ function ParticipantBudgetCard({ event, username }: { event: TradeEvent; usernam
         />
         <button
           onClick={handleSave}
-          disabled={setBudget.isPending}
+          disabled={setBudget.isPending || !me}
           className="rounded-2xl border-2 border-ink bg-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-950 shadow-pop-sm transition-transform hover:-translate-y-0.5 disabled:opacity-60"
         >
           {setBudget.isPending ? t('events.saving') : t('events.budget.save')}
@@ -716,12 +720,12 @@ interface AddListingFormProps {
 
 function AddListingForm({ slug, existingCopyIds }: AddListingFormProps) {
   const { t } = useTranslation()
-  const { data: copiesData } = useCopies({ mine: true })
+  const { data: copiesData } = useMyCopies()
   const addListing = useAddEventListing()
   const [selectedCopyId, setSelectedCopyId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
 
-  const availableCopies = (copiesData?.results ?? []).filter(
+  const availableCopies = (copiesData ?? []).filter(
     (c: Copy) => c.status === 'ACTIVE' && !c.is_pending && !existingCopyIds.has(c.id)
   )
 

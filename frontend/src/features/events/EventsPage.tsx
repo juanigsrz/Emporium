@@ -11,6 +11,7 @@ import type { TradeEventListItem } from '../../api/events'
 import { useAuthStore } from '../../store/auth'
 import { StatusBadge } from './StatusBadge'
 import { searchGeocode, type GeocodeSuggestion } from '../../api/profiles'
+import { safeHttpUrl } from '../../utils/url'
 
 // ---- Constants ----
 
@@ -108,14 +109,16 @@ function EventCard({ event }: { event: TradeEventListItem }) {
       })
     : null
 
+  const imageUrl = safeHttpUrl(event.image_url)
+
   return (
     <Link
       to={`/events/${event.slug}`}
       className="group flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 rounded-3xl border-2 border-ink bg-cream p-4 shadow-card transition-transform hover:-translate-y-0.5"
     >
-      {event.image_url ? (
+      {imageUrl ? (
         <img
-          src={event.image_url}
+          src={imageUrl}
           alt=""
           className="h-24 w-full shrink-0 rounded-2xl object-cover sm:h-24 sm:w-24"
           loading="lazy"
@@ -247,7 +250,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
         shipping_rules: z.string().max(2000).optional(),
         regional_restrictions: z.string().max(2000).optional(),
         trade_policies: z.string().max(2000).optional(),
-        image_url: z.string().max(500).optional(),
+        image_url: z.string().max(500).refine((v) => !v || /^https?:\/\//.test(v), t('events.errors.imageUrlInvalid')).optional(),
         submissions_open_at: z.string().optional(),
         submissions_close_at: z.string().optional(),
         wantlist_close_at: z.string().optional(),
@@ -288,7 +291,7 @@ function CreateEventModal({ onClose }: CreateEventModalProps) {
   })
   const moneyEnabled = watch('money_enabled')
   const requireLocation = watch('require_location')
-  const imageUrl = watch('image_url')
+  const imageUrl = safeHttpUrl(watch('image_url'))
 
   const [locationQuery, setLocationQuery] = useState('')
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([])
@@ -717,7 +720,7 @@ export default function EventsPage() {
   }
 
   const { data, isLoading, isError, isFetching } = useEvents(queryParams)
-  const { data: joinedData } = useEvents({ joined: true })
+  const { data: joinedData } = useEvents({ joined: true }, !!token)
   const joinedEvents = token ? (joinedData?.results ?? []) : []
   const joinedSlugs = new Set(joinedEvents.map((e) => e.slug))
   const handleSearchChange = useCallback(
